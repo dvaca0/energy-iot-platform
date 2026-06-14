@@ -379,6 +379,16 @@ const Topbar = ({ page }) => {
 
 // ─── PAGE: EXECUTIVE DASHBOARD ────────────────────────────────────────────────
 const PageDashboard = () => {
+  const [dashboardSummary, setDashboardSummary] = useState(null);
+
+  useEffect(() => {
+    getDashboardSummary()
+      .then(setDashboardSummary)
+      .catch((error) => console.error("Dashboard summary API error:", error));
+  }, []);
+
+  const mxn = (value) => `$${Number(value || 0).toLocaleString("es-MX")} MXN`;
+
   const tariffData = [
     { name:'Base', kwh:38.4, cost:1228, pct:21 },
     { name:'Intermedia', kwh:82.1, cost:3362, pct:45 },
@@ -387,12 +397,12 @@ const PageDashboard = () => {
   return (
     <div>
       <div style={{display:'flex',flexWrap:'wrap',gap:14,marginBottom:22}}>
-        <StatCard label="Costo Estimado Hoy" value="$1,373 MXN" sub="FIME + Lab. Redes" color="#7c5cbf" trend={8} icon="Wallet"/>
-        <StatCard label="Costo Esta Semana" value="$8,878 MXN" sub="Acumulado lun–hoy" color="#ef4444" trend={12} icon="Calendar"/>
-        <StatCard label="Proyección Mensual" value="$38,400 MXN" sub="Estimado GDMTH" color="#f59e0b" icon="TrendingUp"/>
-        <StatCard label="Ahorro Potencial" value="$5,810 MXN/mes" sub="3 recomendaciones" color="#22c55e" icon="ArrowDown"/>
-        <StatCard label="Edificio más costoso" value="FIME" sub="$5,312 esta semana" color="#a78bfa" icon="Building"/>
-        <StatCard label="Nodos Online" value="2 / 2" sub="Sistema operativo" color="#22c55e" icon="Activity"/>
+        <StatCard label="Costo Estimado Hoy" value={dashboardSummary ? mxn(dashboardSummary.estimated_cost_today_mxn) : "Cargando..."} sub="FIME + Lab. Redes" color="#7c5cbf" trend={8} icon="Wallet"/>
+        <StatCard label="Costo Esta Semana" value={dashboardSummary ? mxn(dashboardSummary.estimated_cost_week_mxn) : "Cargando..."} sub="Acumulado lun–hoy" color="#ef4444" trend={12} icon="Calendar"/>
+        <StatCard label="Proyección Mensual" value={dashboardSummary ? mxn(dashboardSummary.projected_monthly_cost_mxn) : "Cargando..."} sub="Estimado GDMTH" color="#f59e0b" icon="TrendingUp"/>
+        <StatCard label="Ahorro Potencial" value={dashboardSummary ? `${mxn(dashboardSummary.potential_savings_mxn_month)}/mes` : "Cargando..."} sub="Recomendaciones activas" color="#22c55e" icon="ArrowDown"/>
+        <StatCard label="Edificio más costoso" value={dashboardSummary?.most_expensive_building?.name || "Cargando..."} sub={dashboardSummary?.most_expensive_building ? `${mxn(dashboardSummary.most_expensive_building.cost_week_mxn)} esta semana` : "Desde backend"} color="#a78bfa" icon="Building"/>
+        <StatCard label="Nodos Online" value={dashboardSummary ? `${dashboardSummary.online_nodes} / ${dashboardSummary.total_nodes}` : "Cargando..."} sub="Sistema operativo" color="#22c55e" icon="Activity"/>
       </div>
       <div style={{display:'grid',gridTemplateColumns:'2fr 1fr',gap:18,marginBottom:18}}>
         <Card>
