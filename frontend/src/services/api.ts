@@ -27,3 +27,9 @@ export async function getNodes() {
   const response = await api.get("/nodes");
   return response.data;
 }
+
+
+export async function getAiInsights() {
+  const response = await api.get("/ai/insights");
+  return response.data;
+}

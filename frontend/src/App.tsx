@@ -1,4 +1,4 @@
-import { getDashboardSummary, getHourlyCost, getBuildings, getNodes } from "./services/api";
+import { getDashboardSummary, getHourlyCost, getBuildings, getNodes, getAiInsights } from "./services/api";
 
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
@@ -1024,7 +1024,7 @@ const PageCost = () => {
 };
 
 // ─── PAGE: AI CENTER ──────────────────────────────────────────────────────────
-const PageAI = () => {
+const PageAI = ({ apiInsights }) => {
   const [tab, setTab] = useState('forecast');
   const [chat, setChat] = useState(MOCK.chatHistory);
   const [input, setInput] = useState('');
@@ -1395,6 +1395,7 @@ const PageSettings = ({ role, setRole }) => (
 const App = () => {
   const [apiBuildings, setApiBuildings] = useState(null);
   const [apiNodes, setApiNodes] = useState(null);
+  const [apiInsights, setApiInsights] = useState(null);
 
   useEffect(() => {
     getDashboardSummary()
@@ -1446,6 +1447,10 @@ const App = () => {
         setApiNodes(normalized);
       })
       .catch((error) => console.error("Nodes API error:", error));
+
+    getAiInsights()
+      .then((data) => setApiInsights(data))
+      .catch((error) => console.error("AI insights API error:", error));
   }, []);
 
   const [page, setPage] = useState('dashboard');
@@ -1459,7 +1464,7 @@ const App = () => {
       case 'deployments': return <PageDeployments apiNodes={apiNodes}/>;
       case 'live': return <PageLive apiNodes={apiNodes}/>;
       case 'cost': return <PageCost/>;
-      case 'ai': return <PageAI/>;
+      case 'ai': return <PageAI apiInsights={apiInsights}/>;
       case 'mining': return <PageMining/>;
       case 'reports': return <PageReports/>;
       case 'infra': return <PageInfra/>;
