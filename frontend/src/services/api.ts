@@ -70,3 +70,8 @@ export async function getAllOrgBuildings() {
   const response = await api.get("/org/buildings");
   return response.data;
 }
+
+export async function getLatestReadings() {
+  const response = await api.get("/readings/latest");
+  return response.data;
+}

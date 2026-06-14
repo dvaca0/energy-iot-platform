@@ -1,4 +1,4 @@
-import { getDashboardSummary, getHourlyCost, getBuildings, getNodes, getAiInsights, createDeployment, getDelegations, getAllOrgBuildings, getCampusesByDelegation, getUnitsByCampus, getBuildingsByUnit, getPanelsByBuilding } from "./services/api";
+import { getDashboardSummary, getHourlyCost, getBuildings, getNodes, getAiInsights, createDeployment, getDelegations, getAllOrgBuildings, getCampusesByDelegation, getUnitsByCampus, getBuildingsByUnit, getPanelsByBuilding, getLatestReadings } from "./services/api";
 
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
@@ -1100,9 +1100,32 @@ const PageDeployments = ({ apiNodes }) => {
 
 // ─── PAGE: LIVE MONITORING ────────────────────────────────────────────────────
 const PageLive = ({ apiNodes }) => {
-  const [tick, setTick] = useState(0);
-  useEffect(() => { const t = setInterval(() => setTick(x => x+1), 3000); return () => clearInterval(t); }, []);
-  const jitter = (v, pct=0.02) => +(v * (1 + (Math.random()-0.5)*pct)).toFixed(2);
+  const [latestReadings, setLatestReadings] = useState([]);
+
+  useEffect(() => {
+    const loadReadings = () => {
+      getLatestReadings()
+        .then(setLatestReadings)
+        .catch((error) => console.error("Latest readings API error:", error));
+    };
+
+    loadReadings();
+    const timer = setInterval(loadReadings, 3000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const latestByNodeId = latestReadings.reduce((acc, reading) => {
+    const node = (apiNodes || MOCK.nodes).find((item) => String(item.db_id || item.id) === String(reading.node_id) || String(item.id) === String(reading.node_id));
+    if (node) acc[node.id] = reading;
+    return acc;
+  }, {});
+
+  const valueOrNode = (node, reading, apiField, nodeField) => {
+    const value = reading?.[apiField];
+    return value === null || value === undefined ? node[nodeField] : value;
+  };
+
+  const jitter = (v, pct=0.02) => +(Number(v || 0) * (1 + (Math.random()-0.5)*pct)).toFixed(2);
   return (
     <div>
       <div style={{display:'flex',gap:12,marginBottom:18,alignItems:'center'}}>
@@ -1113,7 +1136,16 @@ const PageLive = ({ apiNodes }) => {
         <span style={{fontSize:12,color:'#6e6694'}}>Actualización cada 3s · Datos en tiempo real</span>
       </div>
       <style>{`@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}`}</style>
-      {(apiNodes || MOCK.nodes).map(n => (
+      {(apiNodes || MOCK.nodes).map(n => {
+        const reading = latestByNodeId[n.id];
+        const voltage = valueOrNode(n, reading, "voltage", "voltage");
+        const current = valueOrNode(n, reading, "current", "current");
+        const power = valueOrNode(n, reading, "power_kw", "power");
+        const pf = valueOrNode(n, reading, "power_factor", "pf");
+        const freq = valueOrNode(n, reading, "frequency_hz", "freq");
+        const energyToday = valueOrNode(n, reading, "energy_kwh", "energy_today");
+
+        return (
         <Card key={n.id} style={{marginBottom:18}} glow>
           <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
             <div style={{display:'flex',alignItems:'center',gap:12}}>
@@ -1127,12 +1159,12 @@ const PageLive = ({ apiNodes }) => {
           </div>
           <div style={{display:'flex',flexWrap:'wrap',gap:12}}>
             {[
-              {l:'Tensión (V)',v:jitter(n.voltage,0.01).toFixed(1),c:'#818cf8',unit:'V'},
-              {l:'Corriente (A)',v:jitter(n.current,0.03).toFixed(2),c:'#f59e0b',unit:'A'},
-              {l:'Potencia (kW)',v:jitter(n.power,0.03).toFixed(3),c:'#ef4444',unit:'kW'},
-              {l:'Factor de Potencia',v:jitter(n.pf,0.01).toFixed(3),c:'#22c55e',unit:''},
-              {l:'Frecuencia (Hz)',v:jitter(n.freq,0.005).toFixed(2),c:'#a78bfa',unit:'Hz'},
-              {l:'Energía Hoy',v:n.energy_today,c:PURPLE_L,unit:'kWh'}
+              {l:'Tensión (V)',v:Number(voltage || 0).toFixed(1),c:'#818cf8',unit:'V'},
+              {l:'Corriente (A)',v:Number(current || 0).toFixed(2),c:'#f59e0b',unit:'A'},
+              {l:'Potencia (kW)',v:Number(power || 0).toFixed(3),c:'#ef4444',unit:'kW'},
+              {l:'Factor de Potencia',v:Number(pf || 0).toFixed(3),c:'#22c55e',unit:''},
+              {l:'Frecuencia (Hz)',v:Number(freq || 0).toFixed(2),c:'#a78bfa',unit:'Hz'},
+              {l:'Energía Hoy',v:Number(energyToday || 0).toFixed(2),c:PURPLE_L,unit:'kWh'}
             ].map((m,i) => (
               <div key={i} style={{
                 background:'#0f0f1a', borderRadius:12, padding:'14px 16px',
@@ -1153,7 +1185,8 @@ const PageLive = ({ apiNodes }) => {
             ))}
           </div>
         </Card>
-      ))}
+        );
+      })}
     </div>
   );
 };
