@@ -1,3 +1,4 @@
+import { getDashboardSummary } from "./services/api";
 
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
@@ -1367,6 +1368,12 @@ const PageSettings = ({ role, setRole }) => (
 
 // ─── APP ROOT ─────────────────────────────────────────────────────────────────
 const App = () => {
+  useEffect(() => {
+    getDashboardSummary()
+      .then((data) => console.log("Backend dashboard summary:", data))
+      .catch((error) => console.error("Backend API error:", error));
+  }, []);
+
   const [page, setPage] = useState('dashboard');
   const [role, setRole] = useState('Administrador');
   const renderPage = () => {
