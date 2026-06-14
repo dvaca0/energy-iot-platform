@@ -1,0 +1,501 @@
+            <div style={{fontSize:10,color:'#6e6694',textTransform:'uppercase',letterSpacing:1}}>{s.l}</div>
+            <div style={{fontSize:22,fontWeight:700,color:s.c,marginTop:4}}>{s.v}</div>
+          </div>
+        ))}
+      </div>
+      <div style={{display:'grid',gridTemplateColumns:'2fr 1fr',gap:18,marginBottom:18}}>
+        <Card>
+          <SectionTitle sub="Potencia registrada · últimas 24h">Potencia en el Tiempo</SectionTitle>
+          <ResponsiveContainer width="100%" height={200}>
+            <AreaChart data={MOCK.hourly.map(h => ({...h, power: (h.kwh * 0.9 + Math.random()*0.5).toFixed(2)}))}
+              margin={{top:5,right:10,left:-10,bottom:0}}>
+              <defs><linearGradient id="gp" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="5%" stopColor="#22c55e" stopOpacity={0.4}/>
+                <stop offset="95%" stopColor="#22c55e" stopOpacity={0}/>
+              </linearGradient></defs>
+              <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRID}/>
+              <XAxis dataKey="h" tick={{fontSize:10,fill:'#6e6694'}} interval={3}/>
+              <YAxis tick={{fontSize:10,fill:'#6e6694'}}/>
+              <Tooltip content={<CustomTooltip suffix=" kW"/>}/>
+              <Area type="monotone" dataKey="power" name="Potencia" stroke="#22c55e" fill="url(#gp)" strokeWidth={2}/>
+            </AreaChart>
+          </ResponsiveContainer>
+        </Card>
+        <Card>
+          <SectionTitle sub="Perfil del edificio">Información</SectionTitle>
+          {[
+            {l:'Edificio', v:b.name},{l:'Facultad',v:b.faculty},{l:'Campus',v:b.campus},
+            {l:'Nodo Asignado',v:b.node||'—'},{l:'Panel',v:'Tablero Principal'},
+            {l:'Despliegue',v:'06/01 – 13/01/2025'},{l:'Energía/Semana',v:`${b.energy_week} kWh`}
+          ].map((r,i) => (
+            <div key={i} style={{display:'flex',justifyContent:'space-between',padding:'7px 0',borderBottom:'1px solid #0f0f1a',fontSize:12}}>
+              <span style={{color:'#6e6694'}}>{r.l}</span>
+              <span style={{color:'#f0eeff',fontWeight:600}}>{r.v}</span>
+            </div>
+          ))}
+        </Card>
+      </div>
+      <AIInsightCard insights={[
+        `${b.name} consume el 60% de la energía total monitoreada del campus esta semana.`,
+        'El periodo punta genera el 41% del costo diario estimado con solo el 25% del tiempo operativo.',
+        'Se detectó una reducción del 12% en el consumo base vs. semana anterior — posible mejora en eficiencia.'
+      ]}/>
+    </div>
+  );
+};
+
+// ─── PAGE: DEPLOYMENTS ────────────────────────────────────────────────────────
+const PageDeployments = () => {
+  const [form, setForm] = useState({ node:'N001', campus:'Colima', faculty:'', building:'', panel:'', start:'', end:'', notes:'' });
+  const [saved, setSaved] = useState(false);
+  const handleSave = () => { setSaved(true); setTimeout(() => setSaved(false), 3000); };
+  return (
+    <div style={{display:'grid',gridTemplateColumns:'1fr 1.4fr',gap:18}}>
+      <div>
+        <SectionTitle sub="Estado actual de los nodos de campo">Nodos Disponibles</SectionTitle>
+        {MOCK.nodes.map(n => (
+          <Card key={n.id} style={{marginBottom:12,borderColor:n.status==='online'?'#22c55e33':'#1e1b35'}}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:12}}>
+              <div style={{display:'flex',alignItems:'center',gap:10}}>
+                <div style={{background:'#22c55e18',border:'1px solid #22c55e33',borderRadius:8,padding:10,color:'#22c55e'}}><Icon name="Cpu" size={18}/></div>
+                <div>
+                  <div style={{fontSize:14,fontWeight:700,color:'#f0eeff'}}>{n.name}</div>
+                  <div style={{fontSize:11,color:'#6e6694'}}>{n.ip} · v{n.fw}</div>
+                </div>
+              </div>
+              <Badge color="#22c55e">Online</Badge>
+            </div>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
+              {[
+                {l:'Edificio',v:n.building},{l:'Última Sincronía',v:n.last_sync},
+                {l:'Muestras',v:n.samples.toLocaleString()},{l:'Buffer',v:`${n.buffer} reg. pend.`},
+                {l:'RPi',v:n.rpi_status==='ok'?'OK':'Warning'},{l:'Shelly',v:n.shelly_status==='ok'?'OK':'Warning'}
+              ].map((r,i) => (
+                <div key={i} style={{background:'#0f0f1a',borderRadius:8,padding:'7px 10px'}}>
+                  <div style={{fontSize:10,color:'#6e6694'}}>{r.l}</div>
+                  <div style={{fontSize:12,fontWeight:600,color:'#f0eeff',marginTop:2}}>{r.v}</div>
+                </div>
+              ))}
+            </div>
+          </Card>
+        ))}
+        <SectionTitle sub="Historial de despliegues" style={{marginTop:20}}>Despliegues Pasados</SectionTitle>
+        {MOCK.deployments.filter(d=>d.status==='completed').map(d => (
+          <Card key={d.id} style={{marginBottom:10}}>
+            <div style={{display:'flex',justifyContent:'space-between',marginBottom:6}}>
+              <span style={{fontSize:13,fontWeight:700,color:'#f0eeff'}}>{d.building}</span>
+              <Badge color="#22c55e">Completado</Badge>
+            </div>
+            <div style={{fontSize:12,color:'#6e6694'}}>{d.node} · {d.start} – {d.end}</div>
+            <div style={{fontSize:12,color:'#9890c4',marginTop:4}}>{d.completeness}% completitud · {d.samples.toLocaleString()} muestras</div>
+          </Card>
+        ))}
+      </div>
+      <div>
+        <SectionTitle sub="Despliegues activos actualmente">En Curso</SectionTitle>
+        {MOCK.deployments.filter(d=>d.status==='active').map(d => (
+          <Card key={d.id} style={{marginBottom:14,borderColor:`${PURPLE}44`}} glow>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:12}}>
+              <div>
+                <div style={{fontSize:14,fontWeight:700,color:'#f0eeff'}}>{d.building}</div>
+                <div style={{fontSize:11,color:'#6e6694'}}>{d.node} · {d.panel}</div>
+              </div>
+              <Badge color={PURPLE_L}>Activo</Badge>
+            </div>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8,marginBottom:12}}>
+              {[{l:'Técnico',v:d.tech},{l:'Inicio',v:d.start},{l:'Fin',v:d.end}].map((r,i) => (
+                <div key={i} style={{background:'#0f0f1a',borderRadius:8,padding:'7px 10px'}}>
+                  <div style={{fontSize:10,color:'#6e6694'}}>{r.l}</div>
+                  <div style={{fontSize:12,fontWeight:600,color:'#f0eeff',marginTop:2}}>{r.v}</div>
+                </div>
+              ))}
+            </div>
+            <div style={{marginBottom:8}}>
+              <div style={{display:'flex',justifyContent:'space-between',fontSize:12,color:'#6e6694',marginBottom:4}}>
+                <span>Progreso del despliegue</span>
+                <span style={{color:PURPLE_L,fontWeight:700}}>{d.progress}%</span>
+              </div>
+              <div style={{height:8,background:'#1a1730',borderRadius:4,overflow:'hidden'}}>
+                <div style={{height:'100%',width:`${d.progress}%`,background:`linear-gradient(90deg,${PURPLE},${PURPLE_L})`,borderRadius:4}}/>
+              </div>
+            </div>
+            <div style={{display:'flex',justifyContent:'space-between',fontSize:12,marginTop:8}}>
+              <span style={{color:'#6e6694'}}>Completitud de datos: <strong style={{color:'#22c55e'}}>{d.completeness}%</strong></span>
+              <span style={{color:'#6e6694'}}>{d.samples.toLocaleString()} muestras · {d.buffer} buffer</span>
+            </div>
+            {d.notes && <div style={{marginTop:10,background:'#1a1730',borderRadius:8,padding:'8px 10px',fontSize:11,color:'#9890c4'}}>{d.notes}</div>}
+          </Card>
+        ))}
+        <Card style={{borderColor:`${PURPLE}44`}}>
+          <SectionTitle sub="Asignar nodo a edificio para nuevo despliegue">Asignar Nodo</SectionTitle>
+          {saved && <div style={{background:'#22c55e18',border:'1px solid #22c55e33',borderRadius:10,padding:'10px 14px',marginBottom:14,fontSize:13,color:'#22c55e'}}>Despliegue registrado correctamente</div>}
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
+            {[
+              {l:'Nodo',f:'node',el:'select',opts:['N001','N002']},
+              {l:'Campus',f:'campus',el:'select',opts:['Colima','Coquimatlán','Tecomán']},
+              {l:'Facultad',f:'faculty',el:'input'},
+              {l:'Edificio',f:'building',el:'input'},
+              {l:'Panel Eléctrico',f:'panel',el:'input'},
+              {l:'Fecha Inicio',f:'start',el:'date'},
+              {l:'Fecha Fin',f:'end',el:'date'}
+            ].map(field => (
+              <div key={field.f} style={{display:'flex',flexDirection:'column',gap:5}}>
+                <label style={{fontSize:11,color:'#6e6694',textTransform:'uppercase',letterSpacing:.8}}>{field.l}</label>
+                {field.el==='select' ? (
+                  <select value={form[field.f]} onChange={e => setForm(f=>({...f,[field.f]:e.target.value}))}>
+                    {field.opts.map(o => <option key={o}>{o}</option>)}
+                  </select>
+                ) : (
+                  <input type={field.el||'text'} value={form[field.f]} onChange={e => setForm(f=>({...f,[field.f]:e.target.value}))} placeholder={field.l}/>
+                )}
+              </div>
+            ))}
+          </div>
+          <div style={{marginTop:12}}>
+            <label style={{fontSize:11,color:'#6e6694',textTransform:'uppercase',letterSpacing:.8}}>Notas del Técnico</label>
+            <textarea rows={3} value={form.notes} onChange={e => setForm(f=>({...f,notes:e.target.value}))} style={{width:'100%',marginTop:5,resize:'none'}} placeholder="Observaciones de instalación..."/>
+          </div>
+          <button onClick={handleSave} style={{
+            marginTop:14, width:'100%', padding:'11px',
+            background:`linear-gradient(135deg,${PURPLE},#4f3d9e)`, border:'none',
+            borderRadius:10, color:'#fff', fontWeight:700, fontSize:14, cursor:'pointer'
+          }}>Guardar Despliegue</button>
+        </Card>
+      </div>
+    </div>
+  );
+};
+
+// ─── PAGE: LIVE MONITORING ────────────────────────────────────────────────────
+const PageLive = () => {
+  const [tick, setTick] = useState(0);
+  useEffect(() => { const t = setInterval(() => setTick(x => x+1), 3000); return () => clearInterval(t); }, []);
+  const jitter = (v, pct=0.02) => +(v * (1 + (Math.random()-0.5)*pct)).toFixed(2);
+  return (
+    <div>
+      <div style={{display:'flex',gap:12,marginBottom:18,alignItems:'center'}}>
+        <div style={{display:'flex',alignItems:'center',gap:8,background:'#22c55e18',border:'1px solid #22c55e33',borderRadius:20,padding:'5px 14px'}}>
+          <div style={{width:8,height:8,borderRadius:'50%',background:'#22c55e',animation:'pulse 2s infinite'}}/>
+          <span style={{fontSize:12,color:'#22c55e',fontWeight:600}}>EN VIVO</span>
+        </div>
+        <span style={{fontSize:12,color:'#6e6694'}}>Actualización cada 3s · Datos en tiempo real</span>
+      </div>
+      <style>{`@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}`}</style>
+      {MOCK.nodes.map(n => (
+        <Card key={n.id} style={{marginBottom:18}} glow>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
+            <div style={{display:'flex',alignItems:'center',gap:12}}>
+              <div style={{background:'#22c55e18',border:'1px solid #22c55e33',borderRadius:10,padding:10,color:'#22c55e'}}><Icon name="Cpu" size={20}/></div>
+              <div>
+                <div style={{fontSize:15,fontWeight:700,color:'#f0eeff'}}>{n.name}</div>
+                <div style={{fontSize:11,color:'#6e6694'}}>{n.ip} · {n.building} · {n.last_sync}</div>
+              </div>
+            </div>
+            <Badge color="#22c55e">Online</Badge>
+          </div>
+          <div style={{display:'flex',flexWrap:'wrap',gap:12}}>
+            {[
+              {l:'Tensión (V)',v:jitter(n.voltage,0.01).toFixed(1),c:'#818cf8',unit:'V'},
+              {l:'Corriente (A)',v:jitter(n.current,0.03).toFixed(2),c:'#f59e0b',unit:'A'},
+              {l:'Potencia (kW)',v:jitter(n.power,0.03).toFixed(3),c:'#ef4444',unit:'kW'},
+              {l:'Factor de Potencia',v:jitter(n.pf,0.01).toFixed(3),c:'#22c55e',unit:''},
+              {l:'Frecuencia (Hz)',v:jitter(n.freq,0.005).toFixed(2),c:'#a78bfa',unit:'Hz'},
+              {l:'Energía Hoy',v:n.energy_today,c:PURPLE_L,unit:'kWh'}
+            ].map((m,i) => (
+              <div key={i} style={{
+                background:'#0f0f1a', borderRadius:12, padding:'14px 16px',
+                flex:1, minWidth:120, border:`1px solid ${m.c}22`
+              }}>
+                <div style={{fontSize:10,color:'#6e6694',textTransform:'uppercase',letterSpacing:.8,marginBottom:6}}>{m.l}</div>
+                <div style={{fontSize:26,fontWeight:700,color:m.c}}>{m.v}</div>
+                <div style={{fontSize:11,color:'#4b5563',marginTop:2}}>{m.unit}</div>
+              </div>
+            ))}
+          </div>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:10,marginTop:12}}>
+            {[{l:'RPi Status',v:'OK',c:'#22c55e'},{l:'Shelly Status',v:'OK',c:'#22c55e'},{l:'Buffer',v:`${n.buffer} pend.`,c:n.buffer>0?'#f59e0b':'#22c55e'}].map((s,i) => (
+              <div key={i} style={{background:'#0a0a14',borderRadius:8,padding:'8px 12px',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                <span style={{fontSize:11,color:'#6e6694'}}>{s.l}</span>
+                <span style={{fontSize:12,fontWeight:700,color:s.c}}>{s.v}</span>
+              </div>
+            ))}
+          </div>
+        </Card>
+      ))}
+    </div>
+  );
+};
+
+// ─── PAGE: COST ANALYTICS ─────────────────────────────────────────────────────
+const PageCost = () => {
+  const [peakReduce, setPeakReduce] = useState(20);
+  const baseSavings = Math.round((peakReduce / 100) * 4288);
+  const tariffBreakdown = [
+    {name:'Base',kwh:38.4,cost:1228,rate:31.98,pct:14},
+    {name:'Intermedia',kwh:82.1,cost:3362,rate:40.95,pct:38},
+    {name:'Punta',kwh:29.5,cost:4288,rate:145.36,pct:48}
+  ];
+  return (
+    <div>
+      <div style={{display:'flex',flexWrap:'wrap',gap:14,marginBottom:22}}>
+        <StatCard label="Costo Hoy" value="$1,373 MXN" sub="Estimado GDMTH" color="#ef4444" icon="Wallet"/>
+        <StatCard label="Costo Esta Semana" value="$8,878 MXN" sub="Lun–Vie actual" color="#f59e0b" icon="Calendar" trend={12}/>
+        <StatCard label="Proyección Mensual" value="$38,400 MXN" sub="Enero 2025" color={PURPLE_L} icon="TrendingUp"/>
+        <StatCard label="Costo por Punta" value="48% del total" sub="Solo 23% del tiempo" color="#ef4444" icon="Bolt"/>
+      </div>
+      <div style={{display:'grid',gridTemplateColumns:'2fr 1fr',gap:18,marginBottom:18}}>
+        <Card>
+          <SectionTitle sub="Desglose detallado por periodo tarifario GDMTH">Análisis por Periodo Tarifario</SectionTitle>
+          {tariffBreakdown.map((t,i) => (
+            <div key={i} style={{marginBottom:16}}>
+              <div style={{display:'flex',justifyContent:'space-between',marginBottom:6}}>
+                <div style={{display:'flex',alignItems:'center',gap:10}}>
+                  <span style={{width:10,height:10,borderRadius:2,background:Object.values(TARIFF_COLORS)[i],display:'inline-block'}}/>
+                  <span style={{fontSize:14,fontWeight:700,color:'#f0eeff'}}>{t.name}</span>
+                </div>
+                <div style={{textAlign:'right'}}>
+                  <span style={{fontSize:15,fontWeight:700,color:Object.values(TARIFF_COLORS)[i]}}>${t.cost.toLocaleString()} MXN</span>
+                  <span style={{fontSize:11,color:'#6e6694',marginLeft:8}}>{t.kwh} kWh</span>
+                </div>
+              </div>
+              <div style={{height:8,background:'#1a1730',borderRadius:4,overflow:'hidden',marginBottom:4}}>
+                <div style={{height:'100%',width:`${t.pct}%`,background:Object.values(TARIFF_COLORS)[i],borderRadius:4,opacity:.8}}/>
+              </div>
+              <div style={{display:'flex',justifyContent:'space-between',fontSize:11,color:'#6e6694'}}>
+                <span>{t.pct}% del costo total</span>
+                <span>Tarifa: ${t.rate}/kWh</span>
+              </div>
+            </div>
+          ))}
+        </Card>
+        <div>
+          <Card style={{marginBottom:14}}>
+            <SectionTitle sub="Fuente: CFE">Tarifa Activa</SectionTitle>
+            <div style={{background:'#0f0f1a',borderRadius:10,padding:'14px'}}>
+              <div style={{fontSize:20,fontWeight:800,color:PURPLE_L}}>GDMTH</div>
+              <div style={{fontSize:11,color:'#6e6694',marginTop:2}}>Gran Demanda en Media Tensión H</div>
+            </div>
+            {[{l:'Cargo Base',v:'$31.98/kWh'},{l:'Cargo Intermedia',v:'$40.95/kWh'},{l:'Cargo Punta',v:'$145.36/kWh'},{l:'Última actualización',v:'Ene 2025'},{l:'Estado CFE API',v:'Manual (fallback)'}].map((r,i) => (
+              <div key={i} style={{display:'flex',justifyContent:'space-between',padding:'6px 0',borderBottom:'1px solid #0f0f1a',fontSize:12}}>
+                <span style={{color:'#6e6694'}}>{r.l}</span>
+                <span style={{color:'#f0eeff',fontWeight:600}}>{r.v}</span>
+              </div>
+            ))}
+          </Card>
+        </div>
+      </div>
+      <Card>
+        <SectionTitle sub="Simulador interactivo de ahorro energético">Simulador de Ahorro</SectionTitle>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:24}}>
+          <div>
+            <div style={{marginBottom:20}}>
+              <div style={{display:'flex',justifyContent:'space-between',marginBottom:8,fontSize:13}}>
+                <label style={{color:'#c4bdf0'}}>Reducir consumo en punta</label>
+                <span style={{color:PURPLE_L,fontWeight:700}}>{peakReduce}%</span>
+              </div>
+              <input type="range" min={0} max={80} step={5} value={peakReduce}
+                onChange={e => setPeakReduce(+e.target.value)}
+                style={{width:'100%',accentColor:PURPLE_L}}/>
+            </div>
+            <div style={{background:'#22c55e18',border:'1px solid #22c55e33',borderRadius:12,padding:'16px 20px'}}>
+              <div style={{fontSize:12,color:'#6e6694',marginBottom:4}}>Ahorro estimado mensual</div>
+              <div style={{fontSize:32,fontWeight:800,color:'#22c55e'}}>${(baseSavings * 4.3).toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g,',')} MXN</div>
+              <div style={{fontSize:12,color:'#6e6694',marginTop:4}}>Reduciendo {peakReduce}% de carga en periodo punta</div>
+            </div>
+          </div>
+          <div>
+            <div style={{background:'#1a1730',borderRadius:12,padding:'16px'}}>
+              <div style={{fontSize:13,fontWeight:700,color:'#f0eeff',marginBottom:14}}>Distribución actual vs optimizada</div>
+              {tariffBreakdown.map((t,i) => {
+                const newCost = i===2 ? Math.round(t.cost * (1 - peakReduce/100)) : t.cost;
+                return (
+                  <div key={i} style={{marginBottom:12}}>
+                    <div style={{display:'flex',justifyContent:'space-between',fontSize:12,marginBottom:4}}>
+                      <span style={{color:'#9890c4'}}>{t.name}</span>
+                      <span style={{color:'#f0eeff'}}>${newCost.toLocaleString()} <span style={{color:'#22c55e',fontSize:11}}>{i===2?`(-${peakReduce}%)`:''}</span></span>
+                    </div>
+                    <div style={{height:6,background:'#0f0f1a',borderRadius:3,overflow:'hidden'}}>
+                      <div style={{height:'100%',width:`${Math.round(newCost/8878*100)}%`,background:Object.values(TARIFF_COLORS)[i],opacity:.8,borderRadius:3}}/>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      </Card>
+    </div>
+  );
+};
+
+// ─── PAGE: AI CENTER ──────────────────────────────────────────────────────────
+const PageAI = () => {
+  const [tab, setTab] = useState('forecast');
+  const [chat, setChat] = useState(MOCK.chatHistory);
+  const [input, setInput] = useState('');
+  const chatEndRef = useRef(null);
+  const sendMsg = () => {
+    if (!input.trim()) return;
+    const userMsg = { role:'user', msg: input };
+    const key = Object.keys(MOCK.chatResponses).find(k => input.toLowerCase().includes(k)) || 'default';
+    const botMsg = { role:'assistant', msg: MOCK.chatResponses[key] };
+    setChat(c => [...c, userMsg, botMsg]);
+    setInput('');
+    setTimeout(() => chatEndRef.current?.scrollIntoView({behavior:'smooth'}), 100);
+  };
+  const tabs = [{id:'forecast',label:'Pronóstico'},{id:'anomalies',label:'Anomalías'},{id:'recommendations',label:'Recomendaciones'},{id:'chat',label:'Asistente IA'}];
+  return (
+    <div>
+      <div style={{display:'flex',gap:4,marginBottom:20,background:'#0f0f1a',borderRadius:12,padding:4,width:'fit-content'}}>
+        {tabs.map(t => (
+          <button key={t.id} onClick={() => setTab(t.id)} style={{
+            padding:'8px 18px', borderRadius:9, border:'none', cursor:'pointer',
+            background: tab===t.id ? '#7c5cbf' : 'transparent',
+            color: tab===t.id ? '#fff' : '#6e6694', fontWeight:600, fontSize:13
+          }}>{t.label}</button>
+        ))}
+      </div>
+      {tab==='forecast' && (
+        <div>
+          <div style={{display:'flex',gap:14,marginBottom:18,flexWrap:'wrap'}}>
+            <StatCard label="Proyección Mañana" value="$1,520 MXN" sub="±$180 intervalo" color="#818cf8" icon="ArrowRight"/>
+            <StatCard label="Proyección Semana" value="$9,400 MXN" sub="±8% confianza" color={PURPLE_L} icon="BarChart"/>
+            <StatCard label="Proyección Mensual" value="$38,400 MXN" sub="Tendencia creciente" color="#f59e0b" icon="TrendingUp"/>
+          </div>
+          <Card>
+            <SectionTitle sub="Consumo real vs predicción del modelo · intervalo de confianza 90%">Pronóstico de Costo (MXN)</SectionTitle>
+            <ResponsiveContainer width="100%" height={240}>
+              <ComposedChart data={MOCK.forecast} margin={{top:5,right:20,left:-10,bottom:0}}>
+                <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRID}/>
+                <XAxis dataKey="day" tick={{fontSize:11,fill:'#6e6694'}}/>
+                <YAxis tick={{fontSize:10,fill:'#6e6694'}}/>
+                <Tooltip content={<CustomTooltip prefix="$" suffix=" MXN"/>}/>
+                <Area type="monotone" dataKey="upper" stroke="none" fill="#7c5cbf22" legendType="none"/>
+                <Area type="monotone" dataKey="lower" stroke="none" fill="#0a0a0f" legendType="none"/>
+                <Line type="monotone" dataKey="actual" name="Real" stroke="#22c55e" strokeWidth={2} dot={{fill:'#22c55e',r:4}} connectNulls={false}/>
+                <Line type="monotone" dataKey="pred" name="Predicción" stroke={PURPLE_L} strokeWidth={2} strokeDasharray="6 3" dot={{fill:PURPLE_L,r:4}}/>
+              </ComposedChart>
+            </ResponsiveContainer>
+          </Card>
+        </div>
+      )}
+      {tab==='anomalies' && (
+        <div>
+          <div style={{display:'flex',gap:14,marginBottom:18}}>
+            <StatCard label="Anomalías Hoy" value="3" sub="2 activas" color="#ef4444" icon="Alert"/>
+            <StatCard label="Anomalías Esta Semana" value="7" sub="Revisadas: 4" color="#f59e0b" icon="FileText"/>
+          </div>
+          {MOCK.anomalies.map(a => (
+            <Card key={a.id} style={{marginBottom:12,borderLeft:`4px solid ${a.severity==='critical'?'#ef4444':a.severity==='warning'?'#f59e0b':'#818cf8'}`,borderRadius:'0 12px 12px 0',paddingLeft:20}}>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:8}}>
+                <div>
+                  <div style={{fontSize:14,fontWeight:700,color:'#f0eeff'}}>{a.type}</div>
+                  <div style={{fontSize:11,color:'#6e6694',marginTop:2}}>{a.building} · {a.time}</div>
+                </div>
+                <Badge color={a.severity==='critical'?'#ef4444':a.severity==='warning'?'#f59e0b':'#818cf8'}>
+                  {a.severity==='critical'?'Crítico':a.severity==='warning'?'Advertencia':'Info'}
+                </Badge>
+              </div>
+              <div style={{display:'flex',gap:16,fontSize:12}}>
+                <span style={{color:'#6e6694'}}>Detectado: <strong style={{color:'#ef4444'}}>{a.value}</strong></span>
+                <span style={{color:'#6e6694'}}>Esperado: <strong style={{color:'#22c55e'}}>{a.expected}</strong></span>
+              </div>
+            </Card>
+          ))}
+        </div>
+      )}
+      {tab==='recommendations' && (
+        <div>
+          {MOCK.recommendations.map(r => (
+            <Card key={r.id} style={{marginBottom:14}} glow>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:10}}>
+                <div>
+                  <Badge color={r.priority==='alta'?'#ef4444':'#f59e0b'} style={{marginBottom:8}}>
+                    {r.priority==='alta'?'Alta prioridad':'Prioridad media'}
+                  </Badge>
+                  <div style={{fontSize:15,fontWeight:700,color:'#f0eeff',marginTop:8}}>{r.title}</div>
+                  <div style={{fontSize:12,color:'#6e6694',marginTop:3}}>{r.building}</div>
+                </div>
+                <div style={{textAlign:'right'}}>
+                  <div style={{fontSize:10,color:'#6e6694'}}>Ahorro estimado</div>
+                  <div style={{fontSize:22,fontWeight:800,color:'#22c55e'}}>${r.savings.toLocaleString()}</div>
+                  <div style={{fontSize:10,color:'#6e6694'}}>MXN/mes</div>
+                </div>
+              </div>
+              <p style={{fontSize:13,color:'#9890c4',lineHeight:1.6,marginBottom:10}}>{r.desc}</p>
+              <div style={{background:'#1a1730',borderRadius:8,padding:'8px 12px',fontSize:12,color:PURPLE_L,display:'flex',alignItems:'center',gap:8}}><Icon name="ArrowRight" size={13}/>{r.action}</div>
+            </Card>
+          ))}
+        </div>
+      )}
+      {tab==='chat' && (
+        <Card style={{height:520,display:'flex',flexDirection:'column'}}>
+          <div style={{flex:1,overflowY:'auto',padding:'4px 0',marginBottom:14}}>
+            {chat.map((m,i) => (
+              <div key={i} style={{marginBottom:14,display:'flex',gap:10,alignItems:'flex-start',flexDirection:m.role==='user'?'row-reverse':'row'}}>
+                <div style={{width:32,height:32,borderRadius:'50%',background:m.role==='user'?'#7c5cbf22':'#1a1730',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,fontSize:14}}>
+                  <Icon name={m.role==='user'?'User':'Bot'} size={16} color={m.role==='user'?PURPLE_L:'#9890c4'}/>
+                </div>
+                <div style={{
+                  background:m.role==='user'?'#7c5cbf22':'#0f0f1a',
+                  border:`1px solid ${m.role==='user'?`${PURPLE}44`:'#1e1b35'}`,
+                  borderRadius:12, padding:'10px 14px', maxWidth:'75%',
+                  fontSize:13, color:'#c4bdf0', lineHeight:1.6
+                }}>{m.msg}</div>
+              </div>
+            ))}
+            <div ref={chatEndRef}/>
+          </div>
+          <div style={{display:'flex',gap:10}}>
+            <input value={input} onChange={e => setInput(e.target.value)}
+              onKeyDown={e => e.key==='Enter' && sendMsg()}
+              placeholder="Pregunta sobre costos, anomalías, ahorro…" style={{flex:1}}/>
+            <button onClick={sendMsg} style={{
+              padding:'0 20px', background:`linear-gradient(135deg,${PURPLE},#4f3d9e)`,
+              border:'none', borderRadius:10, color:'#fff', fontWeight:700, cursor:'pointer'
+            }}>Enviar</button>
+          </div>
+          <div style={{marginTop:10,display:'flex',flexWrap:'wrap',gap:6}}>
+            {['¿Qué edificio costó más esta semana?','¿Cuánto podemos ahorrar en punta?','¿Hubo anomalías hoy?','Proyección de costo del mes'].map(q => (
+              <button key={q} onClick={() => { setInput(q); }} style={{
+                padding:'4px 12px', background:'#1a1730', border:'1px solid #2a2740',
+                borderRadius:20, color:'#9890c4', fontSize:11, cursor:'pointer'
+              }}>{q}</button>
+            ))}
+          </div>
+        </Card>
+      )}
+    </div>
+  );
+};
+
+// ─── PAGE: DATA MINING ────────────────────────────────────────────────────────
+const PageMining = () => {
+  const clusters = [
+    {name:'Carga Constante',buildings:['Data Center','Lab. Redes'],color:'#818cf8',desc:'Consumo uniforme 24/7, alta correlación temporal'},
+    {name:'Horario Administrativo',buildings:['Rectoría','Biblioteca'],color:'#22c55e',desc:'Picos 08:00–17:00, consumo mínimo nocturno'},
+    {name:'Alta Demanda Académica',buildings:['FIME','Lab. Química'],color:'#ef4444',desc:'Picos en periodos de clases, alta varianza'},
+    {name:'Uso Mixto',buildings:['Fac. Ingeniería','C. Cómputo'],color:'#f59e0b',desc:'Patrón híbrido sin correlación clara'}
+  ];
+  const correlationData = MOCK.weeklyTrend.map((d,i) => ({...d, fime: d.cost, redes: Math.round(d.cost*0.67)}));
+  return (
+    <div>
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:18,marginBottom:18}}>
+        <Card>
+          <SectionTitle sub="K-Means clustering de comportamiento de consumo">Clustering de Edificios</SectionTitle>
+          <div style={{display:'flex',flexDirection:'column',gap:12,marginTop:4}}>
+            {clusters.map((c,i) => (
+              <div key={i} style={{background:'#0f0f1a',borderRadius:12,padding:'14px',borderLeft:`4px solid ${c.color}`}}>
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:6}}>
+                  <div style={{fontSize:13,fontWeight:700,color:'#f0eeff'}}>{c.name}</div>
+                  <Badge color={c.color}>{c.buildings.length} edificios</Badge>
+                </div>
+                <div style={{fontSize:11,color:'#6e6694',marginBottom:6}}>{c.desc}</div>
+                <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+                  {c.buildings.map(b => <Badge key={b} color={c.color}>{b}</Badge>)}
+                </div>
+              </div>
+            ))}
+          </div>
+        </Card>
+        <Card>

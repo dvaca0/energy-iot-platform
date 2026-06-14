@@ -1,0 +1,451 @@
+            <div style={{fontSize:11,color:'#7b739e'}}>Análisis automático y recomendaciones accionables</div>
+          </div>
+        </div>
+        <Badge color={PURPLE_L}>AI Engine</Badge>
+      </div>
+      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(260px,1fr))',gap:12}}>
+        {normalized.map((ins,i) => {
+          const meta = PRIORITY_META[ins.priority] || PRIORITY_META.info;
+          return (
+            <div key={i} style={{background:'#0d0d19',border:`1px solid ${meta.color}33`,borderRadius:12,padding:'14px 15px'}}>
+              <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,marginBottom:10}}>
+                <Badge color={meta.color}>{meta.label}</Badge>
+                <span style={{fontSize:10,color:'#7b739e',textTransform:'uppercase',letterSpacing:.8}}>{ins.category}</span>
+              </div>
+              <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:8}}>
+                <Icon name="Building" size={14} color={PURPLE_L}/>
+                <span style={{fontSize:12,color:'#c4bdf0',fontWeight:700}}>{ins.building}</span>
+              </div>
+              <div style={{fontSize:12,color:'#22c55e',fontWeight:700,marginBottom:8}}>{ins.impact}</div>
+              <p style={{fontSize:12,color:'#a9a2d0',lineHeight:1.55}}>{ins.desc}</p>
+            </div>
+          );
+        })}
+      </div>
+    </Card>
+  );
+};
+
+const CustomTooltip = ({ active, payload, label, prefix='', suffix='' }) => {
+  if (!active || !payload?.length) return null;
+  return (
+    <div style={TOOLTIP_STYLE}>
+      <div style={{padding:'8px 12px'}}>
+        <div style={{fontSize:11,color:'#6e6694',marginBottom:6}}>{label}</div>
+        {payload.map((p,i) => (
+          <div key={i} style={{fontSize:13,color:p.color||'#e2e0f0',fontWeight:600}}>
+            {p.name}: {prefix}{typeof p.value === 'number' ? p.value.toLocaleString('es-MX') : p.value}{suffix}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+// ─── SIDEBAR ─────────────────────────────────────────────────────────────────
+const NAV_ITEMS = [
+  { id:'dashboard', label:'Dashboard Ejecutivo', icon:'LayoutDashboard' },
+  { id:'campus', label:'Mapa de Campus', icon:'MapPin' },
+  { id:'buildings', label:'Edificios', icon:'Building2' },
+  { id:'deployments', label:'Despliegues', icon:'Cpu' },
+  { id:'live', label:'Monitoreo en Vivo', icon:'Activity' },
+  { id:'cost', label:'Análisis de Costo', icon:'DollarSign' },
+  { id:'ai', label:'Centro IA / Forecasting', icon:'BrainCircuit' },
+  { id:'mining', label:'Minería de Datos', icon:'Database' },
+  { id:'reports', label:'Reportes', icon:'FileText' },
+  { id:'infra', label:'Infraestructura', icon:'Server' },
+  { id:'settings', label:'Configuración', icon:'Settings' }
+];
+
+const ROLES = ['Administrador','Ejecutivo','Técnico','Investigador'];
+
+const Sidebar = ({ page, setPage, role, setRole }) => {
+  const [roleOpen, setRoleOpen] = useState(false);
+  return (
+    <div style={{
+      width:230, minHeight:'100vh', background:'#08080f',
+      borderRight:'1px solid #1a1730', display:'flex', flexDirection:'column',
+      position:'fixed', top:0, left:0, zIndex:100
+    }}>
+      <div style={{padding:'20px 16px 16px', borderBottom:'1px solid #1a1730'}}>
+        <div style={{display:'flex',alignItems:'center',gap:10}}>
+          <div style={{background:'linear-gradient(135deg,#7c5cbf,#4f3d9e)',borderRadius:10,width:36,height:36,display:'flex',alignItems:'center',justifyContent:'center',color:'#fff'}}><Icon name="Bolt" size={18}/></div>
+          <div>
+            <div style={{fontSize:12,fontWeight:800,color:'#f0eeff',letterSpacing:.3}}>ENERGY</div>
+            <div style={{fontSize:10,color:'#6e6694',letterSpacing:.5}}>INTELLIGENCE PLATFORM</div>
+          </div>
+        </div>
+      </div>
+      <nav style={{flex:1,padding:'12px 8px',overflowY:'auto'}}>
+        {NAV_ITEMS.map(item => (
+          <button key={item.id} onClick={() => setPage(item.id)}
+            style={{
+              width:'100%', display:'flex', alignItems:'center', gap:10,
+              padding:'9px 12px', borderRadius:9, border:'none', marginBottom:2,
+              background: page===item.id ? '#7c5cbf22' : 'transparent',
+              color: page===item.id ? PURPLE_L : '#7a7499',
+              fontWeight: page===item.id ? 700 : 400,
+              fontSize:13, cursor:'pointer', transition:'all .15s',
+              borderLeft: page===item.id ? `3px solid ${PURPLE_L}` : '3px solid transparent'
+            }}>
+            <Icon name={iconForNav(item.icon)} size={15} color={page===item.id ? PURPLE_L : '#7a7499'}/>
+            {item.label}
+          </button>
+        ))}
+      </nav>
+      <div style={{padding:'12px 8px', borderTop:'1px solid #1a1730'}}>
+        <div style={{position:'relative'}}>
+          <button onClick={() => setRoleOpen(!roleOpen)} style={{
+            width:'100%', display:'flex', alignItems:'center', justifyContent:'space-between',
+            padding:'8px 12px', borderRadius:9, border:'1px solid #2a2740',
+            background:'#10101e', color:'#c4bdf0', fontSize:12, cursor:'pointer'
+          }}>
+            <div style={{display:'flex',alignItems:'center',gap:8}}>
+              <div style={{width:24,height:24,borderRadius:'50%',background:'#7c5cbf44',display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,color:PURPLE_L,fontWeight:700}}>
+                {role[0]}
+              </div>
+              {role}
+            </div>
+            <span style={{fontSize:10,color:'#6e6694'}}>▾</span>
+          </button>
+          {roleOpen && (
+            <div style={{position:'absolute',bottom:'100%',left:0,right:0,background:'#12101f',border:'1px solid #2a2740',borderRadius:9,overflow:'hidden',marginBottom:4}}>
+              {ROLES.map(r => (
+                <button key={r} onClick={() => { setRole(r); setRoleOpen(false); }} style={{
+                  width:'100%', padding:'9px 14px', textAlign:'left', border:'none',
+                  background: r===role ? '#7c5cbf22' : 'transparent',
+                  color: r===role ? PURPLE_L : '#9890c4', fontSize:13, cursor:'pointer'
+                }}>{r}</button>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ─── TOPBAR ───────────────────────────────────────────────────────────────────
+const Topbar = ({ page }) => {
+  const titles = { dashboard:'Dashboard Ejecutivo', campus:'Mapa de Campus', buildings:'Edificios',
+    deployments:'Despliegues', live:'Monitoreo en Vivo', cost:'Análisis de Costo',
+    ai:'Centro IA & Forecasting', mining:'Minería de Datos', reports:'Reportes',
+    infra:'Infraestructura', settings:'Configuración' };
+  const [time, setTime] = useState(new Date());
+  useEffect(() => { const t = setInterval(() => setTime(new Date()), 30000); return () => clearInterval(t); }, []);
+  return (
+    <div style={{
+      background:'#08080f', borderBottom:'1px solid #1a1730',
+      padding:'0 24px', height:56, display:'flex', alignItems:'center',
+      justifyContent:'space-between', position:'sticky', top:0, zIndex:90
+    }}>
+      <div>
+        <h1 style={{fontSize:16,fontWeight:700,color:'#f0eeff'}}>{titles[page] || page}</h1>
+        <p style={{fontSize:11,color:'#6e6694'}}>Universidad de Colima · GDMTH · Semana del 6–13 Ene 2025</p>
+      </div>
+      <div style={{display:'flex',alignItems:'center',gap:16}}>
+        <div style={{fontSize:12,color:'#6e6694'}}>
+          {time.toLocaleTimeString('es-MX', {hour:'2-digit',minute:'2-digit'})}
+        </div>
+        <div style={{display:'flex',alignItems:'center',gap:6,background:'#22c55e18',border:'1px solid #22c55e33',borderRadius:20,padding:'4px 12px'}}>
+          <StatusDot status="online"/>
+          <span style={{fontSize:11,color:'#22c55e',fontWeight:600}}>2 nodos activos</span>
+        </div>
+        <div style={{width:32,height:32,borderRadius:'50%',background:'linear-gradient(135deg,#7c5cbf,#4f3d9e)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:13,fontWeight:700,color:'#fff'}}>U</div>
+      </div>
+    </div>
+  );
+};
+
+// ─── PAGE: EXECUTIVE DASHBOARD ────────────────────────────────────────────────
+const PageDashboard = () => {
+  const tariffData = [
+    { name:'Base', kwh:38.4, cost:1228, pct:21 },
+    { name:'Intermedia', kwh:82.1, cost:3362, pct:45 },
+    { name:'Punta', kwh:29.5, cost:4288, pct:34 }
+  ];
+  return (
+    <div>
+      <div style={{display:'flex',flexWrap:'wrap',gap:14,marginBottom:22}}>
+        <StatCard label="Costo Estimado Hoy" value="$1,373 MXN" sub="FIME + Lab. Redes" color="#7c5cbf" trend={8} icon="Wallet"/>
+        <StatCard label="Costo Esta Semana" value="$8,878 MXN" sub="Acumulado lun–hoy" color="#ef4444" trend={12} icon="Calendar"/>
+        <StatCard label="Proyección Mensual" value="$38,400 MXN" sub="Estimado GDMTH" color="#f59e0b" icon="TrendingUp"/>
+        <StatCard label="Ahorro Potencial" value="$5,810 MXN/mes" sub="3 recomendaciones" color="#22c55e" icon="ArrowDown"/>
+        <StatCard label="Edificio más costoso" value="FIME" sub="$5,312 esta semana" color="#a78bfa" icon="Building"/>
+        <StatCard label="Nodos Online" value="2 / 2" sub="Sistema operativo" color="#22c55e" icon="Activity"/>
+      </div>
+      <div style={{display:'grid',gridTemplateColumns:'2fr 1fr',gap:18,marginBottom:18}}>
+        <Card>
+          <SectionTitle sub="Costo estimado por hora · tarifa GDMTH">Costo por Hora (MXN)</SectionTitle>
+          <ResponsiveContainer width="100%" height={220}>
+            <BarChart data={MOCK.hourly} margin={{top:0,right:0,left:-10,bottom:0}}>
+              <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRID}/>
+              <XAxis dataKey="h" tick={{fontSize:10,fill:'#6e6694'}} interval={3}/>
+              <YAxis tick={{fontSize:10,fill:'#6e6694'}}/>
+              <Tooltip content={<CustomTooltip prefix="$" suffix=" MXN"/>}/>
+              <Bar dataKey="cost" name="Costo MXN" radius={[4,4,0,0]}>
+                {MOCK.hourly.map((d,i) => <Cell key={i} fill={TARIFF_COLORS[d.tariff]} opacity={0.85}/>)}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+          <div style={{display:'flex',gap:16,marginTop:10}}>
+            {Object.entries(TARIFF_COLORS).map(([k,v]) => (
+              <span key={k} style={{fontSize:11,color:'#6e6694',display:'flex',alignItems:'center',gap:5}}>
+                <span style={{width:10,height:10,borderRadius:2,background:v,display:'inline-block'}}/>
+                {k.charAt(0).toUpperCase()+k.slice(1)}
+              </span>
+            ))}
+          </div>
+        </Card>
+        <Card>
+          <SectionTitle sub="Distribución por periodo tarifario">Costo por Tarifa</SectionTitle>
+          <ResponsiveContainer width="100%" height={180}>
+            <PieChart>
+              <Pie data={tariffData} dataKey="cost" nameKey="name" cx="50%" cy="50%" innerRadius={50} outerRadius={75}>
+                {tariffData.map((d,i) => <Cell key={i} fill={Object.values(TARIFF_COLORS)[i]}/>)}
+              </Pie>
+              <Tooltip formatter={(v) => `$${v.toLocaleString()} MXN`}/>
+            </PieChart>
+          </ResponsiveContainer>
+          {tariffData.map((d,i) => (
+            <div key={i} style={{display:'flex',justifyContent:'space-between',padding:'5px 0',borderTop:'1px solid #1a1730',fontSize:12}}>
+              <span style={{display:'flex',alignItems:'center',gap:6,color:'#9890c4'}}>
+                <span style={{width:8,height:8,borderRadius:2,background:Object.values(TARIFF_COLORS)[i],display:'inline-block'}}/>
+                {d.name}
+              </span>
+              <span style={{color:'#f0eeff',fontWeight:600}}>${d.cost.toLocaleString()}</span>
+            </div>
+          ))}
+        </Card>
+      </div>
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:18,marginBottom:18}}>
+        <Card>
+          <SectionTitle sub="Tendencia de gasto · últimos 7 días">Costo Semanal por Día</SectionTitle>
+          <ResponsiveContainer width="100%" height={180}>
+            <AreaChart data={MOCK.weeklyTrend} margin={{top:5,right:10,left:-10,bottom:0}}>
+              <defs>
+                <linearGradient id="gc" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor={PURPLE} stopOpacity={0.4}/>
+                  <stop offset="95%" stopColor={PURPLE} stopOpacity={0}/>
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRID}/>
+              <XAxis dataKey="day" tick={{fontSize:11,fill:'#6e6694'}}/>
+              <YAxis tick={{fontSize:10,fill:'#6e6694'}}/>
+              <Tooltip content={<CustomTooltip prefix="$" suffix=" MXN"/>}/>
+              <Area type="monotone" dataKey="cost" name="Costo MXN" stroke={PURPLE_L} fill="url(#gc)" strokeWidth={2}/>
+            </AreaChart>
+          </ResponsiveContainer>
+        </Card>
+        <Card>
+          <SectionTitle sub="Edificios actualmente monitoreados">Costo por Edificio · Semana</SectionTitle>
+          <div style={{marginTop:8}}>
+            {[{b:'FIME',cost:5312,pct:60},{b:'Lab. de Redes',cost:3566,pct:40}].map((d,i) => (
+              <div key={i} style={{marginBottom:16}}>
+                <div style={{display:'flex',justifyContent:'space-between',marginBottom:6,fontSize:13}}>
+                  <span style={{color:'#c4bdf0'}}>{d.b}</span>
+                  <span style={{color:'#f0eeff',fontWeight:700}}>${d.cost.toLocaleString()} MXN</span>
+                </div>
+                <div style={{height:8,background:'#1a1730',borderRadius:4,overflow:'hidden'}}>
+                  <div style={{height:'100%',width:`${d.pct}%`,background:`linear-gradient(90deg,${PURPLE},${PURPLE_L})`,borderRadius:4}}/>
+                </div>
+              </div>
+            ))}
+            <div style={{background:'#1a1730',borderRadius:10,padding:'12px 14px',marginTop:16}}>
+              <div style={{fontSize:11,color:'#6e6694',marginBottom:4}}>6 edificios sin monitoreo</div>
+              <div style={{fontSize:13,color:'#9890c4'}}>Asignar nodos para ampliar cobertura</div>
+            </div>
+          </div>
+        </Card>
+      </div>
+      <AIInsightCard insights={[
+        'El periodo de punta representó el 21% del consumo en kWh pero generó el 39% del costo estimado total.',
+        'FIME proyecta superar el costo de la semana anterior en un 14% si el patrón actual se mantiene.',
+        'Desplazar cargas no críticas fuera del periodo punta podría generar un ahorro estimado de $3,250 MXN/mes.',
+        'El factor de potencia de Lab. de Redes (0.89) está por debajo del mínimo recomendado (0.90) y genera penalización tarifaria.'
+      ]}/>
+    </div>
+  );
+};
+
+// ─── PAGE: CAMPUS MAP ─────────────────────────────────────────────────────────
+const PageCampus = () => {
+  const [selected, setSelected] = useState(null);
+  const buildings = MOCK.buildings;
+  return (
+    <div>
+      <div style={{display:'flex',gap:18,marginBottom:22,flexWrap:'wrap'}}>
+        {MOCK.campuses.map((c,i) => (
+          <Card key={i} style={{flex:1,minWidth:220,borderColor:c.status==='active'?`${PURPLE}44`:'#1e1b35'}}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:10}}>
+              <div>
+                <div style={{fontSize:13,fontWeight:700,color:'#f0eeff'}}>{c.name}</div>
+                <div style={{fontSize:11,color:'#6e6694',marginTop:2}}>{c.monitored}/{c.buildings} edificios monitoreados</div>
+              </div>
+              <Badge color={c.status==='active'?'#22c55e':'#6b7280'}>{c.status==='active'?'Activo':'Inactivo'}</Badge>
+            </div>
+            {c.status==='active' && <>
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginTop:10}}>
+                <div style={{background:'#0f0f1a',borderRadius:8,padding:'8px 10px'}}>
+                  <div style={{fontSize:10,color:'#6e6694'}}>Potencia</div>
+                  <div style={{fontSize:16,fontWeight:700,color:'#f0eeff'}}>{c.power} kW</div>
+                </div>
+                <div style={{background:'#0f0f1a',borderRadius:8,padding:'8px 10px'}}>
+                  <div style={{fontSize:10,color:'#6e6694'}}>Costo/Sem.</div>
+                  <div style={{fontSize:16,fontWeight:700,color:PURPLE_L}}>${c.cost_week.toLocaleString()}</div>
+                </div>
+              </div>
+            </>}
+          </Card>
+        ))}
+      </div>
+      <div style={{display:'grid',gridTemplateColumns:selected?'1fr 340px':'1fr',gap:18}}>
+        <Card>
+          <SectionTitle sub="Estado de edificios · Campus Colima">Red de Edificios Inteligentes</SectionTitle>
+          <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(160px,1fr))',gap:12,marginTop:4}}>
+            {buildings.map(b => (
+              <div key={b.id} onClick={() => setSelected(selected?.id===b.id ? null : b)}
+                style={{
+                  background:'#0f0f1a', borderRadius:12, padding:'14px',
+                  border:`1px solid ${b.status==='normal'?'#22c55e44':b.status==='warning'?'#f59e0b44':b.status==='offline'?'#2a2740':'#ef444444'}`,
+                  cursor:'pointer', transition:'all .2s',
+                  boxShadow: selected?.id===b.id ? `0 0 16px ${PURPLE}44` : 'none'
+                }}>
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:8}}>
+                  <Icon name="Building" size={20} color={PURPLE_L}/>
+                  <StatusDot status={b.status==='normal'?'online':b.status==='offline'?'offline':'warning'}/>
+                </div>
+                <div style={{fontSize:13,fontWeight:700,color:'#f0eeff',marginBottom:2}}>{b.name}</div>
+                <div style={{fontSize:11,color:'#6e6694',marginBottom:8}}>{b.campus}</div>
+                {b.status!=='offline' ? <>
+                  <div style={{fontSize:13,fontWeight:700,color:PURPLE_L}}>{b.power} kW</div>
+                  <div style={{fontSize:11,color:'#6e6694'}}>${b.cost_week.toLocaleString()} MXN/sem</div>
+                </> : <div style={{fontSize:11,color:'#4b5563'}}>Sin monitoreo</div>}
+                {b.anomaly && <div style={{marginTop:6,fontSize:10,background:'#ef444418',color:'#ef4444',borderRadius:20,padding:'2px 8px',display:'inline-block'}}>Anomalía</div>}
+              </div>
+            ))}
+          </div>
+        </Card>
+        {selected && (
+          <Card glow>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:16}}>
+              <div>
+                <div style={{fontSize:15,fontWeight:700,color:'#f0eeff'}}>{selected.name}</div>
+                <div style={{fontSize:12,color:'#6e6694'}}>{selected.faculty}</div>
+              </div>
+              <button onClick={() => setSelected(null)} style={{background:'none',border:'none',color:'#6e6694',cursor:'pointer'}}><Icon name="X" size={18}/></button>
+            </div>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+              {[
+                {label:'Campus',value:selected.campus},
+                {label:'Estado',value:selected.status},
+                {label:'Nodo',value:selected.node||'—'},
+                {label:'Última Actualización',value:selected.last_update},
+                {label:'Potencia',value:`${selected.power} kW`},
+                {label:'Energía/Semana',value:`${selected.energy_week} kWh`},
+                {label:'Costo/Semana',value:`$${selected.cost_week.toLocaleString()} MXN`},
+                {label:'Costo/Hoy',value:`$${selected.cost_today.toLocaleString()} MXN`}
+              ].map((r,i) => (
+                <div key={i} style={{background:'#0f0f1a',borderRadius:8,padding:'8px 10px'}}>
+                  <div style={{fontSize:10,color:'#6e6694'}}>{r.label}</div>
+                  <div style={{fontSize:13,fontWeight:600,color:'#f0eeff',marginTop:2}}>{r.value}</div>
+                </div>
+              ))}
+            </div>
+            {selected.anomaly && (
+              <div style={{marginTop:14,background:'#ef444418',border:'1px solid #ef444433',borderRadius:10,padding:'10px 12px'}}>
+                <div style={{fontSize:12,fontWeight:700,color:'#ef4444',marginBottom:4}}>Anomalía detectada</div>
+                <div style={{fontSize:12,color:'#f87171'}}>Se detectó consumo anómalo en las últimas horas. Revisar en monitoreo en vivo.</div>
+              </div>
+            )}
+          </Card>
+        )}
+      </div>
+    </div>
+  );
+};
+
+// ─── PAGE: BUILDINGS ──────────────────────────────────────────────────────────
+const PageBuildings = ({ setPage }) => {
+  const [filter, setFilter] = useState({ campus:'', status:'' });
+  const filtered = MOCK.buildings.filter(b =>
+    (!filter.campus || b.campus === filter.campus) &&
+    (!filter.status || b.status === filter.status)
+  );
+  const campuses = [...new Set(MOCK.buildings.map(b => b.campus))];
+  return (
+    <div>
+      <div style={{display:'flex',gap:12,marginBottom:18,flexWrap:'wrap',alignItems:'center'}}>
+        <select value={filter.campus} onChange={e => setFilter(f=>({...f,campus:e.target.value}))} style={{width:180}}>
+          <option value="">Todos los campus</option>
+          {campuses.map(c => <option key={c}>{c}</option>)}
+        </select>
+        <select value={filter.status} onChange={e => setFilter(f=>({...f,status:e.target.value}))} style={{width:160}}>
+          <option value="">Todos los estados</option>
+          <option value="normal">Normal</option>
+          <option value="warning">Advertencia</option>
+          <option value="offline">Sin datos</option>
+        </select>
+        <div style={{marginLeft:'auto',fontSize:13,color:'#6e6694'}}>{filtered.length} edificios</div>
+      </div>
+      <Card style={{padding:0,overflow:'hidden'}}>
+        <table style={{width:'100%',borderCollapse:'collapse'}}>
+          <thead>
+            <tr style={{borderBottom:'1px solid #1e1b35'}}>
+              {['Edificio','Facultad','Campus','Nodo','Estado','Potencia','Energía/Sem','Costo/Sem','Anomalía'].map(h => (
+                <th key={h} style={{padding:'12px 16px',textAlign:'left',fontSize:11,color:'#6e6694',fontWeight:600,textTransform:'uppercase',letterSpacing:.8}}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {filtered.map((b,i) => (
+              <tr key={b.id} style={{borderBottom:'1px solid #0f0f1a',transition:'background .15s'}}
+                onMouseEnter={e => e.currentTarget.style.background='#10101e'}
+                onMouseLeave={e => e.currentTarget.style.background='transparent'}>
+                <td style={{padding:'13px 16px',fontSize:13,fontWeight:700,color:'#f0eeff'}}>{b.name}</td>
+                <td style={{padding:'13px 16px',fontSize:12,color:'#9890c4'}}>{b.faculty}</td>
+                <td style={{padding:'13px 16px',fontSize:12,color:'#9890c4'}}>{b.campus}</td>
+                <td style={{padding:'13px 16px'}}>
+                  {b.node ? <Badge color="#7c5cbf">{b.node}</Badge> : <span style={{fontSize:12,color:'#4b5563'}}>—</span>}
+                </td>
+                <td style={{padding:'13px 16px'}}>
+                  <div style={{display:'flex',alignItems:'center',gap:5}}>
+                    <StatusDot status={b.status==='normal'?'online':b.status==='offline'?'offline':'warning'}/>
+                    <span style={{fontSize:12,color:b.status==='normal'?'#22c55e':b.status==='warning'?'#f59e0b':'#6b7280'}}>
+                      {b.status==='normal'?'Normal':b.status==='warning'?'Advertencia':'Sin datos'}
+                    </span>
+                  </div>
+                </td>
+                <td style={{padding:'13px 16px',fontSize:13,color:'#f0eeff',fontWeight:600}}>{b.power>0?`${b.power} kW`:'—'}</td>
+                <td style={{padding:'13px 16px',fontSize:13,color:'#9890c4'}}>{b.energy_week>0?`${b.energy_week} kWh`:'—'}</td>
+                <td style={{padding:'13px 16px',fontSize:13,fontWeight:700,color:b.cost_week>0?PURPLE_L:'#4b5563'}}>
+                  {b.cost_week>0?`$${b.cost_week.toLocaleString()}`:'—'}
+                </td>
+                <td style={{padding:'13px 16px'}}>
+                  {b.anomaly ? <Badge color="#ef4444">Sí</Badge> : <span style={{fontSize:12,color:'#4b5563'}}>—</span>}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </Card>
+    </div>
+  );
+};
+
+// ─── PAGE: BUILDING DETAIL ────────────────────────────────────────────────────
+const PageBuildingDetail = ({ building }) => {
+  const b = building || MOCK.buildings[0];
+  return (
+    <div>
+      <div style={{display:'flex',gap:14,marginBottom:22,flexWrap:'wrap'}}>
+        {[
+          {l:'Potencia Actual',v:`${b.power} kW`,c:PURPLE_L},
+          {l:'Tensión',v:'228.4 V',c:'#22c55e'},
+          {l:'Corriente',v:'18.7 A',c:'#f59e0b'},
+          {l:'Factor de Potencia',v:'0.93',c:'#22c55e'},
+          {l:'Frecuencia',v:'60.02 Hz',c:'#818cf8'},
+          {l:'Costo Hoy',v:`$${b.cost_today.toLocaleString()} MXN`,c:'#ef4444'}
+        ].map((s,i) => (
+          <div key={i} style={{background:'#10101e',border:'1px solid #1e1b35',borderRadius:12,padding:'14px 18px',flex:1,minWidth:130}}>
+            <div style={{fontSize:10,color:'#6e6694',textTransform:'uppercase',letterSpacing:1}}>{s.l}</div>

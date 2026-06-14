@@ -1,0 +1,236 @@
+        <Card>
+          <SectionTitle sub="Correlación de consumo entre edificios monitoreados">Correlación FIME vs Lab. Redes</SectionTitle>
+          <ResponsiveContainer width="100%" height={220}>
+            <LineChart data={correlationData} margin={{top:5,right:10,left:-10,bottom:0}}>
+              <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRID}/>
+              <XAxis dataKey="day" tick={{fontSize:10,fill:'#6e6694'}}/>
+              <YAxis tick={{fontSize:10,fill:'#6e6694'}}/>
+              <Tooltip content={<CustomTooltip prefix="$" suffix=" MXN"/>}/>
+              <Line dataKey="fime" name="FIME" stroke={PURPLE_L} strokeWidth={2} dot={{r:3}}/>
+              <Line dataKey="redes" name="Lab. Redes" stroke="#22c55e" strokeWidth={2} dot={{r:3}} strokeDasharray="4 2"/>
+            </LineChart>
+          </ResponsiveContainer>
+          <div style={{background:'#0f0f1a',borderRadius:10,padding:'10px 14px',marginTop:10}}>
+            <div style={{fontSize:12,color:'#9890c4'}}>Coeficiente de correlación Pearson: <strong style={{color:PURPLE_L}}>0.87</strong> — Alta correlación positiva</div>
+          </div>
+        </Card>
+      </div>
+      <Card style={{marginBottom:18}}>
+        <SectionTitle sub="Patrones descubiertos por el motor de minería de datos">Descubrimiento de Patrones</SectionTitle>
+        <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(220px,1fr))',gap:12}}>
+          {[
+            {icon:'Activity',title:'Baseload Nocturno Anómalo',building:'Lab. de Redes',detail:'2.4 kW detectados entre 02:00–05:00 vs. esperado 0.8 kW',severity:'warning'},
+            {icon:'BarChart',title:'Carga Constante',building:'Data Center',detail:'Desviación estándar < 0.3 kW en 72h. Patrón de carga base estable.',severity:'info'},
+            {icon:'Calendar',title:'Alta Dependencia Laboral',building:'FIME',detail:'Ratio lunes-viernes/fin de semana = 4.8x. Correlación académica.',severity:'info'},
+            {icon:'TrendingUp',title:'Tendencia Creciente',building:'FIME',detail:'Incremento del 14% semana sobre semana. Proyección supera límite.',severity:'warning'}
+          ].map((p,i) => (
+            <div key={i} style={{background:'#0f0f1a',borderRadius:12,padding:'14px',border:`1px solid ${p.severity==='warning'?'#f59e0b33':'#1e1b35'}`}}>
+              <div style={{width:34,height:34,borderRadius:9,background:p.severity==='warning'?'#f59e0b18':'#7c5cbf18',border:`1px solid ${p.severity==='warning'?'#f59e0b33':'#7c5cbf33'}`,display:'flex',alignItems:'center',justifyContent:'center',marginBottom:10,color:p.severity==='warning'?'#f59e0b':PURPLE_L}}><Icon name={p.icon} size={17}/></div>
+              <div style={{fontSize:13,fontWeight:700,color:'#f0eeff',marginBottom:4}}>{p.title}</div>
+              <div style={{fontSize:11,color:PURPLE_L,marginBottom:6}}>{p.building}</div>
+              <div style={{fontSize:11,color:'#6e6694',lineHeight:1.5}}>{p.detail}</div>
+            </div>
+          ))}
+        </div>
+      </Card>
+      <AIInsightCard insights={[
+        '"Data Center" presenta firma de carga constante — comportamiento 24/7 sin variación significativa.',
+        '"FIME" y "Lab. de Redes" muestran correlación de Pearson 0.87 — patrones de uso académico similares.',
+        'Los edificios administrativos presentan alta dependencia laboral con ratio semana/fin de semana de 4.8x.',
+        'El baseload nocturno en Lab. de Redes es 3x superior al esperado — posible equipo encendido innecesariamente.'
+      ]}/>
+    </div>
+  );
+};
+
+// ─── PAGE: REPORTS ────────────────────────────────────────────────────────────
+const PageReports = () => {
+  const reports = [
+    {title:'Resumen Semanal de Costo',type:'Ejecutivo',date:'13 Ene 2025',icon:'Wallet',status:'Disponible'},
+    {title:'Comparación de Edificios',type:'Técnico',date:'13 Ene 2025',icon:'Building',status:'Disponible'},
+    {title:'Reporte de Anomalías IA',type:'IA',date:'13 Ene 2025',icon:'Alert',status:'Disponible'},
+    {title:'Reporte de Despliegue de Nodos',type:'Técnico',date:'13 Ene 2025',icon:'Cpu',status:'Disponible'},
+    {title:'Reporte de Sostenibilidad',type:'Ejecutivo',date:'Ene 2025',icon:'Leaf',status:'En preparación'},
+    {title:'Dataset Completo CSV',type:'Datos',date:'13 Ene 2025',icon:'BarChart',status:'Disponible'}
+  ];
+  return (
+    <div>
+      <div style={{display:'flex',gap:14,marginBottom:22,flexWrap:'wrap'}}>
+        {['PDF','CSV','Excel'].map(fmt => (
+          <button key={fmt} style={{
+            padding:'10px 24px', background:`linear-gradient(135deg,${PURPLE},#4f3d9e)`,
+            border:'none', borderRadius:10, color:'#fff', fontWeight:700, fontSize:14, cursor:'pointer'
+          }}>Exportar {fmt}</button>
+        ))}
+      </div>
+      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(280px,1fr))',gap:14}}>
+        {reports.map((r,i) => (
+          <Card key={i} style={{cursor:'pointer'}} glow={r.status==='Disponible'}>
+            <div style={{display:'flex',gap:12,marginBottom:12}}>
+              <div style={{width:42,height:42,borderRadius:11,background:'#7c5cbf18',border:'1px solid #7c5cbf33',display:'flex',alignItems:'center',justifyContent:'center',color:PURPLE_L}}><Icon name={r.icon} size={20}/></div>
+              <div style={{flex:1}}>
+                <div style={{fontSize:14,fontWeight:700,color:'#f0eeff'}}>{r.title}</div>
+                <div style={{fontSize:11,color:'#6e6694',marginTop:2}}>{r.type} · {r.date}</div>
+              </div>
+            </div>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+              <Badge color={r.status==='Disponible'?'#22c55e':'#f59e0b'}>{r.status}</Badge>
+              {r.status==='Disponible' && (
+                <button style={{background:'none',border:`1px solid ${PURPLE}44`,borderRadius:8,padding:'5px 14px',color:PURPLE_L,fontSize:12,cursor:'pointer'}}>Descargar</button>
+              )}
+            </div>
+          </Card>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+// ─── PAGE: INFRASTRUCTURE ─────────────────────────────────────────────────────
+const PageInfra = () => {
+  const services = [
+    {name:'API Backend (FastAPI)',status:'mock',latency:'—',icon:'Plug'},
+    {name:'Base de Datos SQLite (Edge)',status:'ok',latency:'2ms',icon:'Database'},
+    {name:'Servicio de Sincronía',status:'ok',latency:'—',icon:'Sync'},
+    {name:'Tailscale VPN',status:'ok',latency:'14ms',icon:'Lock'},
+    {name:'Raspberry Pi — Node 001',status:'ok',latency:'8ms',icon:'Monitor'},
+    {name:'Raspberry Pi — Node 002',status:'ok',latency:'11ms',icon:'Monitor'},
+    {name:'Shelly Pro — Node 001',status:'ok',latency:'3ms',icon:'Bolt'},
+    {name:'Shelly Pro — Node 002',status:'ok',latency:'5ms',icon:'Bolt'}
+  ];
+  return (
+    <div>
+      <div style={{display:'flex',gap:14,marginBottom:22,flexWrap:'wrap'}}>
+        <StatCard label="Nodos Online" value="2/2" sub="100% disponibilidad" color="#22c55e" icon="Activity"/>
+        <StatCard label="Muestras Acumuladas" value="14,850" sub="Ambos nodos" color={PURPLE_L} icon="BarChart"/>
+        <StatCard label="Buffer Pendiente" value="3 reg." sub="Node 002" color="#f59e0b" icon="Clock"/>
+        <StatCard label="Uptime Sistema" value="99.2%" sub="Últimas 168h" color="#22c55e" icon="TrendingUp"/>
+      </div>
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:14}}>
+        {services.map((s,i) => (
+          <Card key={i} style={{display:'flex',alignItems:'center',gap:14,padding:'14px 18px'}}>
+            <div style={{width:38,height:38,borderRadius:10,background:'#10101e',border:'1px solid #2a2740',display:'flex',alignItems:'center',justifyContent:'center',color:PURPLE_L}}><Icon name={s.icon} size={18}/></div>
+            <div style={{flex:1}}>
+              <div style={{fontSize:13,fontWeight:700,color:'#f0eeff'}}>{s.name}</div>
+              {s.latency!=='—' && <div style={{fontSize:11,color:'#6e6694',marginTop:2}}>Latencia: {s.latency}</div>}
+            </div>
+            <div>
+              <StatusDot status={s.status==='ok'?'online':s.status==='mock'?'warning':'offline'}/>
+              <span style={{fontSize:11,color:s.status==='ok'?'#22c55e':s.status==='mock'?'#f59e0b':'#ef4444',fontWeight:600}}>
+                {s.status==='ok'?'OK':s.status==='mock'?'Mock/Dev':'Error'}
+              </span>
+            </div>
+          </Card>
+        ))}
+      </div>
+      {MOCK.nodes.map(n => (
+        <Card key={n.id} style={{marginTop:14}}>
+          <div style={{fontSize:14,fontWeight:700,color:'#f0eeff',marginBottom:12}}>{n.name} — Detalle de Hardware</div>
+          <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(130px,1fr))',gap:10}}>
+            {[
+              {l:'IP (Tailscale)',v:n.ip},{l:'Firmware',v:`v${n.fw}`},
+              {l:'Muestras',v:n.samples.toLocaleString()},{l:'Buffer',v:`${n.buffer} pend.`},
+              {l:'RPi Status',v:n.rpi_status.toUpperCase()},{l:'Shelly Status',v:n.shelly_status.toUpperCase()},
+              {l:'Última Sync',v:n.last_sync},{l:'Edificio',v:n.building}
+            ].map((r,i) => (
+              <div key={i} style={{background:'#0f0f1a',borderRadius:8,padding:'8px 10px'}}>
+                <div style={{fontSize:10,color:'#6e6694'}}>{r.l}</div>
+                <div style={{fontSize:12,fontWeight:600,color:'#f0eeff',marginTop:2}}>{r.v}</div>
+              </div>
+            ))}
+          </div>
+        </Card>
+      ))}
+    </div>
+  );
+};
+
+// ─── PAGE: SETTINGS ───────────────────────────────────────────────────────────
+const PageSettings = ({ role, setRole }) => (
+  <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:18}}>
+    <div>
+      <Card style={{marginBottom:14}}>
+        <SectionTitle sub="Gestión de perfil de usuario">Perfil de Usuario</SectionTitle>
+        {[{l:'Nombre',v:'Dr. Carlos Mendoza'},{l:'Email',v:'c.mendoza@ucol.mx'},{l:'Rol',v:role},{l:'Campus',v:'Campus Colima'}].map((r,i) => (
+          <div key={i} style={{display:'flex',justifyContent:'space-between',padding:'9px 0',borderBottom:'1px solid #0f0f1a',fontSize:13}}>
+            <span style={{color:'#6e6694'}}>{r.l}</span>
+            <span style={{color:'#f0eeff',fontWeight:600}}>{r.v}</span>
+          </div>
+        ))}
+      </Card>
+      <Card>
+        <SectionTitle sub="Simulación de vista por rol">Selector de Rol</SectionTitle>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+          {ROLES.map(r => (
+            <button key={r} onClick={() => setRole(r)} style={{
+              padding:'12px', borderRadius:10, border:`1px solid ${role===r?PURPLE:'#2a2740'}`,
+              background: role===r ? '#7c5cbf22' : '#0f0f1a',
+              color: role===r ? PURPLE_L : '#9890c4', fontWeight: role===r ? 700 : 400,
+              fontSize:13, cursor:'pointer'
+            }}>{r}</button>
+          ))}
+        </div>
+      </Card>
+    </div>
+    <div>
+      <Card style={{marginBottom:14}}>
+        <SectionTitle sub="Configuración tarifaria CFE">Tarifas (placeholder)</SectionTitle>
+        {[{l:'Tarifa activa',v:'GDMTH'},{l:'Cargo base',v:'$31.98/kWh'},{l:'Cargo intermedia',v:'$40.95/kWh'},{l:'Cargo punta',v:'$145.36/kWh'}].map((r,i) => (
+          <div key={i} style={{display:'flex',justifyContent:'space-between',padding:'8px 0',borderBottom:'1px solid #0f0f1a',fontSize:13}}>
+            <span style={{color:'#6e6694'}}>{r.l}</span>
+            <span style={{color:'#f0eeff',fontWeight:600}}>{r.v}</span>
+          </div>
+        ))}
+        <button style={{marginTop:12,width:'100%',padding:'9px',background:'#1a1730',border:'1px solid #2a2740',borderRadius:10,color:'#9890c4',fontSize:13,cursor:'pointer'}}>Actualizar Tarifas CFE</button>
+      </Card>
+      <Card>
+        <SectionTitle sub="Umbrales de alertas del sistema">Umbrales de Alertas</SectionTitle>
+        {[{l:'Alerta de costo diario',v:'$2,000 MXN'},{l:'Factor de potencia mínimo',v:'0.90'},{l:'Pico de demanda máximo',v:'10 kW'},{l:'Tiempo sin sincronía',v:'15 min'}].map((r,i) => (
+          <div key={i} style={{display:'flex',justifyContent:'space-between',padding:'8px 0',borderBottom:'1px solid #0f0f1a',fontSize:13}}>
+            <span style={{color:'#6e6694'}}>{r.l}</span>
+            <span style={{color:PURPLE_L,fontWeight:600}}>{r.v}</span>
+          </div>
+        ))}
+      </Card>
+    </div>
+  </div>
+);
+
+// ─── APP ROOT ─────────────────────────────────────────────────────────────────
+const App = () => {
+  const [page, setPage] = useState('dashboard');
+  const [role, setRole] = useState('Administrador');
+  const renderPage = () => {
+    switch(page) {
+      case 'dashboard': return <PageDashboard/>;
+      case 'campus': return <PageCampus/>;
+      case 'buildings': return <PageBuildings setPage={setPage}/>;
+      case 'buildingDetail': return <PageBuildingDetail building={MOCK.buildings[0]}/>;
+      case 'deployments': return <PageDeployments/>;
+      case 'live': return <PageLive/>;
+      case 'cost': return <PageCost/>;
+      case 'ai': return <PageAI/>;
+      case 'mining': return <PageMining/>;
+      case 'reports': return <PageReports/>;
+      case 'infra': return <PageInfra/>;
+      case 'settings': return <PageSettings role={role} setRole={setRole}/>;
+      default: return <PageDashboard/>;
+    }
+  };
+  return (
+    <div style={{display:'flex',minHeight:'100vh'}}>
+      <Sidebar page={page} setPage={setPage} role={role} setRole={setRole}/>
+      <div style={{marginLeft:230,flex:1,minHeight:'100vh',background:'#0a0a0f'}}>
+        <Topbar page={page}/>
+        <main style={{padding:'24px 28px'}}>
+          {renderPage()}
+        </main>
+      </div>
+    </div>
+  );
+};
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
+</body>
+</html>
