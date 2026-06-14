@@ -1,4 +1,4 @@
-import { getDashboardSummary } from "./services/api";
+import { getDashboardSummary, getHourlyCost } from "./services/api";
 
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
@@ -380,14 +380,28 @@ const Topbar = ({ page }) => {
 // ─── PAGE: EXECUTIVE DASHBOARD ────────────────────────────────────────────────
 const PageDashboard = () => {
   const [dashboardSummary, setDashboardSummary] = useState(null);
+  const [hourlyCost, setHourlyCost] = useState(null);
 
   useEffect(() => {
     getDashboardSummary()
       .then(setDashboardSummary)
       .catch((error) => console.error("Dashboard summary API error:", error));
+
+    getHourlyCost()
+      .then((data) => {
+        const normalized = data.map((item) => ({
+          h: item.hour,
+          kwh: item.kwh,
+          cost: item.cost_mxn,
+          tariff: item.tariff_period === "intermediate" ? "intermedia" : item.tariff_period === "peak" ? "punta" : "base",
+        }));
+        setHourlyCost(normalized);
+      })
+      .catch((error) => console.error("Hourly cost API error:", error));
   }, []);
 
   const mxn = (value) => `$${Number(value || 0).toLocaleString("es-MX")} MXN`;
+  const hourlyChartData = hourlyCost || MOCK.hourly;
 
   const tariffData = [
     { name:'Base', kwh:38.4, cost:1228, pct:21 },
@@ -408,13 +422,13 @@ const PageDashboard = () => {
         <Card>
           <SectionTitle sub="Costo estimado por hora · tarifa GDMTH">Costo por Hora (MXN)</SectionTitle>
           <ResponsiveContainer width="100%" height={220}>
-            <BarChart data={MOCK.hourly} margin={{top:0,right:0,left:-10,bottom:0}}>
+            <BarChart data={hourlyChartData} margin={{top:0,right:0,left:-10,bottom:0}}>
               <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRID}/>
               <XAxis dataKey="h" tick={{fontSize:10,fill:'#6e6694'}} interval={3}/>
               <YAxis tick={{fontSize:10,fill:'#6e6694'}}/>
               <Tooltip content={<CustomTooltip prefix="$" suffix=" MXN"/>}/>
               <Bar dataKey="cost" name="Costo MXN" radius={[4,4,0,0]}>
-                {MOCK.hourly.map((d,i) => <Cell key={i} fill={TARIFF_COLORS[d.tariff]} opacity={0.85}/>)}
+                {hourlyChartData.map((d,i) => <Cell key={i} fill={TARIFF_COLORS[d.tariff]} opacity={0.85}/>)}
               </Bar>
             </BarChart>
           </ResponsiveContainer>

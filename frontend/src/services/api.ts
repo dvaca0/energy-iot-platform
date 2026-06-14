@@ -9,3 +9,9 @@ export async function getDashboardSummary() {
   const response = await api.get("/dashboard/summary");
   return response.data;
 }
+
+
+export async function getHourlyCost() {
+  const response = await api.get("/cost/hourly");
+  return response.data;
+}
