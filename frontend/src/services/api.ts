@@ -21,3 +21,9 @@ export async function getBuildings() {
   const response = await api.get("/buildings");
   return response.data;
 }
+
+
+export async function getNodes() {
+  const response = await api.get("/nodes");
+  return response.data;
+}

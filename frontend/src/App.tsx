@@ -1,4 +1,4 @@
-import { getDashboardSummary, getHourlyCost, getBuildings } from "./services/api";
+import { getDashboardSummary, getHourlyCost, getBuildings, getNodes } from "./services/api";
 
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
@@ -740,7 +740,7 @@ const PageBuildingDetail = ({ building }) => {
 };
 
 // ─── PAGE: DEPLOYMENTS ────────────────────────────────────────────────────────
-const PageDeployments = () => {
+const PageDeployments = ({ apiNodes }) => {
   const [form, setForm] = useState({ node:'N001', campus:'Colima', faculty:'', building:'', panel:'', start:'', end:'', notes:'' });
   const [saved, setSaved] = useState(false);
   const handleSave = () => { setSaved(true); setTimeout(() => setSaved(false), 3000); };
@@ -748,7 +748,7 @@ const PageDeployments = () => {
     <div style={{display:'grid',gridTemplateColumns:'1fr 1.4fr',gap:18}}>
       <div>
         <SectionTitle sub="Estado actual de los nodos de campo">Nodos Disponibles</SectionTitle>
-        {MOCK.nodes.map(n => (
+        {(apiNodes || MOCK.nodes).map(n => (
           <Card key={n.id} style={{marginBottom:12,borderColor:n.status==='online'?'#22c55e33':'#1e1b35'}}>
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:12}}>
               <div style={{display:'flex',alignItems:'center',gap:10}}>
@@ -862,7 +862,7 @@ const PageDeployments = () => {
 };
 
 // ─── PAGE: LIVE MONITORING ────────────────────────────────────────────────────
-const PageLive = () => {
+const PageLive = ({ apiNodes }) => {
   const [tick, setTick] = useState(0);
   useEffect(() => { const t = setInterval(() => setTick(x => x+1), 3000); return () => clearInterval(t); }, []);
   const jitter = (v, pct=0.02) => +(v * (1 + (Math.random()-0.5)*pct)).toFixed(2);
@@ -876,7 +876,7 @@ const PageLive = () => {
         <span style={{fontSize:12,color:'#6e6694'}}>Actualización cada 3s · Datos en tiempo real</span>
       </div>
       <style>{`@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}`}</style>
-      {MOCK.nodes.map(n => (
+      {(apiNodes || MOCK.nodes).map(n => (
         <Card key={n.id} style={{marginBottom:18}} glow>
           <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
             <div style={{display:'flex',alignItems:'center',gap:12}}>
@@ -1394,6 +1394,7 @@ const PageSettings = ({ role, setRole }) => (
 // ─── APP ROOT ─────────────────────────────────────────────────────────────────
 const App = () => {
   const [apiBuildings, setApiBuildings] = useState(null);
+  const [apiNodes, setApiNodes] = useState(null);
 
   useEffect(() => {
     getDashboardSummary()
@@ -1419,6 +1420,32 @@ const App = () => {
         setApiBuildings(normalized);
       })
       .catch((error) => console.error("Buildings API error:", error));
+
+    getNodes()
+      .then((data) => {
+        const normalized = data.map((node) => ({
+          id: node.id,
+          name: node.name,
+          status: node.status,
+          ip: node.ip,
+          building: node.building,
+          campus: node.campus,
+          voltage: node.voltage,
+          current: node.current,
+          power: node.power_kw,
+          energy_today: node.energy_today_kwh,
+          pf: node.power_factor,
+          freq: node.frequency_hz,
+          last_sync: node.last_sync,
+          buffer: node.buffer_pending,
+          samples: node.samples,
+          rpi_status: "ok",
+          shelly_status: "ok",
+          fw: "1.4.2",
+        }));
+        setApiNodes(normalized);
+      })
+      .catch((error) => console.error("Nodes API error:", error));
   }, []);
 
   const [page, setPage] = useState('dashboard');
@@ -1429,8 +1456,8 @@ const App = () => {
       case 'campus': return <PageCampus apiBuildings={apiBuildings}/>;
       case 'buildings': return <PageBuildings setPage={setPage} apiBuildings={apiBuildings}/>;
       case 'buildingDetail': return <PageBuildingDetail building={MOCK.buildings[0]}/>;
-      case 'deployments': return <PageDeployments/>;
-      case 'live': return <PageLive/>;
+      case 'deployments': return <PageDeployments apiNodes={apiNodes}/>;
+      case 'live': return <PageLive apiNodes={apiNodes}/>;
       case 'cost': return <PageCost/>;
       case 'ai': return <PageAI/>;
       case 'mining': return <PageMining/>;
