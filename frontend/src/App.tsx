@@ -1105,7 +1105,10 @@ const PageLive = ({ apiNodes }) => {
   useEffect(() => {
     const loadReadings = () => {
       getLatestReadings()
-        .then(setLatestReadings)
+        .then((data) => {
+          console.log("Latest readings loaded:", data);
+          setLatestReadings(data);
+        })
         .catch((error) => console.error("Latest readings API error:", error));
     };
 
@@ -1114,18 +1117,23 @@ const PageLive = ({ apiNodes }) => {
     return () => clearInterval(timer);
   }, []);
 
+  const nodes = apiNodes || MOCK.nodes;
+
   const latestByNodeId = latestReadings.reduce((acc, reading) => {
-    const node = (apiNodes || MOCK.nodes).find((item) => String(item.db_id || item.id) === String(reading.node_id) || String(item.id) === String(reading.node_id));
-    if (node) acc[node.id] = reading;
+    const key = String(reading.node_id);
+    if (!acc[key]) {
+      acc[key] = reading;
+    }
     return acc;
   }, {});
 
-  const valueOrNode = (node, reading, apiField, nodeField) => {
-    const value = reading?.[apiField];
-    return value === null || value === undefined ? node[nodeField] : value;
+  const getValue = (node, reading, readingKey, nodeKey) => {
+    if (reading && reading[readingKey] !== null && reading[readingKey] !== undefined) {
+      return reading[readingKey];
+    }
+    return node[nodeKey];
   };
 
-  const jitter = (v, pct=0.02) => +(Number(v || 0) * (1 + (Math.random()-0.5)*pct)).toFixed(2);
   return (
     <div>
       <div style={{display:'flex',gap:12,marginBottom:18,alignItems:'center'}}>
@@ -1133,63 +1141,84 @@ const PageLive = ({ apiNodes }) => {
           <div style={{width:8,height:8,borderRadius:'50%',background:'#22c55e',animation:'pulse 2s infinite'}}/>
           <span style={{fontSize:12,color:'#22c55e',fontWeight:600}}>EN VIVO</span>
         </div>
-        <span style={{fontSize:12,color:'#6e6694'}}>Actualización cada 3s · Datos en tiempo real</span>
+        <span style={{fontSize:12,color:'#6e6694'}}>Actualización cada 3s · Datos desde /api/readings/latest</span>
       </div>
+
       <style>{`@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}`}</style>
-      {(apiNodes || MOCK.nodes).map(n => {
-        const reading = latestByNodeId[n.id];
-        const voltage = valueOrNode(n, reading, "voltage", "voltage");
-        const current = valueOrNode(n, reading, "current", "current");
-        const power = valueOrNode(n, reading, "power_kw", "power");
-        const pf = valueOrNode(n, reading, "power_factor", "pf");
-        const freq = valueOrNode(n, reading, "frequency_hz", "freq");
-        const energyToday = valueOrNode(n, reading, "energy_kwh", "energy_today");
+
+      {nodes.map(n => {
+        const reading = latestByNodeId[String(n.id)];
+
+        const voltage = getValue(n, reading, "voltage", "voltage");
+        const current = getValue(n, reading, "current", "current");
+        const power = getValue(n, reading, "power_kw", "power");
+        const pf = getValue(n, reading, "power_factor", "pf");
+        const freq = getValue(n, reading, "frequency_hz", "freq");
+        const energyToday = getValue(n, reading, "energy_kwh", "energy_today");
 
         return (
-        <Card key={n.id} style={{marginBottom:18}} glow>
-          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
-            <div style={{display:'flex',alignItems:'center',gap:12}}>
-              <div style={{background:'#22c55e18',border:'1px solid #22c55e33',borderRadius:10,padding:10,color:'#22c55e'}}><Icon name="Cpu" size={20}/></div>
-              <div>
-                <div style={{fontSize:15,fontWeight:700,color:'#f0eeff'}}>{n.name}</div>
-                <div style={{fontSize:11,color:'#6e6694'}}>{n.ip} · {n.building} · {n.last_sync}</div>
+          <Card key={n.id} style={{marginBottom:18}} glow>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
+              <div style={{display:'flex',alignItems:'center',gap:12}}>
+                <div style={{
+                  background:'#22c55e18',
+                  border:'1px solid #22c55e33',
+                  borderRadius:10,
+                  padding:'8px 10px',
+                  fontSize:12,
+                  color:'#22c55e',
+                  fontWeight:800,
+                  letterSpacing:.8
+                }}>
+                  NODE
+                </div>
+                <div>
+                  <div style={{fontSize:15,fontWeight:700,color:'#f0eeff'}}>{n.name}</div>
+                  <div style={{fontSize:11,color:'#6e6694'}}>
+                    {n.ip} · {n.building} · {reading ? `Lectura real ${reading.timestamp}` : `Fallback ${n.last_sync}`}
+                  </div>
+                </div>
               </div>
+              <Badge color={reading ? "#22c55e" : "#f59e0b"}>
+                {reading ? "Real API" : "Fallback"}
+              </Badge>
             </div>
-            <Badge color="#22c55e">Online</Badge>
-          </div>
-          <div style={{display:'flex',flexWrap:'wrap',gap:12}}>
-            {[
-              {l:'Tensión (V)',v:Number(voltage || 0).toFixed(1),c:'#818cf8',unit:'V'},
-              {l:'Corriente (A)',v:Number(current || 0).toFixed(2),c:'#f59e0b',unit:'A'},
-              {l:'Potencia (kW)',v:Number(power || 0).toFixed(3),c:'#ef4444',unit:'kW'},
-              {l:'Factor de Potencia',v:Number(pf || 0).toFixed(3),c:'#22c55e',unit:''},
-              {l:'Frecuencia (Hz)',v:Number(freq || 0).toFixed(2),c:'#a78bfa',unit:'Hz'},
-              {l:'Energía Hoy',v:Number(energyToday || 0).toFixed(2),c:PURPLE_L,unit:'kWh'}
-            ].map((m,i) => (
-              <div key={i} style={{
-                background:'#0f0f1a', borderRadius:12, padding:'14px 16px',
-                flex:1, minWidth:120, border:`1px solid ${m.c}22`
-              }}>
-                <div style={{fontSize:10,color:'#6e6694',textTransform:'uppercase',letterSpacing:.8,marginBottom:6}}>{m.l}</div>
-                <div style={{fontSize:26,fontWeight:700,color:m.c}}>{m.v}</div>
-                <div style={{fontSize:11,color:'#4b5563',marginTop:2}}>{m.unit}</div>
-              </div>
-            ))}
-          </div>
-          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:10,marginTop:12}}>
-            {[{l:'RPi Status',v:'OK',c:'#22c55e'},{l:'Shelly Status',v:'OK',c:'#22c55e'},{l:'Buffer',v:`${n.buffer} pend.`,c:n.buffer>0?'#f59e0b':'#22c55e'}].map((s,i) => (
-              <div key={i} style={{background:'#0a0a14',borderRadius:8,padding:'8px 12px',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-                <span style={{fontSize:11,color:'#6e6694'}}>{s.l}</span>
-                <span style={{fontSize:12,fontWeight:700,color:s.c}}>{s.v}</span>
-              </div>
-            ))}
-          </div>
-        </Card>
+
+            <div style={{display:'flex',flexWrap:'wrap',gap:12}}>
+              {[
+                {l:'Tensión (V)',v:Number(voltage || 0).toFixed(1),c:'#818cf8',unit:'V'},
+                {l:'Corriente (A)',v:Number(current || 0).toFixed(2),c:'#f59e0b',unit:'A'},
+                {l:'Potencia (kW)',v:Number(power || 0).toFixed(3),c:'#ef4444',unit:'kW'},
+                {l:'Factor de Potencia',v:Number(pf || 0).toFixed(3),c:'#22c55e',unit:''},
+                {l:'Frecuencia (Hz)',v:Number(freq || 0).toFixed(2),c:'#a78bfa',unit:'Hz'},
+                {l:'Energía Hoy',v:Number(energyToday || 0).toFixed(2),c:PURPLE_L,unit:'kWh'}
+              ].map((m,i) => (
+                <div key={i} style={{
+                  background:'#0f0f1a', borderRadius:12, padding:'14px 16px',
+                  flex:1, minWidth:120, border:`1px solid ${m.c}22`
+                }}>
+                  <div style={{fontSize:10,color:'#6e6694',textTransform:'uppercase',letterSpacing:.8,marginBottom:6}}>{m.l}</div>
+                  <div style={{fontSize:26,fontWeight:700,color:m.c}}>{m.v}</div>
+                  <div style={{fontSize:11,color:'#4b5563',marginTop:2}}>{m.unit}</div>
+                </div>
+              ))}
+            </div>
+
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:10,marginTop:12}}>
+              {[{l:'RPi Status',v:'OK',c:'#22c55e'},{l:'Shelly Status',v:'OK',c:'#22c55e'},{l:'Buffer',v:`${n.buffer} pend.`,c:n.buffer>0?'#f59e0b':'#22c55e'}].map((s,i) => (
+                <div key={i} style={{background:'#0a0a14',borderRadius:8,padding:'8px 12px',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                  <span style={{fontSize:11,color:'#6e6694'}}>{s.l}</span>
+                  <span style={{fontSize:12,fontWeight:700,color:s.c}}>{s.v}</span>
+                </div>
+              ))}
+            </div>
+          </Card>
         );
       })}
     </div>
   );
 };
+
 
 // ─── PAGE: COST ANALYTICS ─────────────────────────────────────────────────────
 const PageCost = () => {
