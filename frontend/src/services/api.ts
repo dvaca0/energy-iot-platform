@@ -33,3 +33,9 @@ export async function getAiInsights() {
   const response = await api.get("/ai/insights");
   return response.data;
 }
+
+
+export async function createDeployment(payload: any) {
+  const response = await api.post("/deployments", payload);
+  return response.data;
+}

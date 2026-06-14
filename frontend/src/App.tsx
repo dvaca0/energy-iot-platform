@@ -1,4 +1,4 @@
-import { getDashboardSummary, getHourlyCost, getBuildings, getNodes, getAiInsights } from "./services/api";
+import { getDashboardSummary, getHourlyCost, getBuildings, getNodes, getAiInsights, createDeployment } from "./services/api";
 
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
@@ -743,7 +743,25 @@ const PageBuildingDetail = ({ building }) => {
 const PageDeployments = ({ apiNodes }) => {
   const [form, setForm] = useState({ node:'N001', campus:'Colima', faculty:'', building:'', panel:'', start:'', end:'', notes:'' });
   const [saved, setSaved] = useState(false);
-  const handleSave = () => { setSaved(true); setTimeout(() => setSaved(false), 3000); };
+  const handleSave = async () => {
+    try {
+      await createDeployment({
+        node_id: form.node,
+        campus: form.campus,
+        faculty: form.faculty,
+        building_name: form.building,
+        electrical_panel: form.panel,
+        start_date: form.start,
+        end_date: form.end,
+        notes: form.notes,
+      });
+      setSaved(true);
+      setTimeout(() => setSaved(false), 3000);
+    } catch (error) {
+      console.error("Create deployment API error:", error);
+      alert("No se pudo guardar el despliegue. Revisa que el backend esté corriendo.");
+    }
+  };
   return (
     <div style={{display:'grid',gridTemplateColumns:'1fr 1.4fr',gap:18}}>
       <div>
