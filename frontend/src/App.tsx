@@ -1,4 +1,4 @@
-import { getDashboardSummary, getHourlyCost, getBuildings, getNodes, getAiInsights, createDeployment, getDelegations, getAllOrgBuildings } from "./services/api";
+import { getDashboardSummary, getHourlyCost, getBuildings, getNodes, getAiInsights, createDeployment, getDelegations, getAllOrgBuildings, getCampusesByDelegation, getUnitsByCampus, getBuildingsByUnit, getPanelsByBuilding } from "./services/api";
 
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
@@ -741,20 +741,182 @@ const PageBuildingDetail = ({ building }) => {
 
 // ─── PAGE: DEPLOYMENTS ────────────────────────────────────────────────────────
 const PageDeployments = ({ apiNodes }) => {
-  const [form, setForm] = useState({ node:'N001', campus:'Colima', faculty:'', building:'', panel:'', start:'', end:'', notes:'' });
+  const [form, setForm] = useState({
+    node:'N001',
+    delegationId:'',
+    campusId:'',
+    unitId:'',
+    customUnitName:'',
+    customUnitType:'administrative',
+    buildingId:'',
+    panelId:'',
+    campus:'',
+    faculty:'',
+    building:'',
+    panel:'',
+    start:'',
+    end:'',
+    notes:''
+  });
   const [saved, setSaved] = useState(false);
+  const [delegations, setDelegations] = useState([]);
+  const [campuses, setCampuses] = useState([]);
+  const [units, setUnits] = useState([]);
+  const [orgBuildings, setOrgBuildings] = useState([]);
+  const [panels, setPanels] = useState([]);
+
+  useEffect(() => {
+    getDelegations()
+      .then(setDelegations)
+      .catch((error) => console.error("Could not load delegations:", error));
+  }, []);
+
+  useEffect(() => {
+    if (!form.delegationId) {
+      setCampuses([]);
+      setUnits([]);
+      setOrgBuildings([]);
+      setPanels([]);
+      return;
+    }
+
+    getCampusesByDelegation(Number(form.delegationId))
+      .then((data) => {
+        setCampuses(data);
+        setUnits([]);
+        setOrgBuildings([]);
+        setPanels([]);
+        setForm((current) => ({
+          ...current,
+          campusId:'',
+          unitId:'',
+          buildingId:'',
+          panelId:'',
+          campus:'',
+          faculty:'',
+          building:'',
+          panel:''
+        }));
+      })
+      .catch((error) => console.error("Could not load campuses:", error));
+  }, [form.delegationId]);
+
+  useEffect(() => {
+    if (!form.campusId) {
+      setUnits([]);
+      setOrgBuildings([]);
+      setPanels([]);
+      return;
+    }
+
+    getUnitsByCampus(Number(form.campusId))
+      .then((data) => {
+        setUnits(data);
+        setOrgBuildings([]);
+        setPanels([]);
+        const selectedCampus = campuses.find((item) => String(item.id) === String(form.campusId));
+        setForm((current) => ({
+          ...current,
+          campus: selectedCampus?.name || '',
+          unitId:'',
+          buildingId:'',
+          panelId:'',
+          faculty:'',
+          building:'',
+          panel:''
+        }));
+      })
+      .catch((error) => console.error("Could not load organizational units:", error));
+  }, [form.campusId]);
+
+  useEffect(() => {
+    if (!form.unitId) {
+      setOrgBuildings([]);
+      setPanels([]);
+      return;
+    }
+
+    if (form.unitId === "__manual__") {
+      setOrgBuildings([]);
+      setPanels([]);
+      setForm((current) => ({
+        ...current,
+        faculty: current.customUnitName || '',
+        buildingId:'',
+        panelId:''
+      }));
+      return;
+    }
+
+    const selectedUnit = units.find((item) => String(item.id) === String(form.unitId));
+    setForm((current) => ({
+      ...current,
+      faculty: selectedUnit?.name || '',
+      buildingId:'',
+      panelId:''
+    }));
+  }, [form.unitId]);
+
+  useEffect(() => {
+    if (!form.buildingId) {
+      setPanels([]);
+      return;
+    }
+
+    getPanelsByBuilding(Number(form.buildingId))
+      .then((data) => {
+        setPanels(data);
+        const selectedBuilding = orgBuildings.find((item) => String(item.id) === String(form.buildingId));
+        setForm((current) => ({
+          ...current,
+          building: selectedBuilding?.name || '',
+          panelId:'',
+          panel:''
+        }));
+      })
+      .catch((error) => console.error("Could not load panels:", error));
+  }, [form.buildingId]);
+
+  useEffect(() => {
+    if (!form.panelId) return;
+    const selectedPanel = panels.find((item) => String(item.id) === String(form.panelId));
+    setForm((current) => ({
+      ...current,
+      panel: selectedPanel?.name || ''
+    }));
+  }, [form.panelId]);
   const handleSave = async () => {
     try {
+      const useCustomUnit = form.unitId === "__manual__";
+
+      if (!form.node || !form.campusId || !form.building || !form.panel || !form.start || !form.end) {
+        alert("Completa nodo, campus, edificio, tablero y fechas.");
+        return;
+      }
+
+      if (useCustomUnit && !form.customUnitName) {
+        alert("Escribe el nombre de la unidad organizacional.");
+        return;
+      }
+
+      if (!useCustomUnit && !form.unitId) {
+        alert("Selecciona una unidad organizacional o usa la opción manual.");
+        return;
+      }
+
       await createDeployment({
         node_id: form.node,
-        campus: form.campus,
-        faculty: form.faculty,
+        campus_id: Number(form.campusId),
+        organizational_unit_id: useCustomUnit ? null : Number(form.unitId),
+        custom_unit_name: useCustomUnit ? form.customUnitName : null,
+        custom_unit_type: useCustomUnit ? form.customUnitType : null,
         building_name: form.building,
         electrical_panel: form.panel,
         start_date: form.start,
         end_date: form.end,
         notes: form.notes,
       });
+
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
     } catch (error) {
@@ -843,26 +1005,83 @@ const PageDeployments = ({ apiNodes }) => {
           <SectionTitle sub="Asignar nodo a edificio para nuevo despliegue">Asignar Nodo</SectionTitle>
           {saved && <div style={{background:'#22c55e18',border:'1px solid #22c55e33',borderRadius:10,padding:'10px 14px',marginBottom:14,fontSize:13,color:'#22c55e'}}>Despliegue registrado correctamente</div>}
           <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
-            {[
-              {l:'Nodo',f:'node',el:'select',opts:['N001','N002']},
-              {l:'Campus',f:'campus',el:'select',opts:['Colima','Coquimatlán','Tecomán']},
-              {l:'Facultad',f:'faculty',el:'input'},
-              {l:'Edificio',f:'building',el:'input'},
-              {l:'Panel Eléctrico',f:'panel',el:'input'},
-              {l:'Fecha Inicio',f:'start',el:'date'},
-              {l:'Fecha Fin',f:'end',el:'date'}
-            ].map(field => (
-              <div key={field.f} style={{display:'flex',flexDirection:'column',gap:5}}>
-                <label style={{fontSize:11,color:'#6e6694',textTransform:'uppercase',letterSpacing:.8}}>{field.l}</label>
-                {field.el==='select' ? (
-                  <select value={form[field.f]} onChange={e => setForm(f=>({...f,[field.f]:e.target.value}))}>
-                    {field.opts.map(o => <option key={o}>{o}</option>)}
+            <div style={{display:'flex',flexDirection:'column',gap:5}}>
+              <label style={{fontSize:11,color:'#6e6694',textTransform:'uppercase',letterSpacing:.8}}>Nodo</label>
+              <select value={form.node} onChange={e => setForm(f=>({...f,node:e.target.value}))}>
+                {(apiNodes || MOCK.nodes).map(n => <option key={n.id} value={n.id}>{n.id} · {n.name}</option>)}
+              </select>
+            </div>
+
+            <div style={{display:'flex',flexDirection:'column',gap:5}}>
+              <label style={{fontSize:11,color:'#6e6694',textTransform:'uppercase',letterSpacing:.8}}>Delegación</label>
+              <select value={form.delegationId} onChange={e => setForm(f=>({...f,delegationId:e.target.value}))}>
+                <option value="">Seleccionar delegación</option>
+                {delegations.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
+              </select>
+            </div>
+
+            <div style={{display:'flex',flexDirection:'column',gap:5}}>
+              <label style={{fontSize:11,color:'#6e6694',textTransform:'uppercase',letterSpacing:.8}}>Campus</label>
+              <select value={form.campusId} disabled={!form.delegationId} onChange={e => setForm(f=>({...f,campusId:e.target.value}))}>
+                <option value="">Seleccionar campus</option>
+                {campuses.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
+              </select>
+            </div>
+
+            <div style={{display:'flex',flexDirection:'column',gap:5}}>
+              <label style={{fontSize:11,color:'#6e6694',textTransform:'uppercase',letterSpacing:.8}}>Unidad Organizacional</label>
+              <select value={form.unitId} disabled={!form.campusId} onChange={e => setForm(f=>({...f,unitId:e.target.value}))}>
+                <option value="">Seleccionar facultad/dependencia</option>
+                {units.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
+                <option value="__manual__">Otra / agregar manualmente</option>
+              </select>
+            </div>
+
+            {form.unitId === "__manual__" && (
+              <>
+                <div style={{display:'flex',flexDirection:'column',gap:5}}>
+                  <label style={{fontSize:11,color:'#6e6694',textTransform:'uppercase',letterSpacing:.8}}>Nombre de Unidad</label>
+                  <input value={form.customUnitName} onChange={e => setForm(f=>({...f,customUnitName:e.target.value,faculty:e.target.value}))} placeholder="Ej. CEGAF, DIGESET, Dirección..." />
+                </div>
+
+                <div style={{display:'flex',flexDirection:'column',gap:5}}>
+                  <label style={{fontSize:11,color:'#6e6694',textTransform:'uppercase',letterSpacing:.8}}>Tipo de Unidad</label>
+                  <select value={form.customUnitType} onChange={e => setForm(f=>({...f,customUnitType:e.target.value}))}>
+                    <option value="faculty">Facultad</option>
+                    <option value="school">Escuela</option>
+                    <option value="institute">Instituto</option>
+                    <option value="center">Centro</option>
+                    <option value="direction">Dirección</option>
+                    <option value="general_direction">Dirección General</option>
+                    <option value="coordination">Coordinación</option>
+                    <option value="administrative">Dependencia administrativa</option>
+                    <option value="services">Servicios universitarios</option>
+                    <option value="technical">Técnica / TI</option>
+                    <option value="other">Otra</option>
                   </select>
-                ) : (
-                  <input type={field.el||'text'} value={form[field.f]} onChange={e => setForm(f=>({...f,[field.f]:e.target.value}))} placeholder={field.l}/>
-                )}
-              </div>
-            ))}
+                </div>
+              </>
+            )}
+
+            <div style={{display:'flex',flexDirection:'column',gap:5}}>
+              <label style={{fontSize:11,color:'#6e6694',textTransform:'uppercase',letterSpacing:.8}}>Edificio</label>
+              <input value={form.building} disabled={!form.unitId} onChange={e => setForm(f=>({...f,building:e.target.value}))} placeholder="Ej. Edificio B, Laboratorio de Redes, Servicios Universitarios" />
+            </div>
+
+            <div style={{display:'flex',flexDirection:'column',gap:5}}>
+              <label style={{fontSize:11,color:'#6e6694',textTransform:'uppercase',letterSpacing:.8}}>Tablero Eléctrico</label>
+              <input value={form.panel} disabled={!form.unitId} onChange={e => setForm(f=>({...f,panel:e.target.value}))} placeholder="Ej. Tablero Principal, Tablero Laboratorios, Tablero UPS" />
+            </div>
+
+            <div style={{display:'flex',flexDirection:'column',gap:5}}>
+              <label style={{fontSize:11,color:'#6e6694',textTransform:'uppercase',letterSpacing:.8}}>Fecha Inicio</label>
+              <input type="date" value={form.start} onChange={e => setForm(f=>({...f,start:e.target.value}))}/>
+            </div>
+
+            <div style={{display:'flex',flexDirection:'column',gap:5}}>
+              <label style={{fontSize:11,color:'#6e6694',textTransform:'uppercase',letterSpacing:.8}}>Fecha Fin</label>
+              <input type="date" value={form.end} onChange={e => setForm(f=>({...f,end:e.target.value}))}/>
+            </div>
           </div>
           <div style={{marginTop:12}}>
             <label style={{fontSize:11,color:'#6e6694',textTransform:'uppercase',letterSpacing:.8}}>Notas del Técnico</label>
