@@ -39,3 +39,34 @@ export async function createDeployment(payload: any) {
   const response = await api.post("/deployments", payload);
   return response.data;
 }
+
+
+export async function getDelegations() {
+  const response = await api.get("/org/delegations");
+  return response.data;
+}
+
+export async function getCampusesByDelegation(delegationId: number) {
+  const response = await api.get(`/org/campuses/by-delegation/${delegationId}`);
+  return response.data;
+}
+
+export async function getUnitsByCampus(campusId: number) {
+  const response = await api.get(`/org/units/by-campus/${campusId}`);
+  return response.data;
+}
+
+export async function getBuildingsByUnit(unitId: number) {
+  const response = await api.get(`/org/buildings/by-unit/${unitId}`);
+  return response.data;
+}
+
+export async function getPanelsByBuilding(buildingId: number) {
+  const response = await api.get(`/org/panels/by-building/${buildingId}`);
+  return response.data;
+}
+
+export async function getAllOrgBuildings() {
+  const response = await api.get("/org/buildings");
+  return response.data;
+}

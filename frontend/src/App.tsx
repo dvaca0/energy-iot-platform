@@ -1,4 +1,4 @@
-import { getDashboardSummary, getHourlyCost, getBuildings, getNodes, getAiInsights, createDeployment } from "./services/api";
+import { getDashboardSummary, getHourlyCost, getBuildings, getNodes, getAiInsights, createDeployment, getDelegations, getAllOrgBuildings } from "./services/api";
 
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
@@ -1469,6 +1469,14 @@ const App = () => {
     getAiInsights()
       .then((data) => setApiInsights(data))
       .catch((error) => console.error("AI insights API error:", error));
+
+    getDelegations()
+      .then((data) => console.log("UdeC delegations:", data))
+      .catch((error) => console.error("Delegations API error:", error));
+
+    getAllOrgBuildings()
+      .then((data) => console.log("UdeC org buildings:", data))
+      .catch((error) => console.error("Org buildings API error:", error));
   }, []);
 
   const [page, setPage] = useState('dashboard');
