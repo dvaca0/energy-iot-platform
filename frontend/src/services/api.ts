@@ -15,3 +15,9 @@ export async function getHourlyCost() {
   const response = await api.get("/cost/hourly");
   return response.data;
 }
+
+
+export async function getBuildings() {
+  const response = await api.get("/buildings");
+  return response.data;
+}

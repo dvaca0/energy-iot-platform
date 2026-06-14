@@ -1,4 +1,4 @@
-import { getDashboardSummary, getHourlyCost } from "./services/api";
+import { getDashboardSummary, getHourlyCost, getBuildings } from "./services/api";
 
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
@@ -513,9 +513,9 @@ const PageDashboard = () => {
 };
 
 // ─── PAGE: CAMPUS MAP ─────────────────────────────────────────────────────────
-const PageCampus = () => {
+const PageCampus = ({ apiBuildings }) => {
   const [selected, setSelected] = useState(null);
-  const buildings = MOCK.buildings;
+  const buildings = apiBuildings || MOCK.buildings;
   return (
     <div>
       <div style={{display:'flex',gap:18,marginBottom:22,flexWrap:'wrap'}}>
@@ -610,13 +610,14 @@ const PageCampus = () => {
 };
 
 // ─── PAGE: BUILDINGS ──────────────────────────────────────────────────────────
-const PageBuildings = ({ setPage }) => {
+const PageBuildings = ({ setPage, apiBuildings }) => {
   const [filter, setFilter] = useState({ campus:'', status:'' });
-  const filtered = MOCK.buildings.filter(b =>
+  const sourceBuildings = apiBuildings || MOCK.buildings;
+  const filtered = sourceBuildings.filter(b =>
     (!filter.campus || b.campus === filter.campus) &&
     (!filter.status || b.status === filter.status)
   );
-  const campuses = [...new Set(MOCK.buildings.map(b => b.campus))];
+  const campuses = [...new Set(sourceBuildings.map(b => b.campus))];
   return (
     <div>
       <div style={{display:'flex',gap:12,marginBottom:18,flexWrap:'wrap',alignItems:'center'}}>
@@ -1392,10 +1393,32 @@ const PageSettings = ({ role, setRole }) => (
 
 // ─── APP ROOT ─────────────────────────────────────────────────────────────────
 const App = () => {
+  const [apiBuildings, setApiBuildings] = useState(null);
+
   useEffect(() => {
     getDashboardSummary()
       .then((data) => console.log("Backend dashboard summary:", data))
       .catch((error) => console.error("Backend API error:", error));
+
+    getBuildings()
+      .then((data) => {
+        const normalized = data.map((building) => ({
+          id: building.id,
+          name: building.name,
+          faculty: building.faculty,
+          campus: building.campus,
+          node: building.node,
+          status: building.status,
+          power: building.power_kw,
+          energy_week: building.energy_week_kwh,
+          cost_week: building.cost_week_mxn,
+          cost_today: building.cost_today_mxn,
+          anomaly: building.anomaly,
+          last_update: building.last_update,
+        }));
+        setApiBuildings(normalized);
+      })
+      .catch((error) => console.error("Buildings API error:", error));
   }, []);
 
   const [page, setPage] = useState('dashboard');
@@ -1403,8 +1426,8 @@ const App = () => {
   const renderPage = () => {
     switch(page) {
       case 'dashboard': return <PageDashboard/>;
-      case 'campus': return <PageCampus/>;
-      case 'buildings': return <PageBuildings setPage={setPage}/>;
+      case 'campus': return <PageCampus apiBuildings={apiBuildings}/>;
+      case 'buildings': return <PageBuildings setPage={setPage} apiBuildings={apiBuildings}/>;
       case 'buildingDetail': return <PageBuildingDetail building={MOCK.buildings[0]}/>;
       case 'deployments': return <PageDeployments/>;
       case 'live': return <PageLive/>;
