@@ -80,3 +80,23 @@ export async function getLiveMetrics() {
   const response = await api.get("/metrics/live");
   return response.data;
 }
+
+export async function getMetricsHourly() {
+  const response = await api.get("/metrics/hourly");
+  return response.data;
+}
+
+export async function getMetricsTariffs() {
+  const response = await api.get("/metrics/tariffs");
+  return response.data;
+}
+
+export async function getMetricsDaily() {
+  const response = await api.get("/metrics/daily");
+  return response.data;
+}
+
+export async function getMetricsBuildings() {
+  const response = await api.get("/metrics/buildings");
+  return response.data;
+}

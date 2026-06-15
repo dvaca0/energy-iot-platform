@@ -1,4 +1,4 @@
-import { getDashboardSummary, getHourlyCost, getBuildings, getNodes, getAiInsights, createDeployment, getDelegations, getAllOrgBuildings, getCampusesByDelegation, getUnitsByCampus, getBuildingsByUnit, getPanelsByBuilding, getLatestReadings, getLiveMetrics } from "./services/api";
+import { getDashboardSummary, getHourlyCost, getBuildings, getNodes, getAiInsights, createDeployment, getDelegations, getAllOrgBuildings, getCampusesByDelegation, getUnitsByCampus, getBuildingsByUnit, getPanelsByBuilding, getLatestReadings, getLiveMetrics, getMetricsHourly, getMetricsTariffs, getMetricsDaily, getMetricsBuildings } from "./services/api";
 
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
@@ -381,13 +381,16 @@ const Topbar = ({ page }) => {
 const PageDashboard = () => {
   const [dashboardSummary, setDashboardSummary] = useState(null);
   const [hourlyCost, setHourlyCost] = useState(null);
+  const [tariffMetrics, setTariffMetrics] = useState(null);
+  const [dailyMetrics, setDailyMetrics] = useState(null);
+  const [buildingMetrics, setBuildingMetrics] = useState(null);
 
   useEffect(() => {
     getDashboardSummary()
       .then(setDashboardSummary)
       .catch((error) => console.error("Dashboard summary API error:", error));
 
-    getHourlyCost()
+    getMetricsHourly()
       .then((data) => {
         const normalized = data.map((item) => ({
           h: item.hour,
@@ -397,17 +400,55 @@ const PageDashboard = () => {
         }));
         setHourlyCost(normalized);
       })
-      .catch((error) => console.error("Hourly cost API error:", error));
+      .catch((error) => console.error("Hourly metrics API error:", error));
+
+    getMetricsTariffs()
+      .then((data) => {
+        const normalized = data.map((item) => ({
+          name: item.period === "intermediate" ? "Intermedia" : item.period === "peak" ? "Punta" : item.period === "base" ? "Base" : item.period,
+          kwh: item.kwh,
+          cost: item.cost_mxn,
+          pct: item.share_pct,
+        }));
+        setTariffMetrics(normalized);
+      })
+      .catch((error) => console.error("Tariff metrics API error:", error));
+
+    getMetricsDaily()
+      .then((data) => {
+        const normalized = data.map((item) => ({
+          day: item.day,
+          cost: item.cost_mxn,
+          kwh: item.kwh,
+        }));
+        setDailyMetrics(normalized);
+      })
+      .catch((error) => console.error("Daily metrics API error:", error));
+
+    getMetricsBuildings()
+      .then((data) => {
+        const total = data.reduce((sum, item) => sum + Number(item.cost_mxn || 0), 0) || 1;
+        const normalized = data.map((item) => ({
+          b: item.building_name || "Sin edificio",
+          cost: item.cost_mxn,
+          kwh: item.kwh,
+          pct: Math.round((Number(item.cost_mxn || 0) / total) * 100),
+        }));
+        setBuildingMetrics(normalized);
+      })
+      .catch((error) => console.error("Building metrics API error:", error));
   }, []);
 
   const mxn = (value) => `$${Number(value || 0).toLocaleString("es-MX")} MXN`;
   const hourlyChartData = hourlyCost || MOCK.hourly;
 
-  const tariffData = [
-    { name:'Base', kwh:38.4, cost:1228, pct:21 },
-    { name:'Intermedia', kwh:82.1, cost:3362, pct:45 },
-    { name:'Punta', kwh:29.5, cost:4288, pct:34 }
+  const tariffData = tariffMetrics || [
+    { name:'Base', kwh:0, cost:0, pct:0 },
+    { name:'Intermedia', kwh:0, cost:0, pct:0 },
+    { name:'Punta', kwh:0, cost:0, pct:0 }
   ];
+  const dailyChartData = dailyMetrics || [];
+  const buildingChartData = buildingMetrics || [];
   return (
     <div>
       <div style={{display:'flex',flexWrap:'wrap',gap:14,marginBottom:22}}>
@@ -466,7 +507,7 @@ const PageDashboard = () => {
         <Card>
           <SectionTitle sub="Tendencia de gasto · últimos 7 días">Costo Semanal por Día</SectionTitle>
           <ResponsiveContainer width="100%" height={180}>
-            <AreaChart data={MOCK.weeklyTrend} margin={{top:5,right:10,left:-10,bottom:0}}>
+            <AreaChart data={dailyChartData} margin={{top:5,right:10,left:-10,bottom:0}}>
               <defs>
                 <linearGradient id="gc" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="5%" stopColor={PURPLE} stopOpacity={0.4}/>
@@ -484,15 +525,20 @@ const PageDashboard = () => {
         <Card>
           <SectionTitle sub="Edificios actualmente monitoreados">Costo por Edificio · Semana</SectionTitle>
           <div style={{marginTop:8}}>
-            {[{b:'FIME',cost:5312,pct:60},{b:'Lab. de Redes',cost:3566,pct:40}].map((d,i) => (
+            {buildingChartData.length === 0 ? (
+              <div style={{background:'#1a1730',borderRadius:10,padding:'12px 14px',fontSize:13,color:'#9890c4'}}>
+                Sin datos reales de edificios todavía.
+              </div>
+            ) : buildingChartData.map((d,i) => (
               <div key={i} style={{marginBottom:16}}>
                 <div style={{display:'flex',justifyContent:'space-between',marginBottom:6,fontSize:13}}>
                   <span style={{color:'#c4bdf0'}}>{d.b}</span>
-                  <span style={{color:'#f0eeff',fontWeight:700}}>${d.cost.toLocaleString()} MXN</span>
+                  <span style={{color:'#f0eeff',fontWeight:700}}>${Number(d.cost || 0).toLocaleString("es-MX")} MXN</span>
                 </div>
                 <div style={{height:8,background:'#1a1730',borderRadius:4,overflow:'hidden'}}>
                   <div style={{height:'100%',width:`${d.pct}%`,background:`linear-gradient(90deg,${PURPLE},${PURPLE_L})`,borderRadius:4}}/>
                 </div>
+                <div style={{fontSize:11,color:'#6e6694'}}>{Number(d.kwh || 0).toFixed(4)} kWh</div>
               </div>
             ))}
             <div style={{background:'#1a1730',borderRadius:10,padding:'12px 14px',marginTop:16}}>
