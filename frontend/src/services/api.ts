@@ -105,3 +105,8 @@ export async function getAnomalies() {
   const response = await api.get("/anomalies");
   return response.data;
 }
+
+export async function getCampusMetrics() {
+  const response = await api.get("/metrics/campuses");
+  return response.data;
+}

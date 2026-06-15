@@ -1,4 +1,4 @@
-import { getDashboardSummary, getHourlyCost, getBuildings, getNodes, getAiInsights, createDeployment, getDelegations, getAllOrgBuildings, getCampusesByDelegation, getUnitsByCampus, getBuildingsByUnit, getPanelsByBuilding, getLatestReadings, getLiveMetrics, getMetricsHourly, getMetricsTariffs, getMetricsDaily, getMetricsBuildings, getAnomalies } from "./services/api";
+import { getDashboardSummary, getHourlyCost, getBuildings, getNodes, getAiInsights, createDeployment, getDelegations, getAllOrgBuildings, getCampusesByDelegation, getUnitsByCampus, getBuildingsByUnit, getPanelsByBuilding, getLatestReadings, getLiveMetrics, getMetricsHourly, getMetricsTariffs, getMetricsDaily, getMetricsBuildings, getAnomalies, getCampusMetrics } from "./services/api";
 
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
@@ -585,231 +585,223 @@ const PageDashboard = ({ apiAnomalies }) => {
 };
 
 // ─── PAGE: CAMPUS MAP ─────────────────────────────────────────────────────────
-const PageCampus = ({ apiBuildings }) => {
-  const [selected, setSelected] = useState(null);
-  const buildings = apiBuildings || MOCK.buildings;
+const PageCampus = () => {
+  const [campusData, setCampusData] = useState({ campuses: [], buildings: [] });
+
+  useEffect(() => {
+    const load = () => {
+      getCampusMetrics()
+        .then(setCampusData)
+        .catch((error) => console.error("Campus metrics API error:", error));
+    };
+
+    load();
+    const timer = setInterval(load, 15000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const campuses = campusData.campuses || [];
+  const buildings = campusData.buildings || [];
+
   return (
     <div>
-      <div style={{display:'flex',gap:18,marginBottom:22,flexWrap:'wrap'}}>
-        {MOCK.campuses.map((c,i) => (
-          <Card key={i} style={{flex:1,minWidth:220,borderColor:c.status==='active'?`${PURPLE}44`:'#1e1b35'}}>
-            <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:10}}>
+      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(280px,1fr))',gap:18,marginBottom:22}}>
+        {campuses.map(campus => (
+          <Card key={campus.id} glow={campus.status === "active"}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:18}}>
               <div>
-                <div style={{fontSize:13,fontWeight:700,color:'#f0eeff'}}>{c.name}</div>
-                <div style={{fontSize:11,color:'#6e6694',marginTop:2}}>{c.monitored}/{c.buildings} edificios monitoreados</div>
+                <div style={{fontSize:15,fontWeight:800,color:'#f0eeff'}}>{campus.name}</div>
+                <div style={{fontSize:11,color:'#7b739e'}}>{campus.delegation}</div>
+                <div style={{fontSize:11,color:'#7b739e',marginTop:3}}>
+                  {campus.monitored_buildings}/{campus.total_buildings} edificios monitoreados
+                </div>
               </div>
-              <Badge color={c.status==='active'?'#22c55e':'#6b7280'}>{c.status==='active'?'Activo':'Inactivo'}</Badge>
+              <Badge color={campus.status === "active" ? "#22c55e" : "#6b7280"}>
+                {campus.status === "active" ? "Activo" : "Sin datos"}
+              </Badge>
             </div>
-            {c.status==='active' && <>
-              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginTop:10}}>
-                <div style={{background:'#0f0f1a',borderRadius:8,padding:'8px 10px'}}>
-                  <div style={{fontSize:10,color:'#6e6694'}}>Potencia</div>
-                  <div style={{fontSize:16,fontWeight:700,color:'#f0eeff'}}>{c.power} kW</div>
-                </div>
-                <div style={{background:'#0f0f1a',borderRadius:8,padding:'8px 10px'}}>
-                  <div style={{fontSize:10,color:'#6e6694'}}>Costo/Sem.</div>
-                  <div style={{fontSize:16,fontWeight:700,color:PURPLE_L}}>${c.cost_week.toLocaleString()}</div>
-                </div>
+
+            <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:12}}>
+              <div>
+                <div style={{fontSize:10,color:'#6e6694',textTransform:'uppercase',letterSpacing:.8}}>Potencia</div>
+                <div style={{fontSize:19,fontWeight:800,color:'#f0eeff'}}>{Number(campus.power_kw || 0).toFixed(2)} kW</div>
               </div>
-            </>}
+              <div>
+                <div style={{fontSize:10,color:'#6e6694',textTransform:'uppercase',letterSpacing:.8}}>Energía hoy</div>
+                <div style={{fontSize:19,fontWeight:800,color:'#f0eeff'}}>{Number(campus.energy_today_kwh || 0).toFixed(3)} kWh</div>
+              </div>
+              <div>
+                <div style={{fontSize:10,color:'#6e6694',textTransform:'uppercase',letterSpacing:.8}}>Costo hoy</div>
+                <div style={{fontSize:19,fontWeight:800,color:PURPLE_L}}>${Number(campus.cost_today_mxn || 0).toLocaleString("es-MX")} MXN</div>
+              </div>
+            </div>
           </Card>
         ))}
       </div>
-      <div style={{display:'grid',gridTemplateColumns:selected?'1fr 340px':'1fr',gap:18}}>
-        <Card>
-          <SectionTitle sub="Estado de edificios · Campus Colima">Red de Edificios Inteligentes</SectionTitle>
-          <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(160px,1fr))',gap:12,marginTop:4}}>
-            {buildings.map(b => (
-              <div key={b.id} onClick={() => setSelected(selected?.id===b.id ? null : b)}
-                style={{
-                  background:'#0f0f1a', borderRadius:12, padding:'14px',
-                  border:`1px solid ${b.status==='normal'?'#22c55e44':b.status==='warning'?'#f59e0b44':b.status==='offline'?'#2a2740':'#ef444444'}`,
-                  cursor:'pointer', transition:'all .2s',
-                  boxShadow: selected?.id===b.id ? `0 0 16px ${PURPLE}44` : 'none'
-                }}>
-                <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:8}}>
-                  <Icon name="Building" size={20} color={PURPLE_L}/>
-                  <StatusDot status={b.status==='normal'?'online':b.status==='offline'?'offline':'warning'}/>
-                </div>
-                <div style={{fontSize:13,fontWeight:700,color:'#f0eeff',marginBottom:2}}>{b.name}</div>
-                <div style={{fontSize:11,color:'#6e6694',marginBottom:8}}>{b.campus}</div>
-                {b.status!=='offline' ? <>
-                  <div style={{fontSize:13,fontWeight:700,color:PURPLE_L}}>{b.power} kW</div>
-                  <div style={{fontSize:11,color:'#6e6694'}}>${b.cost_week.toLocaleString()} MXN/sem</div>
-                </> : <div style={{fontSize:11,color:'#4b5563'}}>Sin monitoreo</div>}
-                {b.anomaly && <div style={{marginTop:6,fontSize:10,background:'#ef444418',color:'#ef4444',borderRadius:20,padding:'2px 8px',display:'inline-block'}}>Anomalía</div>}
-              </div>
-            ))}
-          </div>
-        </Card>
-        {selected && (
-          <Card glow>
-            <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:16}}>
-              <div>
-                <div style={{fontSize:15,fontWeight:700,color:'#f0eeff'}}>{selected.name}</div>
-                <div style={{fontSize:12,color:'#6e6694'}}>{selected.faculty}</div>
-              </div>
-              <button onClick={() => setSelected(null)} style={{background:'none',border:'none',color:'#6e6694',cursor:'pointer'}}><Icon name="X" size={18}/></button>
-            </div>
-            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
-              {[
-                {label:'Campus',value:selected.campus},
-                {label:'Estado',value:selected.status},
-                {label:'Nodo',value:selected.node||'—'},
-                {label:'Última Actualización',value:selected.last_update},
-                {label:'Potencia',value:`${selected.power} kW`},
-                {label:'Energía/Semana',value:`${selected.energy_week} kWh`},
-                {label:'Costo/Semana',value:`$${selected.cost_week.toLocaleString()} MXN`},
-                {label:'Costo/Hoy',value:`$${selected.cost_today.toLocaleString()} MXN`}
-              ].map((r,i) => (
-                <div key={i} style={{background:'#0f0f1a',borderRadius:8,padding:'8px 10px'}}>
-                  <div style={{fontSize:10,color:'#6e6694'}}>{r.label}</div>
-                  <div style={{fontSize:13,fontWeight:600,color:'#f0eeff',marginTop:2}}>{r.value}</div>
-                </div>
-              ))}
-            </div>
-            {selected.anomaly && (
-              <div style={{marginTop:14,background:'#ef444418',border:'1px solid #ef444433',borderRadius:10,padding:'10px 12px'}}>
-                <div style={{fontSize:12,fontWeight:700,color:'#ef4444',marginBottom:4}}>Anomalía detectada</div>
-                <div style={{fontSize:12,color:'#f87171'}}>Se detectó consumo anómalo en las últimas horas. Revisar en monitoreo en vivo.</div>
-              </div>
-            )}
-          </Card>
-        )}
-      </div>
-    </div>
-  );
-};
 
-// ─── PAGE: BUILDINGS ──────────────────────────────────────────────────────────
-const PageBuildings = ({ setPage, apiBuildings }) => {
-  const [filter, setFilter] = useState({ campus:'', status:'' });
-  const sourceBuildings = apiBuildings || MOCK.buildings;
-  const filtered = sourceBuildings.filter(b =>
-    (!filter.campus || b.campus === filter.campus) &&
-    (!filter.status || b.status === filter.status)
-  );
-  const campuses = [...new Set(sourceBuildings.map(b => b.campus))];
-  return (
-    <div>
-      <div style={{display:'flex',gap:12,marginBottom:18,flexWrap:'wrap',alignItems:'center'}}>
-        <select value={filter.campus} onChange={e => setFilter(f=>({...f,campus:e.target.value}))} style={{width:180}}>
-          <option value="">Todos los campus</option>
-          {campuses.map(c => <option key={c}>{c}</option>)}
-        </select>
-        <select value={filter.status} onChange={e => setFilter(f=>({...f,status:e.target.value}))} style={{width:160}}>
-          <option value="">Todos los estados</option>
-          <option value="normal">Normal</option>
-          <option value="warning">Advertencia</option>
-          <option value="offline">Sin datos</option>
-        </select>
-        <div style={{marginLeft:'auto',fontSize:13,color:'#6e6694'}}>{filtered.length} edificios</div>
-      </div>
-      <Card style={{padding:0,overflow:'hidden'}}>
-        <table style={{width:'100%',borderCollapse:'collapse'}}>
-          <thead>
-            <tr style={{borderBottom:'1px solid #1e1b35'}}>
-              {['Edificio','Facultad','Campus','Nodo','Estado','Potencia','Energía/Sem','Costo/Sem','Anomalía'].map(h => (
-                <th key={h} style={{padding:'12px 16px',textAlign:'left',fontSize:11,color:'#6e6694',fontWeight:600,textTransform:'uppercase',letterSpacing:.8}}>{h}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.map((b,i) => (
-              <tr key={b.id} style={{borderBottom:'1px solid #0f0f1a',transition:'background .15s'}}
-                onMouseEnter={e => e.currentTarget.style.background='#10101e'}
-                onMouseLeave={e => e.currentTarget.style.background='transparent'}>
-                <td style={{padding:'13px 16px',fontSize:13,fontWeight:700,color:'#f0eeff'}}>{b.name}</td>
-                <td style={{padding:'13px 16px',fontSize:12,color:'#9890c4'}}>{b.faculty}</td>
-                <td style={{padding:'13px 16px',fontSize:12,color:'#9890c4'}}>{b.campus}</td>
-                <td style={{padding:'13px 16px'}}>
-                  {b.node ? <Badge color="#7c5cbf">{b.node}</Badge> : <span style={{fontSize:12,color:'#4b5563'}}>—</span>}
-                </td>
-                <td style={{padding:'13px 16px'}}>
-                  <div style={{display:'flex',alignItems:'center',gap:5}}>
-                    <StatusDot status={b.status==='normal'?'online':b.status==='offline'?'offline':'warning'}/>
-                    <span style={{fontSize:12,color:b.status==='normal'?'#22c55e':b.status==='warning'?'#f59e0b':'#6b7280'}}>
-                      {b.status==='normal'?'Normal':b.status==='warning'?'Advertencia':'Sin datos'}
-                    </span>
-                  </div>
-                </td>
-                <td style={{padding:'13px 16px',fontSize:13,color:'#f0eeff',fontWeight:600}}>{b.power>0?`${b.power} kW`:'—'}</td>
-                <td style={{padding:'13px 16px',fontSize:13,color:'#9890c4'}}>{b.energy_week>0?`${b.energy_week} kWh`:'—'}</td>
-                <td style={{padding:'13px 16px',fontSize:13,fontWeight:700,color:b.cost_week>0?PURPLE_L:'#4b5563'}}>
-                  {b.cost_week>0?`$${b.cost_week.toLocaleString()}`:'—'}
-                </td>
-                <td style={{padding:'13px 16px'}}>
-                  {b.anomaly ? <Badge color="#ef4444">Sí</Badge> : <span style={{fontSize:12,color:'#4b5563'}}>—</span>}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      <Card>
+        <SectionTitle title="Red de Edificios Inteligentes" subtitle="Datos reales de edificios registrados y lecturas recibidas"/>
+        <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(190px,1fr))',gap:14}}>
+          {buildings.map(building => {
+            const isActive = building.status === "monitored";
+            const color = building.anomaly ? "#f59e0b" : isActive ? "#22c55e" : "#6b7280";
+
+            return (
+              <div key={building.id} style={{
+                background:'#0f0f1a',
+                border:`1px solid ${color}55`,
+                borderRadius:12,
+                padding:16,
+                minHeight:156,
+              }}>
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:14}}>
+                  <Icon name="Building" size={20} color={PURPLE_L}/>
+                  <StatusDot status={building.anomaly ? "warning" : isActive ? "online" : "offline"}/>
+                </div>
+
+                <div style={{fontSize:13,fontWeight:800,color:'#f0eeff',marginBottom:3}}>{building.name}</div>
+                <div style={{fontSize:11,color:'#7b739e',marginBottom:10}}>{building.campus}</div>
+
+                {isActive ? (
+                  <>
+                    <div style={{fontSize:15,fontWeight:800,color:PURPLE_L}}>{Number(building.power_kw || 0).toFixed(2)} kW</div>
+                    <div style={{fontSize:11,color:'#7b739e'}}>${Number(building.cost_today_mxn || 0).toLocaleString("es-MX")} MXN hoy</div>
+                    <div style={{fontSize:11,color:'#7b739e'}}>{Number(building.energy_today_kwh || 0).toFixed(4)} kWh</div>
+                    {building.anomaly && (
+                      <div style={{display:'inline-block',marginTop:8,padding:'3px 8px',background:'#ef444422',borderRadius:999,color:'#ef4444',fontSize:10,fontWeight:700}}>
+                        Anomalía
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <div style={{fontSize:12,color:'#6e6694'}}>Sin lecturas reales</div>
+                )}
+              </div>
+            );
+          })}
+        </div>
       </Card>
     </div>
   );
 };
 
-// ─── PAGE: BUILDING DETAIL ────────────────────────────────────────────────────
-const PageBuildingDetail = ({ building }) => {
-  const b = building || MOCK.buildings[0];
+
+// ─── PAGE: BUILDINGS ──────────────────────────────────────────────────────────
+const PageBuildings = () => {
+  const [data, setData] = useState({ campuses: [], buildings: [] });
+
+  useEffect(() => {
+    const load = () => {
+      getCampusMetrics()
+        .then(setData)
+        .catch((error) => console.error("Buildings metrics API error:", error));
+    };
+
+    load();
+    const timer = setInterval(load, 15000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const buildings = data.buildings || [];
+  const campuses = data.campuses || [];
+  const [campusFilter, setCampusFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("all");
+
+  const filteredBuildings = buildings.filter((b) => {
+    const campusOk = campusFilter === "all" || b.campus === campusFilter;
+    const statusOk =
+      statusFilter === "all" ||
+      (statusFilter === "monitored" && b.status === "monitored") ||
+      (statusFilter === "no_data" && b.status !== "monitored") ||
+      (statusFilter === "anomaly" && b.anomaly);
+
+    return campusOk && statusOk;
+  });
+
   return (
     <div>
-      <div style={{display:'flex',gap:14,marginBottom:22,flexWrap:'wrap'}}>
-        {[
-          {l:'Potencia Actual',v:`${b.power} kW`,c:PURPLE_L},
-          {l:'Tensión',v:'228.4 V',c:'#22c55e'},
-          {l:'Corriente',v:'18.7 A',c:'#f59e0b'},
-          {l:'Factor de Potencia',v:'0.93',c:'#22c55e'},
-          {l:'Frecuencia',v:'60.02 Hz',c:'#818cf8'},
-          {l:'Costo Hoy',v:`$${b.cost_today.toLocaleString()} MXN`,c:'#ef4444'}
-        ].map((s,i) => (
-          <div key={i} style={{background:'#10101e',border:'1px solid #1e1b35',borderRadius:12,padding:'14px 18px',flex:1,minWidth:130}}>
-            <div style={{fontSize:10,color:'#6e6694',textTransform:'uppercase',letterSpacing:1}}>{s.l}</div>
-            <div style={{fontSize:22,fontWeight:700,color:s.c,marginTop:4}}>{s.v}</div>
-          </div>
-        ))}
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:18}}>
+        <div style={{display:'flex',gap:12}}>
+          <select value={campusFilter} onChange={(e) => setCampusFilter(e.target.value)} style={{background:'#12111f',color:'#e2e0f0',border:'1px solid #2a2740',borderRadius:8,padding:'8px 12px'}}>
+            <option value="all">Todos los campus</option>
+            {campuses.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
+          </select>
+          <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} style={{background:'#12111f',color:'#e2e0f0',border:'1px solid #2a2740',borderRadius:8,padding:'8px 12px'}}>
+            <option value="all">Todos los estados</option>
+            <option value="monitored">Monitoreado</option>
+            <option value="no_data">Sin lecturas</option>
+            <option value="anomaly">Con anomalía</option>
+          </select>
+        </div>
+        <div style={{fontSize:12,color:'#7b739e'}}>{filteredBuildings.length} edificios</div>
       </div>
-      <div style={{display:'grid',gridTemplateColumns:'2fr 1fr',gap:18,marginBottom:18}}>
-        <Card>
-          <SectionTitle sub="Potencia registrada · últimas 24h">Potencia en el Tiempo</SectionTitle>
-          <ResponsiveContainer width="100%" height={200}>
-            <AreaChart data={MOCK.hourly.map(h => ({...h, power: (h.kwh * 0.9 + Math.random()*0.5).toFixed(2)}))}
-              margin={{top:5,right:10,left:-10,bottom:0}}>
-              <defs><linearGradient id="gp" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="#22c55e" stopOpacity={0.4}/>
-                <stop offset="95%" stopColor="#22c55e" stopOpacity={0}/>
-              </linearGradient></defs>
-              <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRID}/>
-              <XAxis dataKey="h" tick={{fontSize:10,fill:'#6e6694'}} interval={3}/>
-              <YAxis tick={{fontSize:10,fill:'#6e6694'}}/>
-              <Tooltip content={<CustomTooltip suffix=" kW"/>}/>
-              <Area type="monotone" dataKey="power" name="Potencia" stroke="#22c55e" fill="url(#gp)" strokeWidth={2}/>
-            </AreaChart>
-          </ResponsiveContainer>
-        </Card>
-        <Card>
-          <SectionTitle sub="Perfil del edificio">Información</SectionTitle>
-          {[
-            {l:'Edificio', v:b.name},{l:'Facultad',v:b.faculty},{l:'Campus',v:b.campus},
-            {l:'Nodo Asignado',v:b.node||'—'},{l:'Panel',v:'Tablero Principal'},
-            {l:'Despliegue',v:'06/01 – 13/01/2025'},{l:'Energía/Semana',v:`${b.energy_week} kWh`}
-          ].map((r,i) => (
-            <div key={i} style={{display:'flex',justifyContent:'space-between',padding:'7px 0',borderBottom:'1px solid #0f0f1a',fontSize:12}}>
-              <span style={{color:'#6e6694'}}>{r.l}</span>
-              <span style={{color:'#f0eeff',fontWeight:600}}>{r.v}</span>
-            </div>
-          ))}
-        </Card>
-      </div>
-      <AIInsightCard insights={[
-        `${b.name} consume el 60% de la energía total monitoreada del campus esta semana.`,
-        'El periodo punta genera el 41% del costo diario estimado con solo el 25% del tiempo operativo.',
-        'Se detectó una reducción del 12% en el consumo base vs. semana anterior — posible mejora en eficiencia.'
-      ]}/>
+
+      <Card>
+        <div style={{overflowX:'auto'}}>
+          <table style={{width:'100%',borderCollapse:'collapse'}}>
+            <thead>
+              <tr style={{color:'#7b739e',fontSize:11,textTransform:'uppercase',letterSpacing:1}}>
+                <th align="left" style={{padding:'0 0 12px'}}>Edificio</th>
+                <th align="left" style={{padding:'0 0 12px'}}>Unidad</th>
+                <th align="left" style={{padding:'0 0 12px'}}>Campus</th>
+                <th align="left" style={{padding:'0 0 12px'}}>Estado</th>
+                <th align="left" style={{padding:'0 0 12px'}}>Potencia</th>
+                <th align="left" style={{padding:'0 0 12px'}}>Energía hoy</th>
+                <th align="left" style={{padding:'0 0 12px'}}>Costo hoy</th>
+                <th align="left" style={{padding:'0 0 12px'}}>Anomalía</th>
+              </tr>
+            </thead>
+
+            <tbody>
+              {filteredBuildings.map((b) => (
+                <tr key={b.id} style={{borderTop:'1px solid #1f1f35'}}>
+                  <td style={{padding:'14px 0'}}>
+                    <div style={{fontWeight:800,color:'#f0eeff'}}>{b.name}</div>
+                    <div style={{fontSize:11,color:'#7b739e'}}>{b.delegation}</div>
+                  </td>
+
+                  <td style={{color:'#c4bdf0'}}>{b.organizational_unit}</td>
+                  <td style={{color:'#c4bdf0'}}>{b.campus}</td>
+
+                  <td>
+                    <span style={{
+                      color:b.status === 'monitored' ? '#22c55e' : '#6b7280',
+                      fontWeight:700,
+                      fontSize:12
+                    }}>
+                      {b.status === 'monitored' ? 'Monitoreado' : 'Sin lecturas'}
+                    </span>
+                  </td>
+
+                  <td style={{fontWeight:700,color:'#f0eeff'}}>
+                    {Number(b.power_kw || 0).toFixed(2)} kW
+                  </td>
+
+                  <td style={{color:'#c4bdf0'}}>
+                    {Number(b.energy_today_kwh || 0).toFixed(4)} kWh
+                  </td>
+
+                  <td style={{fontWeight:800,color:'#a78bfa'}}>
+                    ${Number(b.cost_today_mxn || 0).toLocaleString('es-MX')} MXN
+                  </td>
+
+                  <td>
+                    {b.anomaly ? (
+                      <span style={{background:'#ef444422',color:'#ef4444',border:'1px solid #ef444455',padding:'3px 9px',borderRadius:999,fontSize:11,fontWeight:800}}>
+                        Sí
+                      </span>
+                    ) : '—'}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </Card>
     </div>
   );
 };
+
 
 // ─── PAGE: DEPLOYMENTS ────────────────────────────────────────────────────────
 const PageDeployments = ({ apiNodes }) => {
