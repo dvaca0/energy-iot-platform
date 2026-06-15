@@ -75,3 +75,8 @@ export async function getLatestReadings() {
   const response = await api.get("/readings/latest");
   return response.data;
 }
+
+export async function getLiveMetrics() {
+  const response = await api.get("/metrics/live");
+  return response.data;
+}

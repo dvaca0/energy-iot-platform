@@ -1,4 +1,4 @@
-import { getDashboardSummary, getHourlyCost, getBuildings, getNodes, getAiInsights, createDeployment, getDelegations, getAllOrgBuildings, getCampusesByDelegation, getUnitsByCampus, getBuildingsByUnit, getPanelsByBuilding, getLatestReadings } from "./services/api";
+import { getDashboardSummary, getHourlyCost, getBuildings, getNodes, getAiInsights, createDeployment, getDelegations, getAllOrgBuildings, getCampusesByDelegation, getUnitsByCampus, getBuildingsByUnit, getPanelsByBuilding, getLatestReadings, getLiveMetrics } from "./services/api";
 
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
@@ -1104,7 +1104,7 @@ const PageLive = ({ apiNodes }) => {
 
   useEffect(() => {
     const loadReadings = () => {
-      getLatestReadings()
+      getLiveMetrics()
         .then((data) => {
           console.log("Latest readings loaded:", data);
           setLatestReadings(data);
@@ -1154,7 +1154,7 @@ const PageLive = ({ apiNodes }) => {
         const power = getValue(n, reading, "power_kw", "power");
         const pf = getValue(n, reading, "power_factor", "pf");
         const freq = getValue(n, reading, "frequency_hz", "freq");
-        const energyToday = getValue(n, reading, "energy_kwh", "energy_today");
+        const energyToday = getValue(n, reading, "energy_today_kwh", "energy_today");
 
         return (
           <Card key={n.id} style={{marginBottom:18}} glow>
