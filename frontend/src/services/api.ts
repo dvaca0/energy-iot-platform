@@ -100,3 +100,8 @@ export async function getMetricsBuildings() {
   const response = await api.get("/metrics/buildings");
   return response.data;
 }
+
+export async function getAnomalies() {
+  const response = await api.get("/anomalies");
+  return response.data;
+}

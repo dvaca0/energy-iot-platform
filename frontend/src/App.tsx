@@ -1,4 +1,4 @@
-import { getDashboardSummary, getHourlyCost, getBuildings, getNodes, getAiInsights, createDeployment, getDelegations, getAllOrgBuildings, getCampusesByDelegation, getUnitsByCampus, getBuildingsByUnit, getPanelsByBuilding, getLatestReadings, getLiveMetrics, getMetricsHourly, getMetricsTariffs, getMetricsDaily, getMetricsBuildings } from "./services/api";
+import { getDashboardSummary, getHourlyCost, getBuildings, getNodes, getAiInsights, createDeployment, getDelegations, getAllOrgBuildings, getCampusesByDelegation, getUnitsByCampus, getBuildingsByUnit, getPanelsByBuilding, getLatestReadings, getLiveMetrics, getMetricsHourly, getMetricsTariffs, getMetricsDaily, getMetricsBuildings, getAnomalies } from "./services/api";
 
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
@@ -378,7 +378,7 @@ const Topbar = ({ page }) => {
 };
 
 // ─── PAGE: EXECUTIVE DASHBOARD ────────────────────────────────────────────────
-const PageDashboard = () => {
+const PageDashboard = ({ apiAnomalies }) => {
   const [dashboardSummary, setDashboardSummary] = useState(null);
   const [hourlyCost, setHourlyCost] = useState(null);
   const [tariffMetrics, setTariffMetrics] = useState(null);
@@ -548,12 +548,11 @@ const PageDashboard = () => {
           </div>
         </Card>
       </div>
-      <AIInsightCard insights={[
-        'El periodo de punta representó el 21% del consumo en kWh pero generó el 39% del costo estimado total.',
-        'FIME proyecta superar el costo de la semana anterior en un 14% si el patrón actual se mantiene.',
-        'Desplazar cargas no críticas fuera del periodo punta podría generar un ahorro estimado de $3,250 MXN/mes.',
-        'El factor de potencia de Lab. de Redes (0.89) está por debajo del mínimo recomendado (0.90) y genera penalización tarifaria.'
-      ]}/>
+      <AIInsightCard insights={
+        apiAnomalies?.anomalies?.length
+          ? apiAnomalies.anomalies.map((item) => `${item.title}: ${item.description}`)
+          : ['No hay suficientes anomalías reales detectadas todavía. El sistema seguirá analizando las lecturas entrantes.']
+      }/>
     </div>
   );
 };
@@ -1741,6 +1740,7 @@ const App = () => {
   const [apiBuildings, setApiBuildings] = useState(null);
   const [apiNodes, setApiNodes] = useState(null);
   const [apiInsights, setApiInsights] = useState(null);
+  const [apiAnomalies, setApiAnomalies] = useState(null);
 
   useEffect(() => {
     getDashboardSummary()
@@ -1804,25 +1804,29 @@ const App = () => {
     getAllOrgBuildings()
       .then((data) => console.log("UdeC org buildings:", data))
       .catch((error) => console.error("Org buildings API error:", error));
+
+    getAnomalies()
+      .then((data) => setApiAnomalies(data))
+      .catch((error) => console.error("Anomalies API error:", error));
   }, []);
 
   const [page, setPage] = useState('dashboard');
   const [role, setRole] = useState('Administrador');
   const renderPage = () => {
     switch(page) {
-      case 'dashboard': return <PageDashboard/>;
+      case 'dashboard': return <PageDashboard apiAnomalies={apiAnomalies}/>;
       case 'campus': return <PageCampus apiBuildings={apiBuildings}/>;
       case 'buildings': return <PageBuildings setPage={setPage} apiBuildings={apiBuildings}/>;
       case 'buildingDetail': return <PageBuildingDetail building={MOCK.buildings[0]}/>;
       case 'deployments': return <PageDeployments apiNodes={apiNodes}/>;
       case 'live': return <PageLive apiNodes={apiNodes}/>;
       case 'cost': return <PageCost/>;
-      case 'ai': return <PageAI apiInsights={apiInsights}/>;
+      case 'ai': return <PageAI apiInsights={apiInsights} apiAnomalies={apiAnomalies}/>;
       case 'mining': return <PageMining/>;
       case 'reports': return <PageReports/>;
       case 'infra': return <PageInfra/>;
       case 'settings': return <PageSettings role={role} setRole={setRole}/>;
-      default: return <PageDashboard/>;
+      default: return <PageDashboard apiAnomalies={apiAnomalies}/>;
     }
   };
   return (
