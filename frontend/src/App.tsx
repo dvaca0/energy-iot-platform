@@ -1,4 +1,4 @@
-import { getDashboardSummary, getHourlyCost, getBuildings, getNodes, getAiInsights, createDeployment, getDelegations, getAllOrgBuildings, getCampusesByDelegation, getUnitsByCampus, getBuildingsByUnit, getPanelsByBuilding, getLatestReadings, getLiveMetrics, getMetricsHourly, getMetricsTariffs, getMetricsDaily, getMetricsBuildings, getAnomalies, getCampusMetrics } from "./services/api";
+import { getDashboardSummary, getHourlyCost, getBuildings, getNodes, getAiInsights, createDeployment, getDelegations, getAllOrgBuildings, getCampusesByDelegation, getUnitsByCampus, getBuildingsByUnit, getPanelsByBuilding, getLatestReadings, getLiveMetrics, getMetricsHourly, getMetricsTariffs, getMetricsDaily, getMetricsBuildings, getAnomalies, getCampusMetrics, getDeployments } from "./services/api";
 
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
@@ -804,43 +804,44 @@ const PageBuildings = () => {
 
 
 // ─── PAGE: DEPLOYMENTS ────────────────────────────────────────────────────────
-const PageDeployments = ({ apiNodes }) => {
-  const [form, setForm] = useState({
-    node:'N001',
-    delegationId:'',
-    campusId:'',
-    unitId:'',
-    customUnitName:'',
-    customUnitType:'administrative',
-    buildingId:'',
-    panelId:'',
-    campus:'',
-    faculty:'',
-    building:'',
-    panel:'',
-    start:'',
-    end:'',
-    notes:''
-  });
-  const [saved, setSaved] = useState(false);
+const PageDeployments = () => {
+  const [nodes, setNodes] = useState([]);
+  const [deployments, setDeployments] = useState([]);
   const [delegations, setDelegations] = useState([]);
   const [campuses, setCampuses] = useState([]);
   const [units, setUnits] = useState([]);
-  const [orgBuildings, setOrgBuildings] = useState([]);
-  const [panels, setPanels] = useState([]);
+  const [saved, setSaved] = useState(false);
+
+  const [form, setForm] = useState({
+    node: '',
+    delegationId: '',
+    campusId: '',
+    unitId: '',
+    customUnitName: '',
+    customUnitType: 'administrative',
+    building: '',
+    panel: '',
+    start: '',
+    end: '',
+    notes: ''
+  });
+
+  const loadBase = () => {
+    getNodes().then(setNodes).catch((error) => console.error("Nodes API error:", error));
+    getDeployments().then(setDeployments).catch((error) => console.error("Deployments API error:", error));
+    getDelegations().then(setDelegations).catch((error) => console.error("Delegations API error:", error));
+  };
 
   useEffect(() => {
-    getDelegations()
-      .then(setDelegations)
-      .catch((error) => console.error("Could not load delegations:", error));
+    loadBase();
+    const timer = setInterval(loadBase, 15000);
+    return () => clearInterval(timer);
   }, []);
 
   useEffect(() => {
     if (!form.delegationId) {
       setCampuses([]);
       setUnits([]);
-      setOrgBuildings([]);
-      setPanels([]);
       return;
     }
 
@@ -848,132 +849,56 @@ const PageDeployments = ({ apiNodes }) => {
       .then((data) => {
         setCampuses(data);
         setUnits([]);
-        setOrgBuildings([]);
-        setPanels([]);
-        setForm((current) => ({
-          ...current,
-          campusId:'',
-          unitId:'',
-          buildingId:'',
-          panelId:'',
-          campus:'',
-          faculty:'',
-          building:'',
-          panel:''
-        }));
+        setForm((current) => ({...current, campusId:'', unitId:''}));
       })
-      .catch((error) => console.error("Could not load campuses:", error));
+      .catch((error) => console.error("Campuses API error:", error));
   }, [form.delegationId]);
 
   useEffect(() => {
     if (!form.campusId) {
       setUnits([]);
-      setOrgBuildings([]);
-      setPanels([]);
       return;
     }
 
     getUnitsByCampus(Number(form.campusId))
       .then((data) => {
         setUnits(data);
-        setOrgBuildings([]);
-        setPanels([]);
-        const selectedCampus = campuses.find((item) => String(item.id) === String(form.campusId));
-        setForm((current) => ({
-          ...current,
-          campus: selectedCampus?.name || '',
-          unitId:'',
-          buildingId:'',
-          panelId:'',
-          faculty:'',
-          building:'',
-          panel:''
-        }));
+        setForm((current) => ({...current, unitId:''}));
       })
-      .catch((error) => console.error("Could not load organizational units:", error));
+      .catch((error) => console.error("Units API error:", error));
   }, [form.campusId]);
 
   useEffect(() => {
-    if (!form.unitId) {
-      setOrgBuildings([]);
-      setPanels([]);
-      return;
+    if (!form.node && nodes.length > 0) {
+      setForm((current) => ({...current, node:nodes[0].id}));
     }
+  }, [nodes]);
 
-    if (form.unitId === "__manual__") {
-      setOrgBuildings([]);
-      setPanels([]);
-      setForm((current) => ({
-        ...current,
-        faculty: current.customUnitName || '',
-        buildingId:'',
-        panelId:''
-      }));
-      return;
-    }
-
-    const selectedUnit = units.find((item) => String(item.id) === String(form.unitId));
-    setForm((current) => ({
-      ...current,
-      faculty: selectedUnit?.name || '',
-      buildingId:'',
-      panelId:''
-    }));
-  }, [form.unitId]);
-
-  useEffect(() => {
-    if (!form.buildingId) {
-      setPanels([]);
-      return;
-    }
-
-    getPanelsByBuilding(Number(form.buildingId))
-      .then((data) => {
-        setPanels(data);
-        const selectedBuilding = orgBuildings.find((item) => String(item.id) === String(form.buildingId));
-        setForm((current) => ({
-          ...current,
-          building: selectedBuilding?.name || '',
-          panelId:'',
-          panel:''
-        }));
-      })
-      .catch((error) => console.error("Could not load panels:", error));
-  }, [form.buildingId]);
-
-  useEffect(() => {
-    if (!form.panelId) return;
-    const selectedPanel = panels.find((item) => String(item.id) === String(form.panelId));
-    setForm((current) => ({
-      ...current,
-      panel: selectedPanel?.name || ''
-    }));
-  }, [form.panelId]);
   const handleSave = async () => {
+    const useManualUnit = form.unitId === "__manual__";
+
+    if (!form.node || !form.campusId || !form.building || !form.panel || !form.start || !form.end) {
+      alert("Completa nodo, campus, edificio, tablero y fechas.");
+      return;
+    }
+
+    if (!useManualUnit && !form.unitId) {
+      alert("Selecciona una unidad organizacional o agrega una manualmente.");
+      return;
+    }
+
+    if (useManualUnit && !form.customUnitName) {
+      alert("Escribe el nombre de la unidad organizacional.");
+      return;
+    }
+
     try {
-      const useCustomUnit = form.unitId === "__manual__";
-
-      if (!form.node || !form.campusId || !form.building || !form.panel || !form.start || !form.end) {
-        alert("Completa nodo, campus, edificio, tablero y fechas.");
-        return;
-      }
-
-      if (useCustomUnit && !form.customUnitName) {
-        alert("Escribe el nombre de la unidad organizacional.");
-        return;
-      }
-
-      if (!useCustomUnit && !form.unitId) {
-        alert("Selecciona una unidad organizacional o usa la opción manual.");
-        return;
-      }
-
       await createDeployment({
         node_id: form.node,
         campus_id: Number(form.campusId),
-        organizational_unit_id: useCustomUnit ? null : Number(form.unitId),
-        custom_unit_name: useCustomUnit ? form.customUnitName : null,
-        custom_unit_type: useCustomUnit ? form.customUnitType : null,
+        organizational_unit_id: useManualUnit ? null : Number(form.unitId),
+        custom_unit_name: useManualUnit ? form.customUnitName : null,
+        custom_unit_type: useManualUnit ? form.customUnitType : null,
         building_name: form.building,
         electrical_panel: form.panel,
         start_date: form.start,
@@ -982,121 +907,149 @@ const PageDeployments = ({ apiNodes }) => {
       });
 
       setSaved(true);
-      setTimeout(() => setSaved(false), 3000);
+      setTimeout(() => setSaved(false), 2500);
+      loadBase();
     } catch (error) {
       console.error("Create deployment API error:", error);
-      alert("No se pudo guardar el despliegue. Revisa que el backend esté corriendo.");
+      alert("No se pudo guardar el despliegue.");
     }
   };
+
+  const activeDeployments = deployments.filter((d) => d.status === "active");
+  const pastDeployments = deployments.filter((d) => d.status !== "active");
+
+  const fmtSync = (value) => {
+    if (!value) return "Sin sincronía";
+    try {
+      return new Date(value).toLocaleString("es-MX");
+    } catch {
+      return value;
+    }
+  };
+
   return (
     <div style={{display:'grid',gridTemplateColumns:'1fr 1.4fr',gap:18}}>
       <div>
-        <SectionTitle sub="Estado actual de los nodos de campo">Nodos Disponibles</SectionTitle>
-        {(apiNodes || MOCK.nodes).map(n => (
-          <Card key={n.id} style={{marginBottom:12,borderColor:n.status==='online'?'#22c55e33':'#1e1b35'}}>
-            <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:12}}>
-              <div style={{display:'flex',alignItems:'center',gap:10}}>
-                <div style={{background:'#22c55e18',border:'1px solid #22c55e33',borderRadius:8,padding:10,color:'#22c55e'}}><Icon name="Cpu" size={18}/></div>
+        <SectionTitle title="Nodos Disponibles" subtitle="Estado real reportado por Raspberry/edge"/>
+        {nodes.map((node) => (
+          <Card key={node.id} style={{marginBottom:14}} glow={node.status === "online"}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:18}}>
+              <div style={{display:'flex',gap:12,alignItems:'center'}}>
+                <div style={{background:'#22c55e18',border:'1px solid #22c55e33',borderRadius:10,padding:'9px 11px',color:'#22c55e',fontWeight:900,fontSize:12}}>NODE</div>
                 <div>
-                  <div style={{fontSize:14,fontWeight:700,color:'#f0eeff'}}>{n.name}</div>
-                  <div style={{fontSize:11,color:'#6e6694'}}>{n.ip} · v{n.fw}</div>
+                  <div style={{fontWeight:800,color:'#f0eeff'}}>{node.name}</div>
+                  <div style={{fontSize:11,color:'#7b739e'}}>{node.ip || "Sin IP"}</div>
                 </div>
               </div>
-              <Badge color="#22c55e">Online</Badge>
+              <Badge color={node.status === "online" ? "#22c55e" : "#6b7280"}>{node.status}</Badge>
             </div>
-            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
-              {[
-                {l:'Edificio',v:n.building},{l:'Última Sincronía',v:n.last_sync},
-                {l:'Muestras',v:n.samples.toLocaleString()},{l:'Buffer',v:`${n.buffer} reg. pend.`},
-                {l:'RPi',v:n.rpi_status==='ok'?'OK':'Warning'},{l:'Shelly',v:n.shelly_status==='ok'?'OK':'Warning'}
-              ].map((r,i) => (
-                <div key={i} style={{background:'#0f0f1a',borderRadius:8,padding:'7px 10px'}}>
-                  <div style={{fontSize:10,color:'#6e6694'}}>{r.l}</div>
-                  <div style={{fontSize:12,fontWeight:600,color:'#f0eeff',marginTop:2}}>{r.v}</div>
-                </div>
-              ))}
+
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,fontSize:12}}>
+              <div><div style={{color:'#6e6694'}}>Edificio</div><b>{node.building || "Sin despliegue"}</b></div>
+              <div><div style={{color:'#6e6694'}}>Última sincronía</div><b>{fmtSync(node.last_sync)}</b></div>
+              <div><div style={{color:'#6e6694'}}>Muestras</div><b>{Number(node.samples || 0).toLocaleString("es-MX")}</b></div>
+              <div><div style={{color:'#6e6694'}}>Buffer</div><b>{Number(node.buffer_pending || 0)} reg. pend.</b></div>
+              <div><div style={{color:'#6e6694'}}>Raspberry</div><b>{node.status === "online" ? "OK" : "Sin datos"}</b></div>
+              <div><div style={{color:'#6e6694'}}>Shelly</div><b>{node.status === "online" ? "OK" : "Sin datos"}</b></div>
             </div>
           </Card>
         ))}
-        <SectionTitle sub="Historial de despliegues" style={{marginTop:20}}>Despliegues Pasados</SectionTitle>
-        {MOCK.deployments.filter(d=>d.status==='completed').map(d => (
-          <Card key={d.id} style={{marginBottom:10}}>
-            <div style={{display:'flex',justifyContent:'space-between',marginBottom:6}}>
-              <span style={{fontSize:13,fontWeight:700,color:'#f0eeff'}}>{d.building}</span>
-              <Badge color="#22c55e">Completado</Badge>
+
+        <SectionTitle title="Despliegues Pasados" subtitle="Historial real de despliegues cerrados"/>
+        {pastDeployments.length === 0 ? (
+          <Card>
+            <div style={{fontSize:13,color:'#7b739e'}}>No hay despliegues pasados registrados todavía.</div>
+          </Card>
+        ) : pastDeployments.map((deployment) => (
+          <Card key={deployment.id} style={{marginBottom:10}}>
+            <div style={{display:'flex',justifyContent:'space-between'}}>
+              <b>{deployment.building_name}</b>
+              <Badge color={
+                deployment.status === "active"
+                  ? "#22c55e"
+                  : deployment.status === "completed"
+                  ? "#3b82f6"
+                  : deployment.status === "failed"
+                  ? "#ef4444"
+                  : "#6b7280"
+              }>
+                {deployment.status}
+              </Badge>
             </div>
-            <div style={{fontSize:12,color:'#6e6694'}}>{d.node} · {d.start} – {d.end}</div>
-            <div style={{fontSize:12,color:'#9890c4',marginTop:4}}>{d.completeness}% completitud · {d.samples.toLocaleString()} muestras</div>
+            <div style={{fontSize:12,color:'#7b739e',marginTop:6}}>
+              {deployment.node_id} · {deployment.start_date} – {deployment.end_date}
+            </div>
           </Card>
         ))}
       </div>
+
       <div>
-        <SectionTitle sub="Despliegues activos actualmente">En Curso</SectionTitle>
-        {MOCK.deployments.filter(d=>d.status==='active').map(d => (
-          <Card key={d.id} style={{marginBottom:14,borderColor:`${PURPLE}44`}} glow>
-            <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:12}}>
+        <SectionTitle title="En Curso" subtitle="Despliegues activos desde backend"/>
+        {activeDeployments.length === 0 ? (
+          <Card style={{marginBottom:14}}>
+            <div style={{fontSize:13,color:'#7b739e'}}>No hay despliegues activos.</div>
+          </Card>
+        ) : activeDeployments.map((deployment) => (
+          <Card key={deployment.id} style={{marginBottom:14}}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:14}}>
               <div>
-                <div style={{fontSize:14,fontWeight:700,color:'#f0eeff'}}>{d.building}</div>
-                <div style={{fontSize:11,color:'#6e6694'}}>{d.node} · {d.panel}</div>
-              </div>
-              <Badge color={PURPLE_L}>Activo</Badge>
-            </div>
-            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8,marginBottom:12}}>
-              {[{l:'Técnico',v:d.tech},{l:'Inicio',v:d.start},{l:'Fin',v:d.end}].map((r,i) => (
-                <div key={i} style={{background:'#0f0f1a',borderRadius:8,padding:'7px 10px'}}>
-                  <div style={{fontSize:10,color:'#6e6694'}}>{r.l}</div>
-                  <div style={{fontSize:12,fontWeight:600,color:'#f0eeff',marginTop:2}}>{r.v}</div>
+                <div style={{fontSize:16,fontWeight:800,color:'#f0eeff'}}>{deployment.building_name}</div>
+                <div style={{fontSize:12,color:'#7b739e'}}>
+                  {deployment.node_id} · {deployment.electrical_panel}
                 </div>
-              ))}
-            </div>
-            <div style={{marginBottom:8}}>
-              <div style={{display:'flex',justifyContent:'space-between',fontSize:12,color:'#6e6694',marginBottom:4}}>
-                <span>Progreso del despliegue</span>
-                <span style={{color:PURPLE_L,fontWeight:700}}>{d.progress}%</span>
               </div>
-              <div style={{height:8,background:'#1a1730',borderRadius:4,overflow:'hidden'}}>
-                <div style={{height:'100%',width:`${d.progress}%`,background:`linear-gradient(90deg,${PURPLE},${PURPLE_L})`,borderRadius:4}}/>
-              </div>
+              <Badge color="#22c55e">Activo</Badge>
             </div>
-            <div style={{display:'flex',justifyContent:'space-between',fontSize:12,marginTop:8}}>
-              <span style={{color:'#6e6694'}}>Completitud de datos: <strong style={{color:'#22c55e'}}>{d.completeness}%</strong></span>
-              <span style={{color:'#6e6694'}}>{d.samples.toLocaleString()} muestras · {d.buffer} buffer</span>
+
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:12,fontSize:12,marginBottom:14}}>
+              <div><div style={{color:'#6e6694'}}>Unidad</div><b>{deployment.organizational_unit}</b></div>
+              <div><div style={{color:'#6e6694'}}>Inicio</div><b>{deployment.start_date}</b></div>
+              <div><div style={{color:'#6e6694'}}>Fin</div><b>{deployment.end_date}</b></div>
             </div>
-            {d.notes && <div style={{marginTop:10,background:'#1a1730',borderRadius:8,padding:'8px 10px',fontSize:11,color:'#9890c4'}}>{d.notes}</div>}
+
+            <div style={{background:'#1a1730',borderRadius:8,padding:'9px 12px',fontSize:12,color:'#a9a2d0'}}>
+              {deployment.notes || "Sin notas del técnico."}
+            </div>
           </Card>
         ))}
-        <Card style={{borderColor:`${PURPLE}44`}}>
-          <SectionTitle sub="Asignar nodo a edificio para nuevo despliegue">Asignar Nodo</SectionTitle>
-          {saved && <div style={{background:'#22c55e18',border:'1px solid #22c55e33',borderRadius:10,padding:'10px 14px',marginBottom:14,fontSize:13,color:'#22c55e'}}>Despliegue registrado correctamente</div>}
+
+        <Card>
+          <SectionTitle title="Asignar Nodo" subtitle="Registrar un nuevo despliegue en campo"/>
+          {saved && (
+            <div style={{background:'#22c55e18',border:'1px solid #22c55e44',color:'#22c55e',borderRadius:10,padding:'10px 12px',fontSize:13,marginBottom:14}}>
+              Despliegue guardado correctamente.
+            </div>
+          )}
+
           <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
             <div style={{display:'flex',flexDirection:'column',gap:5}}>
-              <label style={{fontSize:11,color:'#6e6694',textTransform:'uppercase',letterSpacing:.8}}>Nodo</label>
-              <select value={form.node} onChange={e => setForm(f=>({...f,node:e.target.value}))}>
-                {(apiNodes || MOCK.nodes).map(n => <option key={n.id} value={n.id}>{n.id} · {n.name}</option>)}
+              <label>Nodo</label>
+              <select value={form.node} onChange={(e) => setForm(f => ({...f,node:e.target.value}))}>
+                {nodes.map((n) => <option key={n.id} value={n.id}>{n.id} · {n.name}</option>)}
               </select>
             </div>
 
             <div style={{display:'flex',flexDirection:'column',gap:5}}>
-              <label style={{fontSize:11,color:'#6e6694',textTransform:'uppercase',letterSpacing:.8}}>Delegación</label>
-              <select value={form.delegationId} onChange={e => setForm(f=>({...f,delegationId:e.target.value}))}>
+              <label>Delegación</label>
+              <select value={form.delegationId} onChange={(e) => setForm(f => ({...f,delegationId:e.target.value}))}>
                 <option value="">Seleccionar delegación</option>
-                {delegations.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
+                {delegations.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
               </select>
             </div>
 
             <div style={{display:'flex',flexDirection:'column',gap:5}}>
-              <label style={{fontSize:11,color:'#6e6694',textTransform:'uppercase',letterSpacing:.8}}>Campus</label>
-              <select value={form.campusId} disabled={!form.delegationId} onChange={e => setForm(f=>({...f,campusId:e.target.value}))}>
+              <label>Campus</label>
+              <select value={form.campusId} disabled={!form.delegationId} onChange={(e) => setForm(f => ({...f,campusId:e.target.value}))}>
                 <option value="">Seleccionar campus</option>
-                {campuses.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
+                {campuses.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
             </div>
 
             <div style={{display:'flex',flexDirection:'column',gap:5}}>
-              <label style={{fontSize:11,color:'#6e6694',textTransform:'uppercase',letterSpacing:.8}}>Unidad Organizacional</label>
-              <select value={form.unitId} disabled={!form.campusId} onChange={e => setForm(f=>({...f,unitId:e.target.value}))}>
-                <option value="">Seleccionar facultad/dependencia</option>
-                {units.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
+              <label>Unidad Organizacional</label>
+              <select value={form.unitId} disabled={!form.campusId} onChange={(e) => setForm(f => ({...f,unitId:e.target.value}))}>
+                <option value="">Seleccionar unidad</option>
+                {units.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
                 <option value="__manual__">Otra / agregar manualmente</option>
               </select>
             </div>
@@ -1104,23 +1057,18 @@ const PageDeployments = ({ apiNodes }) => {
             {form.unitId === "__manual__" && (
               <>
                 <div style={{display:'flex',flexDirection:'column',gap:5}}>
-                  <label style={{fontSize:11,color:'#6e6694',textTransform:'uppercase',letterSpacing:.8}}>Nombre de Unidad</label>
-                  <input value={form.customUnitName} onChange={e => setForm(f=>({...f,customUnitName:e.target.value,faculty:e.target.value}))} placeholder="Ej. CEGAF, DIGESET, Dirección..." />
+                  <label>Nombre de unidad</label>
+                  <input value={form.customUnitName} onChange={(e) => setForm(f => ({...f,customUnitName:e.target.value}))} placeholder="Ej. CEGAF, DIGESET..." />
                 </div>
 
                 <div style={{display:'flex',flexDirection:'column',gap:5}}>
-                  <label style={{fontSize:11,color:'#6e6694',textTransform:'uppercase',letterSpacing:.8}}>Tipo de Unidad</label>
-                  <select value={form.customUnitType} onChange={e => setForm(f=>({...f,customUnitType:e.target.value}))}>
-                    <option value="faculty">Facultad</option>
-                    <option value="school">Escuela</option>
-                    <option value="institute">Instituto</option>
-                    <option value="center">Centro</option>
-                    <option value="direction">Dirección</option>
-                    <option value="general_direction">Dirección General</option>
-                    <option value="coordination">Coordinación</option>
+                  <label>Tipo</label>
+                  <select value={form.customUnitType} onChange={(e) => setForm(f => ({...f,customUnitType:e.target.value}))}>
                     <option value="administrative">Dependencia administrativa</option>
-                    <option value="services">Servicios universitarios</option>
                     <option value="technical">Técnica / TI</option>
+                    <option value="services">Servicios universitarios</option>
+                    <option value="faculty">Facultad</option>
+                    <option value="center">Centro</option>
                     <option value="other">Otra</option>
                   </select>
                 </div>
@@ -1128,39 +1076,40 @@ const PageDeployments = ({ apiNodes }) => {
             )}
 
             <div style={{display:'flex',flexDirection:'column',gap:5}}>
-              <label style={{fontSize:11,color:'#6e6694',textTransform:'uppercase',letterSpacing:.8}}>Edificio</label>
-              <input value={form.building} disabled={!form.unitId} onChange={e => setForm(f=>({...f,building:e.target.value}))} placeholder="Ej. Edificio B, Laboratorio de Redes, Servicios Universitarios" />
+              <label>Edificio</label>
+              <input value={form.building} disabled={!form.unitId} onChange={(e) => setForm(f => ({...f,building:e.target.value}))} placeholder="Ej. Edificio B, Laboratorio de Redes" />
             </div>
 
             <div style={{display:'flex',flexDirection:'column',gap:5}}>
-              <label style={{fontSize:11,color:'#6e6694',textTransform:'uppercase',letterSpacing:.8}}>Tablero Eléctrico</label>
-              <input value={form.panel} disabled={!form.unitId} onChange={e => setForm(f=>({...f,panel:e.target.value}))} placeholder="Ej. Tablero Principal, Tablero Laboratorios, Tablero UPS" />
+              <label>Tablero Eléctrico</label>
+              <input value={form.panel} disabled={!form.unitId} onChange={(e) => setForm(f => ({...f,panel:e.target.value}))} placeholder="Ej. Tablero Principal" />
             </div>
 
             <div style={{display:'flex',flexDirection:'column',gap:5}}>
-              <label style={{fontSize:11,color:'#6e6694',textTransform:'uppercase',letterSpacing:.8}}>Fecha Inicio</label>
-              <input type="date" value={form.start} onChange={e => setForm(f=>({...f,start:e.target.value}))}/>
+              <label>Fecha Inicio</label>
+              <input type="date" value={form.start} onChange={(e) => setForm(f => ({...f,start:e.target.value}))} />
             </div>
 
             <div style={{display:'flex',flexDirection:'column',gap:5}}>
-              <label style={{fontSize:11,color:'#6e6694',textTransform:'uppercase',letterSpacing:.8}}>Fecha Fin</label>
-              <input type="date" value={form.end} onChange={e => setForm(f=>({...f,end:e.target.value}))}/>
+              <label>Fecha Fin</label>
+              <input type="date" value={form.end} onChange={(e) => setForm(f => ({...f,end:e.target.value}))} />
             </div>
           </div>
-          <div style={{marginTop:12}}>
-            <label style={{fontSize:11,color:'#6e6694',textTransform:'uppercase',letterSpacing:.8}}>Notas del Técnico</label>
-            <textarea rows={3} value={form.notes} onChange={e => setForm(f=>({...f,notes:e.target.value}))} style={{width:'100%',marginTop:5,resize:'none'}} placeholder="Observaciones de instalación..."/>
+
+          <div style={{display:'flex',flexDirection:'column',gap:5,marginTop:12}}>
+            <label>Notas del técnico</label>
+            <textarea value={form.notes} onChange={(e) => setForm(f => ({...f,notes:e.target.value}))} placeholder="Observaciones de instalación..." />
           </div>
-          <button onClick={handleSave} style={{
-            marginTop:14, width:'100%', padding:'11px',
-            background:`linear-gradient(135deg,${PURPLE},#4f3d9e)`, border:'none',
-            borderRadius:10, color:'#fff', fontWeight:700, fontSize:14, cursor:'pointer'
-          }}>Guardar Despliegue</button>
+
+          <button onClick={handleSave} style={{width:'100%',marginTop:14}}>
+            Guardar Despliegue
+          </button>
         </Card>
       </div>
     </div>
   );
 };
+
 
 // ─── PAGE: LIVE MONITORING ────────────────────────────────────────────────────
 const PageLive = ({ apiNodes }) => {

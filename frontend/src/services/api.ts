@@ -110,3 +110,8 @@ export async function getCampusMetrics() {
   const response = await api.get("/metrics/campuses");
   return response.data;
 }
+
+export async function getDeployments() {
+  const response = await api.get("/deployments");
+  return response.data;
+}
