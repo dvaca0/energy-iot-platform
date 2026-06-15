@@ -208,9 +208,29 @@ const SectionTitle = ({ children, sub }) => (
 );
 
 const AIInsightCard = ({ insights }) => {
-  const normalized = insights.map((ins,i) => typeof ins === 'string'
-    ? { priority: i===0?'high':i===1?'medium':'info', category: i===0?'Optimización tarifaria':i===1?'Pronóstico operativo':'Recomendación', building: i===0?'Campus Colima':'Sistema', impact: i===0?'Impacto financiero alto':i===1?'Riesgo de sobrecosto':'Mejora potencial', desc: ins }
-    : ins);
+  const normalized = insights.map((ins, i) => {
+    if (typeof ins === 'string') {
+      return {
+        priority: i === 0 ? 'medium' : 'info',
+        category: 'Sistema',
+        building: 'Sin edificio',
+        impact: 'Sin clasificación',
+        title: 'Mensaje del sistema',
+        desc: ins
+      };
+    }
+
+    return {
+      priority: ins.priority || ins.severity || 'info',
+      category: ins.category || 'Anomalía',
+      building: ins.building || ins.node_id || 'Sin edificio',
+      impact: ins.value !== undefined && ins.threshold !== undefined
+        ? `Valor: ${Number(ins.value).toFixed(2)} · Umbral: ${Number(ins.threshold).toFixed(2)}`
+        : 'Evento detectado',
+      title: ins.title || 'Anomalía detectada',
+      desc: ins.description || ins.desc || 'Sin descripción'
+    };
+  });
   return (
     <Card glow style={{borderColor:`${PURPLE}44`}}>
       <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:10,marginBottom:16}}>
@@ -221,7 +241,7 @@ const AIInsightCard = ({ insights }) => {
             <div style={{fontSize:11,color:'#7b739e'}}>Análisis automático y recomendaciones accionables</div>
           </div>
         </div>
-        <Badge color={PURPLE_L}>AI Engine</Badge>
+        <Badge color={PURPLE_L}>Anomaly Engine</Badge>
       </div>
       <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(260px,1fr))',gap:12}}>
         {normalized.map((ins,i) => {
@@ -236,8 +256,9 @@ const AIInsightCard = ({ insights }) => {
                 <Icon name="Building" size={14} color={PURPLE_L}/>
                 <span style={{fontSize:12,color:'#c4bdf0',fontWeight:700}}>{ins.building}</span>
               </div>
-              <div style={{fontSize:12,color:'#22c55e',fontWeight:700,marginBottom:8}}>{ins.impact}</div>
-              <p style={{fontSize:12,color:'#a9a2d0',lineHeight:1.55}}>{ins.desc}</p>
+              <div style={{fontSize:12,color:'#22c55e',fontWeight:700,marginBottom:8}}>{ins.title}</div>
+              <p style={{fontSize:12,color:'#a9a2d0',lineHeight:1.55,marginBottom:8}}>{ins.desc}</p>
+              <div style={{fontSize:11,color:'#7b739e'}}>{ins.impact}</div>
             </div>
           );
         })}
@@ -550,8 +571,14 @@ const PageDashboard = ({ apiAnomalies }) => {
       </div>
       <AIInsightCard insights={
         apiAnomalies?.anomalies?.length
-          ? apiAnomalies.anomalies.map((item) => `${item.title}: ${item.description}`)
-          : ['No hay suficientes anomalías reales detectadas todavía. El sistema seguirá analizando las lecturas entrantes.']
+          ? apiAnomalies.anomalies
+          : [{
+              priority: "info",
+              category: "Sistema",
+              building: "Sin edificio",
+              title: "Sin anomalías detectadas",
+              description: "No hay suficientes anomalías reales detectadas todavía. El sistema seguirá analizando las lecturas entrantes."
+            }]
       }/>
     </div>
   );
