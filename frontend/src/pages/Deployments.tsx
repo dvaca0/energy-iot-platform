@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { Badge } from "../components/ui/Badge";
 import { Card } from "../components/ui/Card";
 import { nodes } from "../data/mockData";

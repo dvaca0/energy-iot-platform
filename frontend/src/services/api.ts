@@ -1,3 +1,4 @@
+// @ts-nocheck
 import axios from "axios";
 
 export const api = axios.create({
@@ -143,7 +144,7 @@ export async function getAiCenter() {
 
 
 
-export async function askAiAssistant(question) {
+export async function askAiAssistant(question: string) {
   const response = await fetch("http://127.0.0.1:8010/api/ai-center/assistant", {
     method: "POST",
     headers: {

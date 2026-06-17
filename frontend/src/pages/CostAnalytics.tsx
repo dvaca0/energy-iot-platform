@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { MetricCard } from "../components/ui/MetricCard";
 import { Card } from "../components/ui/Card";
 

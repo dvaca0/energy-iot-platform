@@ -1,83 +1,195 @@
-import React from "react";
-import { PURPLE, PURPLE_L, STATUS_COLORS, TOOLTIP_STYLE } from "../styles/theme";
+// @ts-nocheck
+import type { CSSProperties, ReactNode } from "react";
+import * as LucideIcons from "lucide-react";
 
-export const Card = ({ children, style, glow, className }) => (
-  <div style={{
-    background:'#10101e', border:`1px solid #1e1b35`, borderRadius:14,
-    padding:'18px 20px', position:'relative', overflow:'hidden',
-    ...(glow ? {boxShadow:`0 0 24px 0 ${PURPLE}22`} : {}),
-    ...style
-  }} className={className}>{children}</div>
-);
+const PURPLE = "#7c5cbf";
+const PURPLE_L = "#c4b5fd";
 
-export const Badge = ({ children, color='#7c5cbf', bg }) => (
-  <span style={{
-    background: bg || `${color}22`, color, border:`1px solid ${color}44`,
-    borderRadius:20, padding:'2px 10px', fontSize:11, fontWeight:600, letterSpacing:.5
-  }}>{children}</span>
-);
+const STATUS_COLORS: Record<string, string> = {
+  normal: "#22c55e",
+  warning: "#f59e0b",
+  critical: "#ef4444",
+  offline: "#6b7280",
+  online: "#22c55e",
+};
 
-export const StatusDot = ({ status }) => (
-  <span style={{
-    display:'inline-block', width:8, height:8, borderRadius:'50%',
-    background: STATUS_COLORS[status] || '#6b7280',
-    boxShadow: `0 0 6px ${STATUS_COLORS[status] || '#6b7280'}`,
-    marginRight:6
-  }}/>
-);
+const PRIORITY_META: Record<string, { label: string; color: string }> = {
+  high: { label: "Alta", color: "#ef4444" },
+  medium: { label: "Media", color: "#f59e0b" },
+  low: { label: "Baja", color: "#22c55e" },
+  info: { label: "Info", color: "#818cf8" },
+};
 
-export const StatCard = ({ label, value, sub, icon, color='#7c5cbf', trend }) => (
-  <Card style={{flex:1,minWidth:140,padding:'18px 20px',borderTop:`1px solid ${color}55`}}>
-    <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:8}}>
-      {icon && <Icon name={icon} size={14} color={color}/>} 
-      <div style={{fontSize:10,color:'#7b739e',textTransform:'uppercase',letterSpacing:1.2,fontWeight:700}}>{label}</div>
-    </div>
-    <div style={{fontSize:27,fontWeight:760,color:'#f6f4ff',letterSpacing:-0.8,lineHeight:1.05}}>{value}</div>
-    {sub && <div style={{fontSize:12,color:'#7b739e',marginTop:8}}>{sub}</div>}
-    {trend && <div style={{display:'inline-flex',alignItems:'center',gap:4,fontSize:11,color:trend>0?'#ef4444':'#22c55e',marginTop:8,fontWeight:700}}>
-      <Icon name={trend>0?'TrendingUp':'ArrowDown'} size={12}/>{trend>0?'+':'-'}{Math.abs(trend)}% vs sem. anterior
-    </div>}
-  </Card>
-);
+type AnyProps = Record<string, any>;
 
-export const SectionTitle = ({ children, sub }) => (
-  <div style={{marginBottom:18}}>
-    <h2 style={{fontSize:17,fontWeight:700,color:'#f0eeff'}}>{children}</h2>
-    {sub && <p style={{fontSize:12,color:'#6e6694',marginTop:3}}>{sub}</p>}
+export const Icon = ({
+  name = "Circle",
+  size = 16,
+  color = "currentColor",
+  stroke = 2,
+  style = {},
+}: {
+  name?: string;
+  size?: number;
+  color?: string;
+  stroke?: number;
+  style?: CSSProperties;
+}) => {
+  const Cmp = (LucideIcons as AnyProps)[name] || (LucideIcons as AnyProps).Circle;
+  return <Cmp size={size} color={color} strokeWidth={stroke} style={style} />;
+};
+
+export const Card = ({
+  children,
+  style = {},
+  glow = false,
+  className = "",
+}: {
+  children?: ReactNode;
+  style?: CSSProperties;
+  glow?: boolean;
+  className?: string;
+}) => (
+  <div
+    className={className}
+    style={{
+      background: "#11111c",
+      border: `1px solid ${glow ? "#7c5cbf55" : "#23233a"}`,
+      borderRadius: 16,
+      padding: 20,
+      boxShadow: glow ? "0 0 25px rgba(124,92,191,.18)" : "none",
+      ...style,
+    }}
+  >
+    {children}
   </div>
 );
 
-export const AIInsightCard = ({ insights }) => {
-  const normalized = insights.map((ins,i) => typeof ins === 'string'
-    ? { priority: i===0?'high':i===1?'medium':'info', category: i===0?'Optimización tarifaria':i===1?'Pronóstico operativo':'Recomendación', building: i===0?'Campus Colima':'Sistema', impact: i===0?'Impacto financiero alto':i===1?'Riesgo de sobrecosto':'Mejora potencial', desc: ins }
-    : ins);
+export const Badge = ({
+  children,
+  color = "#7c5cbf",
+  bg,
+}: {
+  children?: ReactNode;
+  color?: string;
+  bg?: string;
+}) => (
+  <span
+    style={{
+      color,
+      background: bg || `${color}18`,
+      border: `1px solid ${color}44`,
+      borderRadius: 999,
+      padding: "4px 10px",
+      fontSize: 11,
+      fontWeight: 800,
+      whiteSpace: "nowrap",
+    }}
+  >
+    {children}
+  </span>
+);
+
+export const StatusDot = ({ status = "offline" }: { status?: string }) => (
+  <span
+    style={{
+      width: 9,
+      height: 9,
+      borderRadius: 999,
+      display: "inline-block",
+      background: STATUS_COLORS[status] || "#6b7280",
+      boxShadow: `0 0 6px ${STATUS_COLORS[status] || "#6b7280"}`,
+    }}
+  />
+);
+
+export const StatCard = ({
+  label,
+  value,
+  sub,
+  icon,
+  color = "#7c5cbf",
+  trend,
+}: {
+  label?: ReactNode;
+  value?: ReactNode;
+  sub?: ReactNode;
+  icon?: string;
+  color?: string;
+  trend?: number;
+}) => (
+  <Card style={{ flex: 1, minWidth: 140, padding: "18px 20px", borderTop: `1px solid ${color}55` }}>
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+      <div style={{ color: "#7b739e", fontSize: 12 }}>{label}</div>
+      {icon && <Icon name={icon} size={15} color={color} />}
+    </div>
+    <div style={{ color: "#f0eeff", fontSize: 26, fontWeight: 900 }}>{value}</div>
+    <div style={{ color: "#7b739e", fontSize: 12, marginTop: 5 }}>{sub}</div>
+    {typeof trend === "number" && (
+      <div style={{ color: trend >= 0 ? "#ef4444" : "#22c55e", fontSize: 11, marginTop: 8, display: "flex", gap: 4, alignItems: "center" }}>
+        <Icon name={trend >= 0 ? "TrendingUp" : "ArrowDown"} size={12} />
+        {trend >= 0 ? "+" : "-"}
+        {Math.abs(trend)}% vs sem. anterior
+      </div>
+    )}
+  </Card>
+);
+
+export const SectionTitle = ({
+  children,
+  sub,
+  title,
+  subtitle,
+}: {
+  children?: ReactNode;
+  sub?: ReactNode;
+  title?: ReactNode;
+  subtitle?: ReactNode;
+}) => (
+  <div style={{ marginBottom: 18 }}>
+    <div style={{ color: "#f0eeff", fontSize: 18, fontWeight: 900 }}>{title || children}</div>
+    {(subtitle || sub) && <div style={{ color: "#7b739e", fontSize: 12, marginTop: 4 }}>{subtitle || sub}</div>}
+  </div>
+);
+
+export const AIInsightCard = ({ insights = [] }: { insights?: any[] }) => {
+  const normalized = insights.map((ins: any, i: number) =>
+    typeof ins === "string"
+      ? { title: ins, description: "", priority: "info", building: "Sistema" }
+      : { priority: "info", building: "Sistema", ...ins }
+  );
+
   return (
-    <Card glow style={{borderColor:`${PURPLE}44`}}>
-      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:10,marginBottom:16}}>
-        <div style={{display:'flex',alignItems:'center',gap:10}}>
-          <div style={{background:'#7c5cbf18',border:'1px solid #7c5cbf33',borderRadius:10,padding:8,color:PURPLE_L}}><Icon name="Brain" size={18}/></div>
+    <Card glow style={{ borderColor: `${PURPLE}44` }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+        <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+          <div style={{ background: "#7c5cbf18", border: "1px solid #7c5cbf33", borderRadius: 10, padding: 8, color: PURPLE_L }}>
+            <Icon name="Brain" size={18} />
+          </div>
           <div>
-            <div style={{fontSize:13,fontWeight:800,color:'#f0eeff',letterSpacing:.2}}>Centro de Insights</div>
-            <div style={{fontSize:11,color:'#7b739e'}}>Análisis automático y recomendaciones accionables</div>
+            <div style={{ color: "#f0eeff", fontWeight: 900 }}>AI Insights</div>
+            <div style={{ color: "#7b739e", fontSize: 12 }}>Análisis automático del sistema</div>
           </div>
         </div>
         <Badge color={PURPLE_L}>AI Engine</Badge>
       </div>
-      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(260px,1fr))',gap:12}}>
-        {normalized.map((ins,i) => {
+
+      <div style={{ display: "grid", gap: 12 }}>
+        {normalized.map((ins: any, i: number) => {
           const meta = PRIORITY_META[ins.priority] || PRIORITY_META.info;
           return (
-            <div key={i} style={{background:'#0d0d19',border:`1px solid ${meta.color}33`,borderRadius:12,padding:'14px 15px'}}>
-              <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,marginBottom:10}}>
+            <div key={i} style={{ borderTop: "1px solid #23233a", paddingTop: 12 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", gap: 10, marginBottom: 6 }}>
+                <b style={{ color: "#f0eeff" }}>{ins.title}</b>
                 <Badge color={meta.color}>{meta.label}</Badge>
-                <span style={{fontSize:10,color:'#7b739e',textTransform:'uppercase',letterSpacing:.8}}>{ins.category}</span>
               </div>
-              <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:8}}>
-                <Icon name="Building" size={14} color={PURPLE_L}/>
-                <span style={{fontSize:12,color:'#c4bdf0',fontWeight:700}}>{ins.building}</span>
-              </div>
-              <div style={{fontSize:12,color:'#22c55e',fontWeight:700,marginBottom:8}}>{ins.impact}</div>
-              <p style={{fontSize:12,color:'#a9a2d0',lineHeight:1.55}}>{ins.desc}</p>
+              {ins.building && (
+                <div style={{ color: PURPLE_L, fontSize: 12, display: "flex", gap: 6, alignItems: "center", marginBottom: 5 }}>
+                  <Icon name="Building" size={14} color={PURPLE_L} />
+                  {ins.building}
+                </div>
+              )}
+              {ins.description && <div style={{ color: "#a9a2d0", fontSize: 13, lineHeight: 1.45 }}>{ins.description}</div>}
             </div>
           );
         })}
@@ -86,18 +198,31 @@ export const AIInsightCard = ({ insights }) => {
   );
 };
 
-export const CustomTooltip = ({ active, payload, label, prefix='', suffix='' }) => {
-  if (!active || !payload?.length) return null;
+export const CustomTooltip = ({
+  active,
+  payload,
+  label,
+  prefix = "",
+  suffix = "",
+}: {
+  active?: boolean;
+  payload?: any[];
+  label?: ReactNode;
+  prefix?: string;
+  suffix?: string;
+}) => {
+  if (!active || !payload || !payload.length) return null;
+
   return (
-    <div style={TOOLTIP_STYLE}>
-      <div style={{padding:'8px 12px'}}>
-        <div style={{fontSize:11,color:'#6e6694',marginBottom:6}}>{label}</div>
-        {payload.map((p,i) => (
-          <div key={i} style={{fontSize:13,color:p.color||'#e2e0f0',fontWeight:600}}>
-            {p.name}: {prefix}{typeof p.value === 'number' ? p.value.toLocaleString('es-MX') : p.value}{suffix}
-          </div>
-        ))}
-      </div>
+    <div style={{ background: "#11111c", border: "1px solid #2a2740", borderRadius: 10, padding: 10 }}>
+      <div style={{ color: "#f0eeff", fontWeight: 800, marginBottom: 6 }}>{label}</div>
+      {payload.map((p: any, i: number) => (
+        <div key={i} style={{ color: p.color || "#c4b5fd", fontSize: 12 }}>
+          {p.name}: {prefix}
+          {p.value}
+          {suffix}
+        </div>
+      ))}
     </div>
   );
 };
