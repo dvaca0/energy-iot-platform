@@ -1,4 +1,7 @@
-import { getDashboardSummary, getHourlyCost, getBuildings, getNodes, getAiInsights, createDeployment, getDelegations, getAllOrgBuildings, getCampusesByDelegation, getUnitsByCampus, getBuildingsByUnit, getPanelsByBuilding, getLatestReadings, getLiveMetrics, getMetricsHourly, getMetricsTariffs, getMetricsDaily, getMetricsBuildings, getAnomalies, getCampusMetrics, getDeployments } from "./services/api";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import ucolLogo from "./assets/ucol-logo.png";
+import { getDashboardSummary, getHourlyCost, getBuildings, getNodes, getAiInsights, createDeployment, getDelegations, getAllOrgBuildings, getCampusesByDelegation, getUnitsByCampus, getBuildingsByUnit, getPanelsByBuilding, getLatestReadings, getLiveMetrics, getMetricsHourly, getMetricsTariffs, getMetricsDaily, getMetricsBuildings, getAnomalies, getCampusMetrics, getDeployments, getCostSummary, getSystemSettings, getInfrastructureStatus, getMiningAnalytics, getAiCenter, askAiAssistant } from "./services/api";
 
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
@@ -367,7 +370,7 @@ const Sidebar = ({ page, setPage, role, setRole }) => {
 };
 
 // ─── TOPBAR ───────────────────────────────────────────────────────────────────
-const Topbar = ({ page }) => {
+const Topbar = ({page, activeNodesText}) => {
   const titles = { dashboard:'Dashboard Ejecutivo', campus:'Mapa de Campus', buildings:'Edificios',
     deployments:'Despliegues', live:'Monitoreo en Vivo', cost:'Análisis de Costo',
     ai:'Centro IA & Forecasting', mining:'Minería de Datos', reports:'Reportes',
@@ -390,7 +393,7 @@ const Topbar = ({ page }) => {
         </div>
         <div style={{display:'flex',alignItems:'center',gap:6,background:'#22c55e18',border:'1px solid #22c55e33',borderRadius:20,padding:'4px 12px'}}>
           <StatusDot status="online"/>
-          <span style={{fontSize:11,color:'#22c55e',fontWeight:600}}>2 nodos activos</span>
+          <span style={{fontSize:11,color:'#22c55e',fontWeight:600}}>{activeNodesText}</span>
         </div>
         <div style={{width:32,height:32,borderRadius:'50%',background:'linear-gradient(135deg,#7c5cbf,#4f3d9e)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:13,fontWeight:700,color:'#fff'}}>U</div>
       </div>
@@ -1112,40 +1115,20 @@ const PageDeployments = () => {
 
 
 // ─── PAGE: LIVE MONITORING ────────────────────────────────────────────────────
-const PageLive = ({ apiNodes }) => {
-  const [latestReadings, setLatestReadings] = useState([]);
+const PageLive = () => {
+  const [metrics, setMetrics] = useState([]);
 
   useEffect(() => {
-    const loadReadings = () => {
+    const load = () => {
       getLiveMetrics()
-        .then((data) => {
-          console.log("Latest readings loaded:", data);
-          setLatestReadings(data);
-        })
-        .catch((error) => console.error("Latest readings API error:", error));
+        .then(setMetrics)
+        .catch((error) => console.error("Live metrics API error:", error));
     };
 
-    loadReadings();
-    const timer = setInterval(loadReadings, 3000);
+    load();
+    const timer = setInterval(load, 3000);
     return () => clearInterval(timer);
   }, []);
-
-  const nodes = apiNodes || MOCK.nodes;
-
-  const latestByNodeId = latestReadings.reduce((acc, reading) => {
-    const key = String(reading.node_id);
-    if (!acc[key]) {
-      acc[key] = reading;
-    }
-    return acc;
-  }, {});
-
-  const getValue = (node, reading, readingKey, nodeKey) => {
-    if (reading && reading[readingKey] !== null && reading[readingKey] !== undefined) {
-      return reading[readingKey];
-    }
-    return node[nodeKey];
-  };
 
   return (
     <div>
@@ -1154,495 +1137,72 @@ const PageLive = ({ apiNodes }) => {
           <div style={{width:8,height:8,borderRadius:'50%',background:'#22c55e',animation:'pulse 2s infinite'}}/>
           <span style={{fontSize:12,color:'#22c55e',fontWeight:600}}>EN VIVO</span>
         </div>
-        <span style={{fontSize:12,color:'#6e6694'}}>Actualización cada 3s · Datos desde /api/readings/latest</span>
+        <span style={{fontSize:12,color:'#6e6694'}}>Actualización cada 3s · Datos desde /api/metrics/live</span>
       </div>
 
       <style>{`@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}`}</style>
 
-      {nodes.map(n => {
-        const reading = latestByNodeId[String(n.id)];
-
-        const voltage = getValue(n, reading, "voltage", "voltage");
-        const current = getValue(n, reading, "current", "current");
-        const power = getValue(n, reading, "power_kw", "power");
-        const pf = getValue(n, reading, "power_factor", "pf");
-        const freq = getValue(n, reading, "frequency_hz", "freq");
-        const energyToday = getValue(n, reading, "energy_today_kwh", "energy_today");
-
-        return (
-          <Card key={n.id} style={{marginBottom:18}} glow>
-            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
-              <div style={{display:'flex',alignItems:'center',gap:12}}>
-                <div style={{
-                  background:'#22c55e18',
-                  border:'1px solid #22c55e33',
-                  borderRadius:10,
-                  padding:'8px 10px',
-                  fontSize:12,
-                  color:'#22c55e',
-                  fontWeight:800,
-                  letterSpacing:.8
-                }}>
-                  NODE
-                </div>
-                <div>
-                  <div style={{fontSize:15,fontWeight:700,color:'#f0eeff'}}>{n.name}</div>
-                  <div style={{fontSize:11,color:'#6e6694'}}>
-                    {n.ip} · {n.building} · {reading ? `Lectura real ${reading.timestamp}` : `Fallback ${n.last_sync}`}
-                  </div>
-                </div>
-              </div>
-              <Badge color={reading ? "#22c55e" : "#f59e0b"}>
-                {reading ? "Real API" : "Fallback"}
-              </Badge>
-            </div>
-
-            <div style={{display:'flex',flexWrap:'wrap',gap:12}}>
-              {[
-                {l:'Tensión (V)',v:Number(voltage || 0).toFixed(1),c:'#818cf8',unit:'V'},
-                {l:'Corriente (A)',v:Number(current || 0).toFixed(2),c:'#f59e0b',unit:'A'},
-                {l:'Potencia (kW)',v:Number(power || 0).toFixed(3),c:'#ef4444',unit:'kW'},
-                {l:'Factor de Potencia',v:Number(pf || 0).toFixed(3),c:'#22c55e',unit:''},
-                {l:'Frecuencia (Hz)',v:Number(freq || 0).toFixed(2),c:'#a78bfa',unit:'Hz'},
-                {l:'Energía Hoy',v:Number(energyToday || 0).toFixed(2),c:PURPLE_L,unit:'kWh'}
-              ].map((m,i) => (
-                <div key={i} style={{
-                  background:'#0f0f1a', borderRadius:12, padding:'14px 16px',
-                  flex:1, minWidth:120, border:`1px solid ${m.c}22`
-                }}>
-                  <div style={{fontSize:10,color:'#6e6694',textTransform:'uppercase',letterSpacing:.8,marginBottom:6}}>{m.l}</div>
-                  <div style={{fontSize:26,fontWeight:700,color:m.c}}>{m.v}</div>
-                  <div style={{fontSize:11,color:'#4b5563',marginTop:2}}>{m.unit}</div>
-                </div>
-              ))}
-            </div>
-
-            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:10,marginTop:12}}>
-              {[{l:'RPi Status',v:'OK',c:'#22c55e'},{l:'Shelly Status',v:'OK',c:'#22c55e'},{l:'Buffer',v:`${n.buffer} pend.`,c:n.buffer>0?'#f59e0b':'#22c55e'}].map((s,i) => (
-                <div key={i} style={{background:'#0a0a14',borderRadius:8,padding:'8px 12px',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-                  <span style={{fontSize:11,color:'#6e6694'}}>{s.l}</span>
-                  <span style={{fontSize:12,fontWeight:700,color:s.c}}>{s.v}</span>
-                </div>
-              ))}
-            </div>
-          </Card>
-        );
-      })}
-    </div>
-  );
-};
-
-
-// ─── PAGE: COST ANALYTICS ─────────────────────────────────────────────────────
-const PageCost = () => {
-  const [peakReduce, setPeakReduce] = useState(20);
-  const baseSavings = Math.round((peakReduce / 100) * 4288);
-  const tariffBreakdown = [
-    {name:'Base',kwh:38.4,cost:1228,rate:31.98,pct:14},
-    {name:'Intermedia',kwh:82.1,cost:3362,rate:40.95,pct:38},
-    {name:'Punta',kwh:29.5,cost:4288,rate:145.36,pct:48}
-  ];
-  return (
-    <div>
-      <div style={{display:'flex',flexWrap:'wrap',gap:14,marginBottom:22}}>
-        <StatCard label="Costo Hoy" value="$1,373 MXN" sub="Estimado GDMTH" color="#ef4444" icon="Wallet"/>
-        <StatCard label="Costo Esta Semana" value="$8,878 MXN" sub="Lun–Vie actual" color="#f59e0b" icon="Calendar" trend={12}/>
-        <StatCard label="Proyección Mensual" value="$38,400 MXN" sub="Enero 2025" color={PURPLE_L} icon="TrendingUp"/>
-        <StatCard label="Costo por Punta" value="48% del total" sub="Solo 23% del tiempo" color="#ef4444" icon="Bolt"/>
-      </div>
-      <div style={{display:'grid',gridTemplateColumns:'2fr 1fr',gap:18,marginBottom:18}}>
+      {metrics.length === 0 ? (
         <Card>
-          <SectionTitle sub="Desglose detallado por periodo tarifario GDMTH">Análisis por Periodo Tarifario</SectionTitle>
-          {tariffBreakdown.map((t,i) => (
-            <div key={i} style={{marginBottom:16}}>
-              <div style={{display:'flex',justifyContent:'space-between',marginBottom:6}}>
-                <div style={{display:'flex',alignItems:'center',gap:10}}>
-                  <span style={{width:10,height:10,borderRadius:2,background:Object.values(TARIFF_COLORS)[i],display:'inline-block'}}/>
-                  <span style={{fontSize:14,fontWeight:700,color:'#f0eeff'}}>{t.name}</span>
-                </div>
-                <div style={{textAlign:'right'}}>
-                  <span style={{fontSize:15,fontWeight:700,color:Object.values(TARIFF_COLORS)[i]}}>${t.cost.toLocaleString()} MXN</span>
-                  <span style={{fontSize:11,color:'#6e6694',marginLeft:8}}>{t.kwh} kWh</span>
-                </div>
-              </div>
-              <div style={{height:8,background:'#1a1730',borderRadius:4,overflow:'hidden',marginBottom:4}}>
-                <div style={{height:'100%',width:`${t.pct}%`,background:Object.values(TARIFF_COLORS)[i],borderRadius:4,opacity:.8}}/>
-              </div>
-              <div style={{display:'flex',justifyContent:'space-between',fontSize:11,color:'#6e6694'}}>
-                <span>{t.pct}% del costo total</span>
-                <span>Tarifa: ${t.rate}/kWh</span>
-              </div>
-            </div>
-          ))}
+          <div style={{fontSize:13,color:'#7b739e'}}>No hay nodos con métricas reales todavía.</div>
         </Card>
-        <div>
-          <Card style={{marginBottom:14}}>
-            <SectionTitle sub="Fuente: CFE">Tarifa Activa</SectionTitle>
-            <div style={{background:'#0f0f1a',borderRadius:10,padding:'14px'}}>
-              <div style={{fontSize:20,fontWeight:800,color:PURPLE_L}}>GDMTH</div>
-              <div style={{fontSize:11,color:'#6e6694',marginTop:2}}>Gran Demanda en Media Tensión H</div>
-            </div>
-            {[{l:'Cargo Base',v:'$31.98/kWh'},{l:'Cargo Intermedia',v:'$40.95/kWh'},{l:'Cargo Punta',v:'$145.36/kWh'},{l:'Última actualización',v:'Ene 2025'},{l:'Estado CFE API',v:'Manual (fallback)'}].map((r,i) => (
-              <div key={i} style={{display:'flex',justifyContent:'space-between',padding:'6px 0',borderBottom:'1px solid #0f0f1a',fontSize:12}}>
-                <span style={{color:'#6e6694'}}>{r.l}</span>
-                <span style={{color:'#f0eeff',fontWeight:600}}>{r.v}</span>
+      ) : metrics.map((n) => (
+        <Card key={n.node_id} style={{marginBottom:18}} glow={n.status === "online"}>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
+            <div style={{display:'flex',alignItems:'center',gap:12}}>
+              <div style={{
+                background:'#22c55e18',
+                border:'1px solid #22c55e33',
+                borderRadius:10,
+                padding:'8px 10px',
+                fontSize:12,
+                color:'#22c55e',
+                fontWeight:800,
+                letterSpacing:.8
+              }}>
+                NODE
               </div>
-            ))}
-          </Card>
-        </div>
-      </div>
-      <Card>
-        <SectionTitle sub="Simulador interactivo de ahorro energético">Simulador de Ahorro</SectionTitle>
-        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:24}}>
-          <div>
-            <div style={{marginBottom:20}}>
-              <div style={{display:'flex',justifyContent:'space-between',marginBottom:8,fontSize:13}}>
-                <label style={{color:'#c4bdf0'}}>Reducir consumo en punta</label>
-                <span style={{color:PURPLE_L,fontWeight:700}}>{peakReduce}%</span>
+              <div>
+                <div style={{fontSize:15,fontWeight:700,color:'#f0eeff'}}>{n.node_id}</div>
+                <div style={{fontSize:11,color:'#6e6694'}}>
+                  {n.building || "Sin edificio"} · Última lectura {n.latest_reading ? new Date(n.latest_reading).toLocaleString("es-MX") : "sin datos"}
+                </div>
               </div>
-              <input type="range" min={0} max={80} step={5} value={peakReduce}
-                onChange={e => setPeakReduce(+e.target.value)}
-                style={{width:'100%',accentColor:PURPLE_L}}/>
             </div>
-            <div style={{background:'#22c55e18',border:'1px solid #22c55e33',borderRadius:12,padding:'16px 20px'}}>
-              <div style={{fontSize:12,color:'#6e6694',marginBottom:4}}>Ahorro estimado mensual</div>
-              <div style={{fontSize:32,fontWeight:800,color:'#22c55e'}}>${(baseSavings * 4.3).toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g,',')} MXN</div>
-              <div style={{fontSize:12,color:'#6e6694',marginTop:4}}>Reduciendo {peakReduce}% de carga en periodo punta</div>
-            </div>
+            <Badge color={n.status === "online" ? "#22c55e" : "#6b7280"}>
+              {n.status === "online" ? "Real API" : "Offline"}
+            </Badge>
           </div>
-          <div>
-            <div style={{background:'#1a1730',borderRadius:12,padding:'16px'}}>
-              <div style={{fontSize:13,fontWeight:700,color:'#f0eeff',marginBottom:14}}>Distribución actual vs optimizada</div>
-              {tariffBreakdown.map((t,i) => {
-                const newCost = i===2 ? Math.round(t.cost * (1 - peakReduce/100)) : t.cost;
-                return (
-                  <div key={i} style={{marginBottom:12}}>
-                    <div style={{display:'flex',justifyContent:'space-between',fontSize:12,marginBottom:4}}>
-                      <span style={{color:'#9890c4'}}>{t.name}</span>
-                      <span style={{color:'#f0eeff'}}>${newCost.toLocaleString()} <span style={{color:'#22c55e',fontSize:11}}>{i===2?`(-${peakReduce}%)`:''}</span></span>
-                    </div>
-                    <div style={{height:6,background:'#0f0f1a',borderRadius:3,overflow:'hidden'}}>
-                      <div style={{height:'100%',width:`${Math.round(newCost/8878*100)}%`,background:Object.values(TARIFF_COLORS)[i],opacity:.8,borderRadius:3}}/>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-      </Card>
-    </div>
-  );
-};
 
-// ─── PAGE: AI CENTER ──────────────────────────────────────────────────────────
-const PageAI = ({ apiInsights }) => {
-  const [tab, setTab] = useState('forecast');
-  const [chat, setChat] = useState(MOCK.chatHistory);
-  const [input, setInput] = useState('');
-  const chatEndRef = useRef(null);
-  const sendMsg = () => {
-    if (!input.trim()) return;
-    const userMsg = { role:'user', msg: input };
-    const key = Object.keys(MOCK.chatResponses).find(k => input.toLowerCase().includes(k)) || 'default';
-    const botMsg = { role:'assistant', msg: MOCK.chatResponses[key] };
-    setChat(c => [...c, userMsg, botMsg]);
-    setInput('');
-    setTimeout(() => chatEndRef.current?.scrollIntoView({behavior:'smooth'}), 100);
-  };
-  const tabs = [{id:'forecast',label:'Pronóstico'},{id:'anomalies',label:'Anomalías'},{id:'recommendations',label:'Recomendaciones'},{id:'chat',label:'Asistente IA'}];
-  return (
-    <div>
-      <div style={{display:'flex',gap:4,marginBottom:20,background:'#0f0f1a',borderRadius:12,padding:4,width:'fit-content'}}>
-        {tabs.map(t => (
-          <button key={t.id} onClick={() => setTab(t.id)} style={{
-            padding:'8px 18px', borderRadius:9, border:'none', cursor:'pointer',
-            background: tab===t.id ? '#7c5cbf' : 'transparent',
-            color: tab===t.id ? '#fff' : '#6e6694', fontWeight:600, fontSize:13
-          }}>{t.label}</button>
-        ))}
-      </div>
-      {tab==='forecast' && (
-        <div>
-          <div style={{display:'flex',gap:14,marginBottom:18,flexWrap:'wrap'}}>
-            <StatCard label="Proyección Mañana" value="$1,520 MXN" sub="±$180 intervalo" color="#818cf8" icon="ArrowRight"/>
-            <StatCard label="Proyección Semana" value="$9,400 MXN" sub="±8% confianza" color={PURPLE_L} icon="BarChart"/>
-            <StatCard label="Proyección Mensual" value="$38,400 MXN" sub="Tendencia creciente" color="#f59e0b" icon="TrendingUp"/>
-          </div>
-          <Card>
-            <SectionTitle sub="Consumo real vs predicción del modelo · intervalo de confianza 90%">Pronóstico de Costo (MXN)</SectionTitle>
-            <ResponsiveContainer width="100%" height={240}>
-              <ComposedChart data={MOCK.forecast} margin={{top:5,right:20,left:-10,bottom:0}}>
-                <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRID}/>
-                <XAxis dataKey="day" tick={{fontSize:11,fill:'#6e6694'}}/>
-                <YAxis tick={{fontSize:10,fill:'#6e6694'}}/>
-                <Tooltip content={<CustomTooltip prefix="$" suffix=" MXN"/>}/>
-                <Area type="monotone" dataKey="upper" stroke="none" fill="#7c5cbf22" legendType="none"/>
-                <Area type="monotone" dataKey="lower" stroke="none" fill="#0a0a0f" legendType="none"/>
-                <Line type="monotone" dataKey="actual" name="Real" stroke="#22c55e" strokeWidth={2} dot={{fill:'#22c55e',r:4}} connectNulls={false}/>
-                <Line type="monotone" dataKey="pred" name="Predicción" stroke={PURPLE_L} strokeWidth={2} strokeDasharray="6 3" dot={{fill:PURPLE_L,r:4}}/>
-              </ComposedChart>
-            </ResponsiveContainer>
-          </Card>
-        </div>
-      )}
-      {tab==='anomalies' && (
-        <div>
-          <div style={{display:'flex',gap:14,marginBottom:18}}>
-            <StatCard label="Anomalías Hoy" value="3" sub="2 activas" color="#ef4444" icon="Alert"/>
-            <StatCard label="Anomalías Esta Semana" value="7" sub="Revisadas: 4" color="#f59e0b" icon="FileText"/>
-          </div>
-          {MOCK.anomalies.map(a => (
-            <Card key={a.id} style={{marginBottom:12,borderLeft:`4px solid ${a.severity==='critical'?'#ef4444':a.severity==='warning'?'#f59e0b':'#818cf8'}`,borderRadius:'0 12px 12px 0',paddingLeft:20}}>
-              <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:8}}>
-                <div>
-                  <div style={{fontSize:14,fontWeight:700,color:'#f0eeff'}}>{a.type}</div>
-                  <div style={{fontSize:11,color:'#6e6694',marginTop:2}}>{a.building} · {a.time}</div>
-                </div>
-                <Badge color={a.severity==='critical'?'#ef4444':a.severity==='warning'?'#f59e0b':'#818cf8'}>
-                  {a.severity==='critical'?'Crítico':a.severity==='warning'?'Advertencia':'Info'}
-                </Badge>
-              </div>
-              <div style={{display:'flex',gap:16,fontSize:12}}>
-                <span style={{color:'#6e6694'}}>Detectado: <strong style={{color:'#ef4444'}}>{a.value}</strong></span>
-                <span style={{color:'#6e6694'}}>Esperado: <strong style={{color:'#22c55e'}}>{a.expected}</strong></span>
-              </div>
-            </Card>
-          ))}
-        </div>
-      )}
-      {tab==='recommendations' && (
-        <div>
-          {MOCK.recommendations.map(r => (
-            <Card key={r.id} style={{marginBottom:14}} glow>
-              <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:10}}>
-                <div>
-                  <Badge color={r.priority==='alta'?'#ef4444':'#f59e0b'} style={{marginBottom:8}}>
-                    {r.priority==='alta'?'Alta prioridad':'Prioridad media'}
-                  </Badge>
-                  <div style={{fontSize:15,fontWeight:700,color:'#f0eeff',marginTop:8}}>{r.title}</div>
-                  <div style={{fontSize:12,color:'#6e6694',marginTop:3}}>{r.building}</div>
-                </div>
-                <div style={{textAlign:'right'}}>
-                  <div style={{fontSize:10,color:'#6e6694'}}>Ahorro estimado</div>
-                  <div style={{fontSize:22,fontWeight:800,color:'#22c55e'}}>${r.savings.toLocaleString()}</div>
-                  <div style={{fontSize:10,color:'#6e6694'}}>MXN/mes</div>
-                </div>
-              </div>
-              <p style={{fontSize:13,color:'#9890c4',lineHeight:1.6,marginBottom:10}}>{r.desc}</p>
-              <div style={{background:'#1a1730',borderRadius:8,padding:'8px 12px',fontSize:12,color:PURPLE_L,display:'flex',alignItems:'center',gap:8}}><Icon name="ArrowRight" size={13}/>{r.action}</div>
-            </Card>
-          ))}
-        </div>
-      )}
-      {tab==='chat' && (
-        <Card style={{height:520,display:'flex',flexDirection:'column'}}>
-          <div style={{flex:1,overflowY:'auto',padding:'4px 0',marginBottom:14}}>
-            {chat.map((m,i) => (
-              <div key={i} style={{marginBottom:14,display:'flex',gap:10,alignItems:'flex-start',flexDirection:m.role==='user'?'row-reverse':'row'}}>
-                <div style={{width:32,height:32,borderRadius:'50%',background:m.role==='user'?'#7c5cbf22':'#1a1730',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,fontSize:14}}>
-                  <Icon name={m.role==='user'?'User':'Bot'} size={16} color={m.role==='user'?PURPLE_L:'#9890c4'}/>
-                </div>
-                <div style={{
-                  background:m.role==='user'?'#7c5cbf22':'#0f0f1a',
-                  border:`1px solid ${m.role==='user'?`${PURPLE}44`:'#1e1b35'}`,
-                  borderRadius:12, padding:'10px 14px', maxWidth:'75%',
-                  fontSize:13, color:'#c4bdf0', lineHeight:1.6
-                }}>{m.msg}</div>
-              </div>
-            ))}
-            <div ref={chatEndRef}/>
-          </div>
-          <div style={{display:'flex',gap:10}}>
-            <input value={input} onChange={e => setInput(e.target.value)}
-              onKeyDown={e => e.key==='Enter' && sendMsg()}
-              placeholder="Pregunta sobre costos, anomalías, ahorro…" style={{flex:1}}/>
-            <button onClick={sendMsg} style={{
-              padding:'0 20px', background:`linear-gradient(135deg,${PURPLE},#4f3d9e)`,
-              border:'none', borderRadius:10, color:'#fff', fontWeight:700, cursor:'pointer'
-            }}>Enviar</button>
-          </div>
-          <div style={{marginTop:10,display:'flex',flexWrap:'wrap',gap:6}}>
-            {['¿Qué edificio costó más esta semana?','¿Cuánto podemos ahorrar en punta?','¿Hubo anomalías hoy?','Proyección de costo del mes'].map(q => (
-              <button key={q} onClick={() => { setInput(q); }} style={{
-                padding:'4px 12px', background:'#1a1730', border:'1px solid #2a2740',
-                borderRadius:20, color:'#9890c4', fontSize:11, cursor:'pointer'
-              }}>{q}</button>
-            ))}
-          </div>
-        </Card>
-      )}
-    </div>
-  );
-};
-
-// ─── PAGE: DATA MINING ────────────────────────────────────────────────────────
-const PageMining = () => {
-  const clusters = [
-    {name:'Carga Constante',buildings:['Data Center','Lab. Redes'],color:'#818cf8',desc:'Consumo uniforme 24/7, alta correlación temporal'},
-    {name:'Horario Administrativo',buildings:['Rectoría','Biblioteca'],color:'#22c55e',desc:'Picos 08:00–17:00, consumo mínimo nocturno'},
-    {name:'Alta Demanda Académica',buildings:['FIME','Lab. Química'],color:'#ef4444',desc:'Picos en periodos de clases, alta varianza'},
-    {name:'Uso Mixto',buildings:['Fac. Ingeniería','C. Cómputo'],color:'#f59e0b',desc:'Patrón híbrido sin correlación clara'}
-  ];
-  const correlationData = MOCK.weeklyTrend.map((d,i) => ({...d, fime: d.cost, redes: Math.round(d.cost*0.67)}));
-  return (
-    <div>
-      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:18,marginBottom:18}}>
-        <Card>
-          <SectionTitle sub="K-Means clustering de comportamiento de consumo">Clustering de Edificios</SectionTitle>
-          <div style={{display:'flex',flexDirection:'column',gap:12,marginTop:4}}>
-            {clusters.map((c,i) => (
-              <div key={i} style={{background:'#0f0f1a',borderRadius:12,padding:'14px',borderLeft:`4px solid ${c.color}`}}>
-                <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:6}}>
-                  <div style={{fontSize:13,fontWeight:700,color:'#f0eeff'}}>{c.name}</div>
-                  <Badge color={c.color}>{c.buildings.length} edificios</Badge>
-                </div>
-                <div style={{fontSize:11,color:'#6e6694',marginBottom:6}}>{c.desc}</div>
-                <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
-                  {c.buildings.map(b => <Badge key={b} color={c.color}>{b}</Badge>)}
-                </div>
-              </div>
-            ))}
-          </div>
-        </Card>
-        <Card>
-          <SectionTitle sub="Correlación de consumo entre edificios monitoreados">Correlación FIME vs Lab. Redes</SectionTitle>
-          <ResponsiveContainer width="100%" height={220}>
-            <LineChart data={correlationData} margin={{top:5,right:10,left:-10,bottom:0}}>
-              <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRID}/>
-              <XAxis dataKey="day" tick={{fontSize:10,fill:'#6e6694'}}/>
-              <YAxis tick={{fontSize:10,fill:'#6e6694'}}/>
-              <Tooltip content={<CustomTooltip prefix="$" suffix=" MXN"/>}/>
-              <Line dataKey="fime" name="FIME" stroke={PURPLE_L} strokeWidth={2} dot={{r:3}}/>
-              <Line dataKey="redes" name="Lab. Redes" stroke="#22c55e" strokeWidth={2} dot={{r:3}} strokeDasharray="4 2"/>
-            </LineChart>
-          </ResponsiveContainer>
-          <div style={{background:'#0f0f1a',borderRadius:10,padding:'10px 14px',marginTop:10}}>
-            <div style={{fontSize:12,color:'#9890c4'}}>Coeficiente de correlación Pearson: <strong style={{color:PURPLE_L}}>0.87</strong> — Alta correlación positiva</div>
-          </div>
-        </Card>
-      </div>
-      <Card style={{marginBottom:18}}>
-        <SectionTitle sub="Patrones descubiertos por el motor de minería de datos">Descubrimiento de Patrones</SectionTitle>
-        <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(220px,1fr))',gap:12}}>
-          {[
-            {icon:'Activity',title:'Baseload Nocturno Anómalo',building:'Lab. de Redes',detail:'2.4 kW detectados entre 02:00–05:00 vs. esperado 0.8 kW',severity:'warning'},
-            {icon:'BarChart',title:'Carga Constante',building:'Data Center',detail:'Desviación estándar < 0.3 kW en 72h. Patrón de carga base estable.',severity:'info'},
-            {icon:'Calendar',title:'Alta Dependencia Laboral',building:'FIME',detail:'Ratio lunes-viernes/fin de semana = 4.8x. Correlación académica.',severity:'info'},
-            {icon:'TrendingUp',title:'Tendencia Creciente',building:'FIME',detail:'Incremento del 14% semana sobre semana. Proyección supera límite.',severity:'warning'}
-          ].map((p,i) => (
-            <div key={i} style={{background:'#0f0f1a',borderRadius:12,padding:'14px',border:`1px solid ${p.severity==='warning'?'#f59e0b33':'#1e1b35'}`}}>
-              <div style={{width:34,height:34,borderRadius:9,background:p.severity==='warning'?'#f59e0b18':'#7c5cbf18',border:`1px solid ${p.severity==='warning'?'#f59e0b33':'#7c5cbf33'}`,display:'flex',alignItems:'center',justifyContent:'center',marginBottom:10,color:p.severity==='warning'?'#f59e0b':PURPLE_L}}><Icon name={p.icon} size={17}/></div>
-              <div style={{fontSize:13,fontWeight:700,color:'#f0eeff',marginBottom:4}}>{p.title}</div>
-              <div style={{fontSize:11,color:PURPLE_L,marginBottom:6}}>{p.building}</div>
-              <div style={{fontSize:11,color:'#6e6694',lineHeight:1.5}}>{p.detail}</div>
-            </div>
-          ))}
-        </div>
-      </Card>
-      <AIInsightCard insights={[
-        '"Data Center" presenta firma de carga constante — comportamiento 24/7 sin variación significativa.',
-        '"FIME" y "Lab. de Redes" muestran correlación de Pearson 0.87 — patrones de uso académico similares.',
-        'Los edificios administrativos presentan alta dependencia laboral con ratio semana/fin de semana de 4.8x.',
-        'El baseload nocturno en Lab. de Redes es 3x superior al esperado — posible equipo encendido innecesariamente.'
-      ]}/>
-    </div>
-  );
-};
-
-// ─── PAGE: REPORTS ────────────────────────────────────────────────────────────
-const PageReports = () => {
-  const reports = [
-    {title:'Resumen Semanal de Costo',type:'Ejecutivo',date:'13 Ene 2025',icon:'Wallet',status:'Disponible'},
-    {title:'Comparación de Edificios',type:'Técnico',date:'13 Ene 2025',icon:'Building',status:'Disponible'},
-    {title:'Reporte de Anomalías IA',type:'IA',date:'13 Ene 2025',icon:'Alert',status:'Disponible'},
-    {title:'Reporte de Despliegue de Nodos',type:'Técnico',date:'13 Ene 2025',icon:'Cpu',status:'Disponible'},
-    {title:'Reporte de Sostenibilidad',type:'Ejecutivo',date:'Ene 2025',icon:'Leaf',status:'En preparación'},
-    {title:'Dataset Completo CSV',type:'Datos',date:'13 Ene 2025',icon:'BarChart',status:'Disponible'}
-  ];
-  return (
-    <div>
-      <div style={{display:'flex',gap:14,marginBottom:22,flexWrap:'wrap'}}>
-        {['PDF','CSV','Excel'].map(fmt => (
-          <button key={fmt} style={{
-            padding:'10px 24px', background:`linear-gradient(135deg,${PURPLE},#4f3d9e)`,
-            border:'none', borderRadius:10, color:'#fff', fontWeight:700, fontSize:14, cursor:'pointer'
-          }}>Exportar {fmt}</button>
-        ))}
-      </div>
-      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(280px,1fr))',gap:14}}>
-        {reports.map((r,i) => (
-          <Card key={i} style={{cursor:'pointer'}} glow={r.status==='Disponible'}>
-            <div style={{display:'flex',gap:12,marginBottom:12}}>
-              <div style={{width:42,height:42,borderRadius:11,background:'#7c5cbf18',border:'1px solid #7c5cbf33',display:'flex',alignItems:'center',justifyContent:'center',color:PURPLE_L}}><Icon name={r.icon} size={20}/></div>
-              <div style={{flex:1}}>
-                <div style={{fontSize:14,fontWeight:700,color:'#f0eeff'}}>{r.title}</div>
-                <div style={{fontSize:11,color:'#6e6694',marginTop:2}}>{r.type} · {r.date}</div>
-              </div>
-            </div>
-            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-              <Badge color={r.status==='Disponible'?'#22c55e':'#f59e0b'}>{r.status}</Badge>
-              {r.status==='Disponible' && (
-                <button style={{background:'none',border:`1px solid ${PURPLE}44`,borderRadius:8,padding:'5px 14px',color:PURPLE_L,fontSize:12,cursor:'pointer'}}>Descargar</button>
-              )}
-            </div>
-          </Card>
-        ))}
-      </div>
-    </div>
-  );
-};
-
-// ─── PAGE: INFRASTRUCTURE ─────────────────────────────────────────────────────
-const PageInfra = () => {
-  const services = [
-    {name:'API Backend (FastAPI)',status:'mock',latency:'—',icon:'Plug'},
-    {name:'Base de Datos SQLite (Edge)',status:'ok',latency:'2ms',icon:'Database'},
-    {name:'Servicio de Sincronía',status:'ok',latency:'—',icon:'Sync'},
-    {name:'Tailscale VPN',status:'ok',latency:'14ms',icon:'Lock'},
-    {name:'Raspberry Pi — Node 001',status:'ok',latency:'8ms',icon:'Monitor'},
-    {name:'Raspberry Pi — Node 002',status:'ok',latency:'11ms',icon:'Monitor'},
-    {name:'Shelly Pro — Node 001',status:'ok',latency:'3ms',icon:'Bolt'},
-    {name:'Shelly Pro — Node 002',status:'ok',latency:'5ms',icon:'Bolt'}
-  ];
-  return (
-    <div>
-      <div style={{display:'flex',gap:14,marginBottom:22,flexWrap:'wrap'}}>
-        <StatCard label="Nodos Online" value="2/2" sub="100% disponibilidad" color="#22c55e" icon="Activity"/>
-        <StatCard label="Muestras Acumuladas" value="14,850" sub="Ambos nodos" color={PURPLE_L} icon="BarChart"/>
-        <StatCard label="Buffer Pendiente" value="3 reg." sub="Node 002" color="#f59e0b" icon="Clock"/>
-        <StatCard label="Uptime Sistema" value="99.2%" sub="Últimas 168h" color="#22c55e" icon="TrendingUp"/>
-      </div>
-      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:14}}>
-        {services.map((s,i) => (
-          <Card key={i} style={{display:'flex',alignItems:'center',gap:14,padding:'14px 18px'}}>
-            <div style={{width:38,height:38,borderRadius:10,background:'#10101e',border:'1px solid #2a2740',display:'flex',alignItems:'center',justifyContent:'center',color:PURPLE_L}}><Icon name={s.icon} size={18}/></div>
-            <div style={{flex:1}}>
-              <div style={{fontSize:13,fontWeight:700,color:'#f0eeff'}}>{s.name}</div>
-              {s.latency!=='—' && <div style={{fontSize:11,color:'#6e6694',marginTop:2}}>Latencia: {s.latency}</div>}
-            </div>
-            <div>
-              <StatusDot status={s.status==='ok'?'online':s.status==='mock'?'warning':'offline'}/>
-              <span style={{fontSize:11,color:s.status==='ok'?'#22c55e':s.status==='mock'?'#f59e0b':'#ef4444',fontWeight:600}}>
-                {s.status==='ok'?'OK':s.status==='mock'?'Mock/Dev':'Error'}
-              </span>
-            </div>
-          </Card>
-        ))}
-      </div>
-      {MOCK.nodes.map(n => (
-        <Card key={n.id} style={{marginTop:14}}>
-          <div style={{fontSize:14,fontWeight:700,color:'#f0eeff',marginBottom:12}}>{n.name} — Detalle de Hardware</div>
-          <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(130px,1fr))',gap:10}}>
+          <div style={{display:'flex',flexWrap:'wrap',gap:12}}>
             {[
-              {l:'IP (Tailscale)',v:n.ip},{l:'Firmware',v:`v${n.fw}`},
-              {l:'Muestras',v:n.samples.toLocaleString()},{l:'Buffer',v:`${n.buffer} pend.`},
-              {l:'RPi Status',v:n.rpi_status.toUpperCase()},{l:'Shelly Status',v:n.shelly_status.toUpperCase()},
-              {l:'Última Sync',v:n.last_sync},{l:'Edificio',v:n.building}
-            ].map((r,i) => (
-              <div key={i} style={{background:'#0f0f1a',borderRadius:8,padding:'8px 10px'}}>
-                <div style={{fontSize:10,color:'#6e6694'}}>{r.l}</div>
-                <div style={{fontSize:12,fontWeight:600,color:'#f0eeff',marginTop:2}}>{r.v}</div>
+              {l:'Tensión (V)',v:Number(n.voltage || 0).toFixed(1),c:'#818cf8',unit:'V'},
+              {l:'Corriente (A)',v:Number(n.current || 0).toFixed(2),c:'#f59e0b',unit:'A'},
+              {l:'Potencia (kW)',v:Number(n.power_kw || 0).toFixed(3),c:'#ef4444',unit:'kW'},
+              {l:'Factor de Potencia',v:Number(n.power_factor || 0).toFixed(3),c:'#22c55e',unit:''},
+              {l:'Frecuencia (Hz)',v:Number(n.frequency_hz || 0).toFixed(2),c:'#a78bfa',unit:'Hz'},
+              {l:'Energía Hoy',v:Number(n.energy_today_kwh || 0).toFixed(3),c:PURPLE_L,unit:'kWh'}
+            ].map((m,i) => (
+              <div key={i} style={{
+                background:'#0f0f1a', borderRadius:12, padding:'14px 16px',
+                flex:1, minWidth:120, border:`1px solid ${m.c}22`
+              }}>
+                <div style={{fontSize:10,color:'#6e6694',textTransform:'uppercase',letterSpacing:.8,marginBottom:6}}>{m.l}</div>
+                <div style={{fontSize:26,fontWeight:700,color:m.c}}>{m.v}</div>
+                <div style={{fontSize:11,color:'#4b5563',marginTop:2}}>{m.unit}</div>
+              </div>
+            ))}
+          </div>
+
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:10,marginTop:12}}>
+            {[
+              {l:'RPi Status',v:n.rpi_status === "ok" ? "OK" : "Offline",c:n.rpi_status === "ok" ? '#22c55e' : '#6b7280'},
+              {l:'Shelly Status',v:n.shelly_status === "ok" ? "OK" : "Offline",c:n.shelly_status === "ok" ? '#22c55e' : '#6b7280'},
+              {l:'Buffer',v:`${Number(n.buffer_pending || 0)} pend.`,c:Number(n.buffer_pending || 0)>0?'#f59e0b':'#22c55e'}
+            ].map((item,i) => (
+              <div key={i} style={{background:'#0a0a14',borderRadius:8,padding:'8px 12px',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                <span style={{fontSize:11,color:'#6e6694'}}>{item.l}</span>
+                <span style={{fontSize:12,fontWeight:700,color:item.c}}>{item.v}</span>
               </div>
             ))}
           </div>
@@ -1652,58 +1212,864 @@ const PageInfra = () => {
   );
 };
 
-// ─── PAGE: SETTINGS ───────────────────────────────────────────────────────────
-const PageSettings = ({ role, setRole }) => (
-  <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:18}}>
+
+// ─── PAGE: COST ANALYTICS ─────────────────────────────────────────────────────
+const PageCost = () => {
+  const [summary, setSummary] = useState(null);
+
+  useEffect(() => {
+    const load = () => {
+      getCostSummary()
+        .then(setSummary)
+        .catch((error) => console.error("Cost summary API error:", error));
+    };
+
+    load();
+    const timer = setInterval(load, 15000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const periods = summary?.periods || [];
+  const rates = summary?.rates || {};
+
+  const mxn = (v) => `$${Number(v || 0).toLocaleString("es-MX")} MXN`;
+  const totalCost = periods.reduce((sum, p) => sum + Number(p.cost_mxn || 0), 0) || 1;
+
+  const peak = periods.find(p => p.period === "peak");
+  const peakShare = peak ? peak.share_pct : 0;
+
+  return (
     <div>
-      <Card style={{marginBottom:14}}>
-        <SectionTitle sub="Gestión de perfil de usuario">Perfil de Usuario</SectionTitle>
-        {[{l:'Nombre',v:'Dr. Carlos Mendoza'},{l:'Email',v:'c.mendoza@ucol.mx'},{l:'Rol',v:role},{l:'Campus',v:'Campus Colima'}].map((r,i) => (
-          <div key={i} style={{display:'flex',justifyContent:'space-between',padding:'9px 0',borderBottom:'1px solid #0f0f1a',fontSize:13}}>
-            <span style={{color:'#6e6694'}}>{r.l}</span>
-            <span style={{color:'#f0eeff',fontWeight:600}}>{r.v}</span>
-          </div>
-        ))}
-      </Card>
-      <Card>
-        <SectionTitle sub="Simulación de vista por rol">Selector de Rol</SectionTitle>
-        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
-          {ROLES.map(r => (
-            <button key={r} onClick={() => setRole(r)} style={{
-              padding:'12px', borderRadius:10, border:`1px solid ${role===r?PURPLE:'#2a2740'}`,
-              background: role===r ? '#7c5cbf22' : '#0f0f1a',
-              color: role===r ? PURPLE_L : '#9890c4', fontWeight: role===r ? 700 : 400,
-              fontSize:13, cursor:'pointer'
-            }}>{r}</button>
+      <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:16,marginBottom:22}}>
+        <StatCard label="Costo hoy" value={mxn(summary?.cost_today_mxn)} sub="Datos reales acumulados" color="#ef4444" icon="Wallet"/>
+        <StatCard label="Costo esta semana" value={mxn(summary?.cost_week_mxn)} sub="Proyección con datos actuales" color="#f59e0b" icon="Calendar"/>
+        <StatCard label="Proyección mensual" value={mxn(summary?.projected_month_mxn)} sub="Extrapolación simple" color="#a78bfa" icon="TrendingUp"/>
+        <StatCard label="Costo por punta" value={`${Number(peakShare || 0).toFixed(1)}%`} sub="Participación real actual" color="#ef4444" icon="Zap"/>
+      </div>
+
+      <div style={{display:'grid',gridTemplateColumns:'2fr 1fr',gap:18,marginBottom:22}}>
+        <Card>
+          <SectionTitle title="Análisis por Periodo Tarifario" subtitle="Desglose real por periodo tarifario GDMTH"/>
+          {periods.length === 0 ? (
+            <div style={{fontSize:13,color:'#7b739e'}}>Sin consumo real registrado todavía.</div>
+          ) : periods.map((p, i) => {
+            const color = p.period === "peak" ? "#ef4444" : p.period === "intermediate" ? "#f59e0b" : "#818cf8";
+            const label = p.period === "peak" ? "Punta" : p.period === "intermediate" ? "Intermedia" : "Base";
+            const width = Math.max(2, (Number(p.cost_mxn || 0) / totalCost) * 100);
+
+            return (
+              <div key={i} style={{marginBottom:22}}>
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
+                  <div style={{display:'flex',alignItems:'center',gap:8}}>
+                    <div style={{width:10,height:10,borderRadius:2,background:color}}/>
+                    <b>{label}</b>
+                  </div>
+                  <div style={{fontWeight:800,color}}>{mxn(p.cost_mxn)}</div>
+                </div>
+                <div style={{height:8,background:'#1a1730',borderRadius:99,overflow:'hidden'}}>
+                  <div style={{height:'100%',width:`${width}%`,background:color,borderRadius:99}}/>
+                </div>
+                <div style={{display:'flex',justifyContent:'space-between',fontSize:11,color:'#7b739e',marginTop:6}}>
+                  <span>{Number(p.share_pct || 0).toFixed(1)}% del costo total</span>
+                  <span>{Number(p.kwh || 0).toFixed(4)} kWh</span>
+                </div>
+              </div>
+            );
+          })}
+        </Card>
+
+        <Card>
+          <SectionTitle title="Tarifa Activa" subtitle="Fuente: configuración local"/>
+          <div style={{fontSize:24,fontWeight:900,color:PURPLE_L,marginBottom:4}}>GDMTH</div>
+          <div style={{fontSize:12,color:'#7b739e',marginBottom:22}}>Gran Demanda en Media Tensión H</div>
+
+          {[
+            ["Base", rates.base],
+            ["Intermedia", rates.intermediate],
+            ["Punta", rates.peak],
+          ].map(([name, value]) => (
+            <div key={name} style={{display:'flex',justifyContent:'space-between',fontSize:13,marginBottom:14}}>
+              <span style={{color:'#7b739e'}}>Cargo {name}</span>
+              <b>${Number(value || 0).toFixed(2)}/kWh</b>
+            </div>
           ))}
+
+          <div style={{display:'flex',justifyContent:'space-between',fontSize:13,marginTop:20}}>
+            <span style={{color:'#7b739e'}}>Estado CFE API</span>
+            <b>Manual fallback</b>
+          </div>
+        </Card>
+      </div>
+
+      <Card>
+        <SectionTitle title="Simulador de Ahorro" subtitle="Deshabilitado hasta contar con histórico suficiente"/>
+        <div style={{background:'#1a1730',borderRadius:12,padding:18,color:'#a9a2d0',fontSize:13}}>
+          El simulador requiere más datos históricos para estimar escenarios de ahorro sin usar placeholders.
         </div>
       </Card>
     </div>
+  );
+};
+
+
+// ─── PAGE: AI CENTER ──────────────────────────────────────────────────────────
+const PageAI = ({ apiInsights, apiAnomalies }) => {
+  const [tab, setTab] = useState("forecast");
+  const [aiData, setAiData] = useState(null);
+  const [question, setQuestion] = useState("");
+  const [messages, setMessages] = useState([
+    { role: "assistant", text: "Hola. Soy el Asistente de Energía IA. Puedes preguntarme sobre costos, consumo, anomalías o comparaciones entre edificios." }
+  ]);
+
+  useEffect(() => {
+    const load = () => {
+      getAiCenter()
+        .then(setAiData)
+        .catch((error) => console.error("AI Center API error:", error));
+    };
+
+    load();
+    const timer = setInterval(load, 30000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const forecast = aiData?.forecast || {};
+  const anomalies = aiData?.anomalies || {};
+  const recommendations = aiData?.recommendations || [];
+
+  const sendQuestion = () => {
+    const clean = question.trim();
+    if (!clean) return;
+
+    setMessages((current) => [...current, { role: "user", text: clean }]);
+    setQuestion("");
+
+    askAiAssistant(clean)
+      .then((res) => {
+        setMessages((current) => [...current, { role: "assistant", text: res.answer }]);
+      })
+      .catch((error) => {
+        console.error("AI assistant frontend error:", error);
+        setMessages((current) => [...current, { role: "assistant", text: `No pude consultar el backend IA: ${error.message}` }]);
+      });
+  };
+
+  const tabs = [
+    ["forecast", "Pronóstico"],
+    ["anomalies", "Anomalías"],
+    ["recommendations", "Recomendaciones"],
+    ["assistant", "Asistente IA"],
+  ];
+
+  const mxn = (v) => `$${Number(v || 0).toLocaleString("es-MX")} MXN`;
+
+  return (
     <div>
-      <Card style={{marginBottom:14}}>
-        <SectionTitle sub="Configuración tarifaria CFE">Tarifas (placeholder)</SectionTitle>
-        {[{l:'Tarifa activa',v:'GDMTH'},{l:'Cargo base',v:'$31.98/kWh'},{l:'Cargo intermedia',v:'$40.95/kWh'},{l:'Cargo punta',v:'$145.36/kWh'}].map((r,i) => (
-          <div key={i} style={{display:'flex',justifyContent:'space-between',padding:'8px 0',borderBottom:'1px solid #0f0f1a',fontSize:13}}>
-            <span style={{color:'#6e6694'}}>{r.l}</span>
-            <span style={{color:'#f0eeff',fontWeight:600}}>{r.v}</span>
-          </div>
+      <div style={{display:'flex',gap:8,background:'#11111c',padding:4,borderRadius:12,width:'fit-content',marginBottom:20}}>
+        {tabs.map(([key, label]) => (
+          <button key={key} onClick={() => setTab(key)} style={{
+            background:tab === key ? PURPLE : 'transparent',
+            color:tab === key ? '#fff' : '#8b83ad',
+            border:0,
+            borderRadius:9,
+            padding:'10px 22px',
+            fontWeight:800,
+            cursor:'pointer',
+          }}>
+            {label}
+          </button>
         ))}
-        <button style={{marginTop:12,width:'100%',padding:'9px',background:'#1a1730',border:'1px solid #2a2740',borderRadius:10,color:'#9890c4',fontSize:13,cursor:'pointer'}}>Actualizar Tarifas CFE</button>
+      </div>
+
+      {tab === "forecast" && (
+        <>
+          <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:16,marginBottom:18}}>
+            <StatCard label="Proyección mañana" value={mxn(forecast.tomorrow_mxn)} sub={`Confianza ${(Number(forecast.confidence || 0) * 100).toFixed(0)}%`} color="#818cf8" icon="ArrowRight"/>
+            <StatCard label="Proyección semana" value={mxn(forecast.week_mxn)} sub="Basado en consumo real" color="#a78bfa" icon="BarChart"/>
+            <StatCard label="Proyección mensual" value={mxn(forecast.month_mxn)} sub="Tendencia actual" color="#f59e0b" icon="TrendingUp"/>
+          </div>
+
+          <Card>
+            <SectionTitle title="Pronóstico de Costo (MXN)" subtitle={`${forecast.method || "Modelo basado en datos reales"} · intervalo de confianza dinámico`}/>
+            <div style={{height:240,border:'1px solid #1f1f35',borderRadius:12,padding:16}}>
+              <svg width="100%" height="200" viewBox="0 0 600 200" preserveAspectRatio="none">
+                <line x1="0" y1="180" x2="600" y2="180" stroke="#2a2740"/>
+                <line x1="0" y1="120" x2="600" y2="120" stroke="#1f1f35" strokeDasharray="4 4"/>
+                <line x1="0" y1="60" x2="600" y2="60" stroke="#1f1f35" strokeDasharray="4 4"/>
+                {(() => {
+                  const pts = forecast.points || [];
+                  const max = Math.max(...pts.map(p => p.value || 0), 1);
+                  const points = pts.map((p, i) => `${(i / Math.max(pts.length - 1, 1)) * 600},${180 - ((p.value || 0) / max) * 150}`).join(" ");
+                  return <polyline points={points} fill="none" stroke="#a78bfa" strokeWidth="3" strokeDasharray="7 4"/>;
+                })()}
+              </svg>
+              <div style={{display:'flex',justifyContent:'space-between',fontSize:12,color:'#7b739e'}}>
+                {(forecast.points || []).map(p => <span key={p.label}>{p.label}</span>)}
+              </div>
+            </div>
+          </Card>
+        </>
+      )}
+
+      {tab === "anomalies" && (
+        <>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:16,marginBottom:18}}>
+            <StatCard label="Anomalías hoy" value={anomalies.today_count || 0} sub="Detectadas con reglas reales" color="#ef4444" icon="AlertTriangle"/>
+            <StatCard label="Anomalías esta semana" value={anomalies.week_count || 0} sub={`Revisadas: ${anomalies.reviewed || 0}`} color="#f59e0b" icon="Clipboard"/>
+          </div>
+
+          {(anomalies.items || []).length === 0 ? (
+            <Card>
+              <div style={{fontSize:13,color:'#7b739e'}}>No hay anomalías activas con los datos actuales.</div>
+            </Card>
+          ) : anomalies.items.map((item, i) => (
+            <Card key={i} style={{marginBottom:12,borderLeft:`4px solid ${item.color || '#818cf8'}`}}>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                <div>
+                  <div style={{fontWeight:900,color:'#f0eeff',marginBottom:4}}>{item.title}</div>
+                  <div style={{fontSize:12,color:'#7b739e'}}>{item.building} · {item.time}</div>
+                  <div style={{fontSize:12,color:'#a9a2d0',marginTop:10}}>
+                    Detectado: <b style={{color:'#ef4444'}}>{item.detected}</b>
+                    <span style={{marginLeft:18}}>Esperado: <b style={{color:'#22c55e'}}>{item.expected}</b></span>
+                  </div>
+                </div>
+                <Badge color={item.color || '#818cf8'}>{item.severity}</Badge>
+              </div>
+            </Card>
+          ))}
+        </>
+      )}
+
+      {tab === "recommendations" && (
+        <>
+          {recommendations.map((rec, i) => (
+            <Card key={i} style={{marginBottom:14}}>
+              <div style={{display:'flex',justifyContent:'space-between',gap:18}}>
+                <div style={{flex:1}}>
+                  <Badge color={rec.priority === "Alta prioridad" ? "#ef4444" : "#f59e0b"}>{rec.priority}</Badge>
+                  <div style={{fontSize:16,fontWeight:900,color:'#f0eeff',marginTop:10}}>{rec.title}</div>
+                  <div style={{fontSize:12,color:'#7b739e',marginBottom:14}}>{rec.building}</div>
+                  <div style={{fontSize:13,color:'#a9a2d0',lineHeight:1.5}}>{rec.description}</div>
+                  <div style={{marginTop:14,background:'#1b1730',borderRadius:8,padding:'9px 12px',fontSize:13,color:'#c4b5fd'}}>
+                    → {rec.action}
+                  </div>
+                </div>
+                <div style={{minWidth:120,textAlign:'right'}}>
+                  <div style={{fontSize:11,color:'#7b739e'}}>Ahorro estimado</div>
+                  <div style={{fontSize:26,fontWeight:900,color:'#22c55e'}}>${Number(rec.saving_mxn_month || 0).toLocaleString("es-MX")}</div>
+                  <div style={{fontSize:11,color:'#7b739e'}}>MXN/mes</div>
+                </div>
+              </div>
+            </Card>
+          ))}
+        </>
+      )}
+
+      {tab === "assistant" && (
+        <Card style={{minHeight:470,display:'flex',flexDirection:'column'}}>
+          <div style={{flex:1,overflowY:'auto',paddingBottom:20}}>
+            {messages.map((msg, i) => (
+              <div key={i} style={{
+                display:'flex',
+                justifyContent:msg.role === "user" ? "flex-end" : "flex-start",
+                marginBottom:12
+              }}>
+                <div style={{
+                  maxWidth:'70%',
+                  background:msg.role === "user" ? '#6d4fc2' : '#10101a',
+                  border:'1px solid #2a2740',
+                  borderRadius:12,
+                  padding:'12px 14px',
+                  fontSize:13,
+                  color:'#f0eeff',
+                }}>
+                  {msg.role === "assistant" ? (
+                    <div className="ai-markdown">
+                      <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                        {msg.text}
+                      </ReactMarkdown>
+                    </div>
+                  ) : (
+                    msg.text
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div>
+            <div style={{display:'flex',gap:10}}>
+              <input
+                value={question}
+                onChange={(e) => setQuestion(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") sendQuestion(); }}
+                placeholder="Pregunta sobre costos, anomalías, ahorro..."
+                style={{
+                  flex:1,
+                  background:'#0f0f1a',
+                  border:'1px solid #2a2740',
+                  color:'#f0eeff',
+                  borderRadius:8,
+                  padding:'12px',
+                }}
+              />
+              <button onClick={sendQuestion} style={{
+                background:PURPLE,
+                border:0,
+                color:'#fff',
+                borderRadius:9,
+                padding:'0 24px',
+                fontWeight:900,
+              }}>
+                Enviar
+              </button>
+            </div>
+            <div style={{display:'flex',gap:6,marginTop:10,flexWrap:'wrap'}}>
+              {["¿Qué edificio costó más esta semana?","¿Cuánto podemos ahorrar?","¿Hubo anomalías hoy?","Proyección de costo del mes"].map((q) => (
+                <button key={q} onClick={() => setQuestion(q)} style={{
+                  background:'#1b1730',
+                  border:'1px solid #2a2740',
+                  color:'#a78bfa',
+                  borderRadius:999,
+                  padding:'5px 10px',
+                  fontSize:11,
+                }}>
+                  {q}
+                </button>
+              ))}
+            </div>
+          </div>
+        </Card>
+      )}
+    </div>
+  );
+};
+
+
+
+// ─── PAGE: DATA MINING ────────────────────────────────────────────────────────
+const PageMining = () => {
+  const [mining, setMining] = useState(null);
+
+  useEffect(() => {
+    const load = () => {
+      getMiningAnalytics()
+        .then(setMining)
+        .catch((error) => console.error("Mining API error:", error));
+    };
+
+    load();
+    const timer = setInterval(load, 30000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const clusters = mining?.clusters || [];
+  const correlation = mining?.correlation || {};
+  const patterns = mining?.patterns || [];
+  const insights = mining?.insights || [];
+  const clusterColors = ["#818cf8", "#22c55e", "#ef4444", "#f59e0b", "#a78bfa"];
+
+  const BlockTitle = ({title, subtitle}) => (
+    <div style={{marginBottom:18}}>
+      <div style={{fontSize:18,fontWeight:900,color:'#f0eeff',marginBottom:4}}>{title}</div>
+      <div style={{fontSize:12,color:'#7b739e'}}>{subtitle}</div>
+    </div>
+  );
+
+  return (
+    <div>
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:18,marginBottom:18}}>
+        <Card>
+          <BlockTitle title="Clustering de Edificios" subtitle="K-Means clustering de comportamiento de consumo"/>
+          {clusters.map((cluster, i) => {
+            const color = clusterColors[i % clusterColors.length];
+            return (
+              <div key={cluster.name} style={{
+                borderLeft:`4px solid ${color}`,
+                padding:'14px 16px',
+                marginBottom:12,
+                background:'#0f0f1a',
+                borderRadius:10,
+              }}>
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
+                  <div style={{fontWeight:800,color:'#f0eeff'}}>{cluster.name}</div>
+                  <Badge color={color}>{cluster.count} edificio{cluster.count === 1 ? "" : "s"}</Badge>
+                </div>
+                <div style={{fontSize:12,color:'#7b739e',marginBottom:8}}>{cluster.description}</div>
+                <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+                  {(cluster.buildings || []).length === 0 ? (
+                    <span style={{fontSize:12,color:'#6e6694'}}>Sin edificios clasificados todavía</span>
+                  ) : cluster.buildings.map((name) => (
+                    <span key={name} style={{
+                      border:`1px solid ${color}66`,
+                      color,
+                      borderRadius:999,
+                      padding:'3px 9px',
+                      fontSize:11,
+                      fontWeight:700,
+                      background:`${color}18`,
+                    }}>
+                      {name}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+        </Card>
+
+        <Card>
+          <BlockTitle title={correlation.title || "Correlación entre edificios"} subtitle="Correlación de consumo entre edificios monitoreados"/>
+          {correlation.available ? (
+            <>
+              <div style={{height:210,border:'1px solid #1f1f35',borderRadius:12,padding:14,marginBottom:14}}>
+                <svg width="100%" height="170" viewBox="0 0 500 170" preserveAspectRatio="none">
+                  <line x1="0" y1="150" x2="500" y2="150" stroke="#2a2740" />
+                  <line x1="0" y1="100" x2="500" y2="100" stroke="#1f1f35" strokeDasharray="4 4" />
+                  <line x1="0" y1="50" x2="500" y2="50" stroke="#1f1f35" strokeDasharray="4 4" />
+                  {(() => {
+                    const a = correlation.series_a || [];
+                    const b = correlation.series_b || [];
+                    const vals = [...a.map(x => x.value), ...b.map(x => x.value)];
+                    const max = Math.max(...vals, 1);
+                    const pointsA = a.map((x, i) => `${(i / Math.max(a.length - 1, 1)) * 500},${150 - (x.value / max) * 130}`).join(" ");
+                    const pointsB = b.map((x, i) => `${(i / Math.max(b.length - 1, 1)) * 500},${150 - (x.value / max) * 130}`).join(" ");
+                    return (
+                      <>
+                        <polyline points={pointsA} fill="none" stroke="#a78bfa" strokeWidth="3"/>
+                        <polyline points={pointsB} fill="none" stroke="#22c55e" strokeWidth="3" strokeDasharray="6 4"/>
+                      </>
+                    );
+                  })()}
+                </svg>
+              </div>
+              <div style={{fontSize:13,color:'#a9a2d0'}}>
+                Coeficiente de correlación Pearson: <b style={{color:PURPLE_L}}>{Number(correlation.coefficient || 0).toFixed(2)}</b>
+              </div>
+            </>
+          ) : (
+            <div style={{height:210,display:'flex',alignItems:'center',justifyContent:'center',border:'1px solid #1f1f35',borderRadius:12,color:'#7b739e',fontSize:13,textAlign:'center',padding:20}}>
+              {correlation.message || "Se requieren al menos 2 edificios con lecturas reales."}
+            </div>
+          )}
+        </Card>
+      </div>
+
+      <Card style={{marginBottom:18}}>
+        <BlockTitle title="Descubrimiento de Patrones" subtitle="Patrones descubiertos por el motor de minería de datos"/>
+        <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(210px,1fr))',gap:14}}>
+          {patterns.map((pattern, i) => {
+            const color = pattern.severity === "high" ? "#ef4444" : pattern.severity === "warning" ? "#f59e0b" : pattern.severity === "medium" ? "#a78bfa" : "#818cf8";
+            return (
+              <div key={i} style={{
+                border:`1px solid ${color}55`,
+                borderRadius:12,
+                padding:14,
+                background:'#0f0f1a',
+              }}>
+                <div style={{marginBottom:12}}>
+                  <Icon name={pattern.severity === "high" ? "TrendingUp" : pattern.severity === "warning" ? "Zap" : "Database"} size={18} color={color}/>
+                </div>
+                <div style={{fontWeight:800,color:'#f0eeff',marginBottom:4}}>{pattern.title}</div>
+                <div style={{fontSize:12,color:PURPLE_L,marginBottom:8}}>{pattern.building}</div>
+                <div style={{fontSize:12,color:'#7b739e',lineHeight:1.45}}>{pattern.description}</div>
+              </div>
+            );
+          })}
+        </div>
       </Card>
+
+      <AIInsightCard insights={insights}/>
+    </div>
+  );
+};
+
+
+// ─── PAGE: REPORTS ───────────────────────────────────────────────────────────
+const PageReports = () => {
+  const API = "http://127.0.0.1:8010/api/reports";
+  const download = (path) => window.open(`${API}${path}`, "_blank");
+
+  const reports = [
+    { title: "Resumen Semanal de Costo", type: "Ejecutivo", date: "Datos reales", status: "Disponible", icon: "Wallet", path: "/weekly-cost.pdf" },
+    { title: "Comparación de Edificios", type: "Técnico", date: "Datos reales", status: "Disponible", icon: "Building", path: "/building-comparison.pdf" },
+    { title: "Reporte de Anomalías IA", type: "IA", date: "Isolation Forest", status: "Disponible", icon: "AlertTriangle", path: "/anomalies.pdf" },
+    { title: "Reporte de Despliegue de Nodos", type: "Técnico", date: "Estado actual", status: "Disponible", icon: "Cpu", path: "/deployments.pdf" },
+    { title: "Reporte de Sostenibilidad", type: "Ejecutivo", date: "Datos reales", status: "Disponible", icon: "Leaf", path: "/sustainability.pdf" },
+    { title: "Dataset Completo CSV", type: "Datos", date: "Lecturas reales", status: "Disponible", icon: "BarChart", path: "/dataset.csv" },
+  ];
+
+  return (
+    <div>
+      <div style={{display:'flex',gap:14,marginBottom:24}}>
+        <button onClick={() => download("/raw-readings.pdf")} style={{background:PURPLE,color:'#fff',border:0,borderRadius:10,padding:'14px 28px',fontWeight:900,fontSize:15,cursor:'pointer'}}>Exportar PDF</button>
+        <button onClick={() => download("/dataset.csv")} style={{background:PURPLE,color:'#fff',border:0,borderRadius:10,padding:'14px 28px',fontWeight:900,fontSize:15,cursor:'pointer'}}>Exportar CSV</button>
+        <button onClick={() => download("/dataset.xlsx")} style={{background:PURPLE,color:'#fff',border:0,borderRadius:10,padding:'14px 28px',fontWeight:900,fontSize:15,cursor:'pointer'}}>Exportar Excel</button>
+      </div>
+
+      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(330px,1fr))',gap:16}}>
+        {reports.map((report) => (
+          <Card key={report.title}>
+            <div style={{display:'flex',gap:16,alignItems:'flex-start'}}>
+              <div style={{
+                width:46,height:46,borderRadius:12,background:'#1b1730',
+                border:'1px solid #342a5f',display:'flex',alignItems:'center',
+                justifyContent:'center',flexShrink:0
+              }}>
+                <Icon name={report.icon} size={22} color={PURPLE_L}/>
+              </div>
+
+              <div style={{flex:1}}>
+                <div style={{fontSize:16,fontWeight:900,color:'#f0eeff',marginBottom:4}}>
+                  {report.title}
+                </div>
+                <div style={{fontSize:12,color:'#7b739e',marginBottom:18}}>
+                  {report.type} · {report.date}
+                </div>
+
+                <div style={{display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+                  <Badge color={report.status === "Disponible" ? "#22c55e" : "#f59e0b"}>
+                    {report.status}
+                  </Badge>
+
+                  <button
+                    onClick={() => download(report.path)}
+                    style={{
+                      background:'transparent',
+                      border:'1px solid #342a5f',
+                      color:'#c4b5fd',
+                      borderRadius:8,
+                      padding:'7px 16px',
+                      cursor:'pointer',
+                    }}
+                  >
+                    Descargar
+                  </button>
+                </div>
+              </div>
+            </div>
+          </Card>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+
+// ─── PAGE: INFRASTRUCTURE ─────────────────────────────────────────────────────
+const PageInfra = () => {
+  const [infra, setInfra] = useState(null);
+
+  useEffect(() => {
+    const load = () => {
+      getInfrastructureStatus()
+        .then(setInfra)
+        .catch((error) => console.error("Infrastructure API error:", error));
+    };
+
+    load();
+    const timer = setInterval(load, 15000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const summary = infra?.summary || {};
+  const services = infra?.services || [];
+  const nodes = infra?.nodes || [];
+
+  const lastSyncText = summary.latest_sync
+    ? new Date(summary.latest_sync).toLocaleString("es-MX")
+    : "Sin sincronía";
+
+  const statusColor = (status) => {
+    if (status === "OK" || status === "online") return "#22c55e";
+    if (status === "Sin datos") return "#f59e0b";
+    return "#6b7280";
+  };
+
+  return (
+    <div>
+      <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:16,marginBottom:22}}>
+        <StatCard label="Nodos online" value={`${summary.online_nodes || 0}/${summary.total_nodes || 0}`} sub="Disponibilidad real" color="#22c55e" icon="Activity"/>
+        <StatCard label="Muestras acumuladas" value={Number(summary.total_samples || 0).toLocaleString("es-MX")} sub="Reportadas por edge" color="#a78bfa" icon="BarChart"/>
+        <StatCard label="Buffer pendiente" value={`${summary.buffer_pending || 0} reg.`} sub="Pendientes de sincronía" color="#f59e0b" icon="Clock"/>
+        <StatCard label="Lecturas backend" value={Number(summary.total_readings || 0).toLocaleString("es-MX")} sub="En base de datos" color="#22c55e" icon="Database"/>
+      </div>
+
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:14,marginBottom:18}}>
+        {services.map((service, i) => (
+          <Card key={i}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+              <div style={{display:'flex',alignItems:'center',gap:12}}>
+                <div style={{border:'1px solid #2a2740',background:'#10101a',borderRadius:10,padding:10}}>
+                  <Icon name={service.name.includes("Base") ? "Database" : service.name.includes("VPN") ? "Lock" : "Server"} size={18} color={PURPLE_L}/>
+                </div>
+                <div>
+                  <div style={{fontWeight:800,color:'#f0eeff'}}>{service.name}</div>
+                  <div style={{fontSize:12,color:'#7b739e'}}>{service.detail}</div>
+                </div>
+              </div>
+              <div style={{display:'flex',alignItems:'center',gap:8}}>
+                <StatusDot status={service.status === "OK" ? "online" : service.status === "Sin datos" ? "warning" : "offline"}/>
+                <b style={{fontSize:12,color:statusColor(service.status)}}>{service.status}</b>
+              </div>
+            </div>
+          </Card>
+        ))}
+      </div>
+
+      {nodes.map((node) => (
+        <Card key={node.id} style={{marginBottom:14}}>
+          <SectionTitle title={`${node.id} — Detalle de Hardware`} subtitle={node.status === "online" ? "Nodo detectado recientemente" : "Nodo sin sincronía reciente"}/>
+          <div style={{display:'grid',gridTemplateColumns:'repeat(8,1fr)',gap:12,fontSize:12}}>
+            <div><div style={{color:'#6e6694'}}>IP</div><b>{node.ip || "Sin IP"}</b></div>
+            <div><div style={{color:'#6e6694'}}>Estado</div><b style={{color:statusColor(node.status)}}>{node.status}</b></div>
+            <div><div style={{color:'#6e6694'}}>Muestras</div><b>{Number(node.samples || 0).toLocaleString("es-MX")}</b></div>
+            <div><div style={{color:'#6e6694'}}>Buffer</div><b>{Number(node.buffer_pending || 0)} pend.</b></div>
+            <div><div style={{color:'#6e6694'}}>RPi Status</div><b>{node.rpi_status}</b></div>
+            <div><div style={{color:'#6e6694'}}>Shelly Status</div><b>{node.shelly_status}</b></div>
+            <div><div style={{color:'#6e6694'}}>Última Sync</div><b>{node.last_sync ? new Date(node.last_sync).toLocaleString("es-MX") : "Sin sync"}</b></div>
+            <div><div style={{color:'#6e6694'}}>Edificio</div><b>{node.building || "Sin edificio"}</b></div>
+          </div>
+
+          <div style={{display:'grid',gridTemplateColumns:'repeat(5,1fr)',gap:12,fontSize:12,marginTop:14}}>
+            <div><div style={{color:'#6e6694'}}>Voltaje</div><b>{node.voltage ? Number(node.voltage).toFixed(1) : "0.0"} V</b></div>
+            <div><div style={{color:'#6e6694'}}>Corriente</div><b>{node.current ? Number(node.current).toFixed(2) : "0.00"} A</b></div>
+            <div><div style={{color:'#6e6694'}}>Potencia</div><b>{node.power_kw ? Number(node.power_kw).toFixed(3) : "0.000"} kW</b></div>
+            <div><div style={{color:'#6e6694'}}>FP</div><b>{node.power_factor ? Number(node.power_factor).toFixed(3) : "0.000"}</b></div>
+            <div><div style={{color:'#6e6694'}}>Frecuencia</div><b>{node.frequency_hz ? Number(node.frequency_hz).toFixed(2) : "0.00"} Hz</b></div>
+          </div>
+        </Card>
+      ))}
+    </div>
+  );
+};
+
+
+// ─── PAGE: SETTINGS ──────────────────────────────────────────────────────────
+const PageSettings = ({ role, setRole }) => {
+  const [settings, setSettings] = useState(null);
+  const [localThresholds, setLocalThresholds] = useState(null);
+
+  useEffect(() => {
+    const load = () => {
+      getSystemSettings()
+        .then((data) => {
+          setSettings(data);
+          setLocalThresholds((current) => current || data.thresholds || {});
+        })
+        .catch((error) => console.error("Settings API error:", error));
+    };
+
+    load();
+    const timer = setInterval(load, 15000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const tariffs = settings?.tariffs || {};
+  const counts = settings?.counts || {};
+  const system = settings?.system || {};
+  const thresholds = localThresholds || settings?.thresholds || {};
+  const nodes = settings?.nodes || [];
+
+  const updateThreshold = (key, value) => {
+    setLocalThresholds((current) => ({
+      ...(current || {}),
+      [key]: Number(value)
+    }));
+  };
+
+  const statusBadge = (value) => (
+    <span style={{
+      color:value === "online" ? "#22c55e" : "#6b7280",
+      background:value === "online" ? "#22c55e18" : "#6b728018",
+      border:`1px solid ${value === "online" ? "#22c55e44" : "#6b728044"}`,
+      borderRadius:999,
+      padding:'3px 10px',
+      fontSize:11,
+      fontWeight:800
+    }}>
+      {value}
+    </span>
+  );
+
+  return (
+    <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:18}}>
       <Card>
-        <SectionTitle sub="Umbrales de alertas del sistema">Umbrales de Alertas</SectionTitle>
-        {[{l:'Alerta de costo diario',v:'$2,000 MXN'},{l:'Factor de potencia mínimo',v:'0.90'},{l:'Pico de demanda máximo',v:'10 kW'},{l:'Tiempo sin sincronía',v:'15 min'}].map((r,i) => (
-          <div key={i} style={{display:'flex',justifyContent:'space-between',padding:'8px 0',borderBottom:'1px solid #0f0f1a',fontSize:13}}>
-            <span style={{color:'#6e6694'}}>{r.l}</span>
-            <span style={{color:PURPLE_L,fontWeight:600}}>{r.v}</span>
+        <SectionTitle title="Perfil de Usuario" subtitle="Sesión local para simulación de roles"/>
+        {[
+          ["Nombre", "Administrador UdeC"],
+          ["Email", "admin@ucol.mx"],
+          ["Rol actual", role],
+          ["Campus", "Universidad de Colima"],
+        ].map(([label, value]) => (
+          <div key={label} style={{display:'flex',justifyContent:'space-between',marginBottom:14,fontSize:13}}>
+            <span style={{color:'#7b739e'}}>{label}</span>
+            <b style={{color:'#f0eeff'}}>{value}</b>
           </div>
         ))}
+      </Card>
+
+      <Card>
+        <SectionTitle title="Tarifa Activa" subtitle="Valores reales usados por el motor de costos"/>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:18}}>
+          <div>
+            <div style={{fontSize:26,fontWeight:900,color:PURPLE_L}}>GDMTH</div>
+            <div style={{fontSize:12,color:'#7b739e'}}>Gran Demanda en Media Tensión H · {tariffs.month || "JUN-26"}</div>
+          </div>
+          <Badge color="#a78bfa">{tariffs.source || "Manual fallback"}</Badge>
+        </div>
+
+        {[
+          ["Cargo Base", tariffs.base],
+          ["Cargo Intermedia", tariffs.intermediate],
+          ["Cargo Punta", tariffs.peak],
+        ].map(([label, value]) => (
+          <div key={label} style={{display:'flex',justifyContent:'space-between',marginBottom:13,fontSize:13}}>
+            <span style={{color:'#7b739e'}}>{label}</span>
+            <b>${Number(value || 0).toFixed(4)}/kWh</b>
+          </div>
+        ))}
+
+        <button disabled style={{
+          width:'100%',
+          marginTop:14,
+          opacity:.55,
+          cursor:'not-allowed',
+          background:'#1f1b35',
+          border:'1px solid #3b315f',
+          color:'#a78bfa',
+          borderRadius:8,
+          padding:'9px 12px',
+          fontWeight:700
+        }}>
+          Actualizar desde CFE API / scraper pendiente
+        </button>
+      </Card>
+
+      <Card>
+        <SectionTitle title="Selector de Rol" subtitle="Cambia la vista operativa del dashboard"/>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+          {["Administrador","Ejecutivo","Técnico","Investigador"].map((item) => (
+            <button key={item} onClick={() => setRole(item)} style={{
+              background:role === item ? '#261d3e' : '#10101a',
+              border:`1px solid ${role === item ? '#a78bfa' : '#2a2740'}`,
+              color:role === item ? '#c4b5fd' : '#8b83ad',
+              borderRadius:10,
+              padding:'12px',
+              fontWeight:800
+            }}>
+              {item}
+            </button>
+          ))}
+        </div>
+      </Card>
+
+      <Card>
+        <SectionTitle title="Estado del Sistema" subtitle="Salud real del backend y sincronización"/>
+        {[
+          ["Backend API", system.backend_api || "sin datos"],
+          ["Base de datos", system.database || "sin datos"],
+          ["Zona horaria", system.timezone || "sin datos"],
+          ["Última lectura", system.last_reading ? new Date(system.last_reading).toLocaleString("es-MX") : "Sin lecturas"],
+        ].map(([label, value]) => (
+          <div key={label} style={{display:'flex',justifyContent:'space-between',marginBottom:14,fontSize:13}}>
+            <span style={{color:'#7b739e'}}>{label}</span>
+            <b style={{color:value === "online" ? "#22c55e" : "#f0eeff"}}>{value}</b>
+          </div>
+        ))}
+      </Card>
+
+      <Card>
+        <SectionTitle title="Umbrales de Alertas" subtitle="Parámetros editables localmente para anomalías"/>
+        {[
+          ["min_power_factor", "Factor de potencia mínimo", "", 0.01],
+          ["max_current_a", "Corriente máxima", "A", 1],
+          ["night_power_kw", "Consumo nocturno", "kW", 0.5],
+          ["node_offline_seconds", "Nodo offline", "s", 30],
+        ].map(([key, label, unit, step]) => (
+          <div key={key} style={{display:'grid',gridTemplateColumns:'1fr 130px 40px',gap:10,alignItems:'center',marginBottom:12}}>
+            <span style={{color:'#7b739e',fontSize:13}}>{label}</span>
+            <input
+              type="number"
+              step={step}
+              value={thresholds[key] ?? 0}
+              onChange={(e) => updateThreshold(key, e.target.value)}
+              style={{
+                background:'#10101a',
+                border:'1px solid #2a2740',
+                color:'#f0eeff',
+                borderRadius:8,
+                padding:'8px 10px',
+                textAlign:'right'
+              }}
+            />
+            <span style={{color:PURPLE_L,fontSize:12,fontWeight:800}}>{unit}</span>
+          </div>
+        ))}
+
+        <div style={{fontSize:11,color:'#7b739e',marginTop:10}}>
+          Estos cambios son locales por ahora. Persistencia en backend pendiente.
+        </div>
+      </Card>
+
+      <Card>
+        <SectionTitle title="Inventario del Sistema" subtitle="Conteos reales registrados en base de datos"/>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
+          {[
+            ["Nodos totales", counts.nodes_total],
+            ["Nodos online", counts.nodes_online],
+            ["Campus", counts.campuses],
+            ["Edificios", counts.buildings],
+            ["Despliegues", counts.deployments],
+            ["Lecturas", counts.readings],
+          ].map(([label, value]) => (
+            <div key={label} style={{background:'#0f0f1a',border:'1px solid #1f1f35',borderRadius:10,padding:12}}>
+              <div style={{fontSize:11,color:'#7b739e',marginBottom:6}}>{label}</div>
+              <div style={{fontSize:22,fontWeight:900,color:'#f0eeff'}}>{Number(value || 0).toLocaleString("es-MX")}</div>
+            </div>
+          ))}
+        </div>
+      </Card>
+
+      <Card style={{gridColumn:'1 / -1'}}>
+        <SectionTitle title="Nodos Registrados" subtitle="Estado real reportado por heartbeat"/>
+        <div style={{overflowX:'auto'}}>
+          <table style={{width:'100%',borderCollapse:'collapse'}}>
+            <thead>
+              <tr style={{fontSize:11,color:'#7b739e',textTransform:'uppercase',letterSpacing:1}}>
+                <th align="left" style={{padding:'0 0 12px'}}>Nodo</th>
+                <th align="left" style={{padding:'0 0 12px'}}>Estado</th>
+                <th align="left" style={{padding:'0 0 12px'}}>Última sincronía</th>
+                <th align="left" style={{padding:'0 0 12px'}}>Buffer</th>
+                <th align="left" style={{padding:'0 0 12px'}}>Muestras</th>
+              </tr>
+            </thead>
+            <tbody>
+              {nodes.map((node) => (
+                <tr key={node.id} style={{borderTop:'1px solid #1f1f35'}}>
+                  <td style={{padding:'13px 0'}}>
+                    <b>{node.id}</b>
+                    <div style={{color:'#7b739e',fontSize:12}}>{node.name}</div>
+                  </td>
+                  <td>{statusBadge(node.status)}</td>
+                  <td style={{color:'#c4bdf0'}}>{node.last_sync ? new Date(node.last_sync).toLocaleString("es-MX") : "Sin sincronía"}</td>
+                  <td style={{color:Number(node.buffer_pending || 0) > 0 ? "#f59e0b" : "#22c55e",fontWeight:800}}>
+                    {Number(node.buffer_pending || 0)} pendientes
+                  </td>
+                  <td>{Number(node.samples || 0).toLocaleString("es-MX")}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </Card>
     </div>
-  </div>
-);
+  );
+};
 
-// ─── APP ROOT ─────────────────────────────────────────────────────────────────
+
+
+
 const App = () => {
   const [apiBuildings, setApiBuildings] = useState(null);
   const [apiNodes, setApiNodes] = useState(null);
@@ -1780,6 +2146,9 @@ const App = () => {
 
   const [page, setPage] = useState('dashboard');
   const [role, setRole] = useState('Administrador');
+  const activeNodesCount = (apiNodes || []).filter((node) => node.status === "online").length;
+  const activeNodesText = `${activeNodesCount} nodo${activeNodesCount === 1 ? "" : "s"} activo${activeNodesCount === 1 ? "" : "s"}`;
+
   const renderPage = () => {
     switch(page) {
       case 'dashboard': return <PageDashboard apiAnomalies={apiAnomalies}/>;
@@ -1801,7 +2170,7 @@ const App = () => {
     <div style={{display:'flex',minHeight:'100vh'}}>
       <Sidebar page={page} setPage={setPage} role={role} setRole={setRole}/>
       <div style={{marginLeft:230,flex:1,minHeight:'100vh',background:'#0a0a0f'}}>
-        <Topbar page={page}/>
+        <Topbar page={page} activeNodesText={activeNodesText}/>
         <main style={{padding:'24px 28px'}}>
           {renderPage()}
         </main>

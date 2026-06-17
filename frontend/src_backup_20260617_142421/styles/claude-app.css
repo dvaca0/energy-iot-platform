@@ -1,0 +1,14 @@
+
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Inter','Segoe UI',sans-serif;background:#0a0a0f;color:#e2e0f0;overflow-x:hidden}
+::-webkit-scrollbar{width:5px;height:5px}
+::-webkit-scrollbar-track{background:#0f0f1a}
+::-webkit-scrollbar-thumb{background:#3a3560;border-radius:4px}
+::-webkit-scrollbar-thumb:hover{background:#5b50c8}
+input,select,textarea{background:#12121e;border:1px solid #2a2740;color:#e2e0f0;border-radius:8px;padding:8px 12px;font-family:inherit;font-size:14px;outline:none;transition:border-color .2s}
+input:focus,select:focus,textarea:focus{border-color:#7c5cbf}
+button{cursor:pointer;font-family:inherit}
+.recharts-text{fill:#9890c4 !important}
+.recharts-cartesian-axis-tick-value{fill:#6e6694 !important;font-size:11px}
+.recharts-legend-item-text{fill:#9890c4 !important;font-size:12px}
+.recharts-tooltip-wrapper{filter:none}

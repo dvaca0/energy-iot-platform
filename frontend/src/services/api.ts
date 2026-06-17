@@ -115,3 +115,55 @@ export async function getDeployments() {
   const response = await api.get("/deployments");
   return response.data;
 }
+
+export async function getCostSummary() {
+  const response = await api.get("/cost/summary");
+  return response.data;
+}
+
+export async function getSystemSettings() {
+  const response = await api.get("/settings");
+  return response.data;
+}
+
+export async function getInfrastructureStatus() {
+  const response = await api.get("/infra");
+  return response.data;
+}
+
+export async function getMiningAnalytics() {
+  const response = await api.get("/mining");
+  return response.data;
+}
+
+export async function getAiCenter() {
+  const response = await api.get("/ai-center");
+  return response.data;
+}
+
+
+
+export async function askAiAssistant(question) {
+  const response = await fetch("http://127.0.0.1:8010/api/ai-center/assistant", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ question }),
+  });
+
+  const text = await response.text();
+
+  let data;
+  try {
+    data = JSON.parse(text);
+  } catch {
+    throw new Error(`Backend returned non-JSON response: ${text}`);
+  }
+
+  if (!response.ok) {
+    throw new Error(data?.answer || data?.detail || `HTTP ${response.status}`);
+  }
+
+  return data;
+}
