@@ -1,5 +1,6 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Zap, DollarSign, Sparkles, Server, User, Lock, Eye, EyeOff, LogIn } from "lucide-react";
+import { api } from "../services/api";
 
 const USERS = {
   "admin@ucol.mx": { pass: "admin123", role: "Administrador" },
@@ -15,6 +16,46 @@ export default function LoginPage({ onLogin }) {
   const [showPw, setShowPw] = useState(false);
   const [alert, setAlert] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [systemStatus, setSystemStatus] = useState({
+    activeNodes: 0,
+    totalNodes: 0,
+    syncActive: false,
+    warnings: 0,
+    operational: false,
+  });
+
+  useEffect(() => {
+    const loadStatus = async () => {
+      try {
+        const [nodesRes, anomaliesRes] = await Promise.allSettled([
+          api.get("/nodes"),
+          api.get("/anomalies"),
+        ]);
+
+        const nodes = nodesRes.status === "fulfilled" ? nodesRes.value.data || [] : [];
+        const anomalies = anomaliesRes.status === "fulfilled" ? anomaliesRes.value.data || {} : {};
+
+        const activeNodes = nodes.filter((node) => node.status === "online").length;
+        const totalNodes = nodes.length;
+        const warnings =
+          Number(anomalies.today_count || 0) ||
+          Number(anomalies.week_count || 0) ||
+          (Array.isArray(anomalies.items) ? anomalies.items.length : 0);
+
+        setSystemStatus({
+          activeNodes,
+          totalNodes,
+          syncActive: activeNodes > 0,
+          warnings,
+          operational: activeNodes > 0,
+        });
+      } catch (error) {
+        console.error("Login status load error:", error);
+      }
+    };
+
+    loadStatus();
+  }, []);
 
   const fillDemo = (user, pass) => {
     setEmail(user);
@@ -112,10 +153,28 @@ export default function LoginPage({ onLogin }) {
           </div>
         </div>
 
-        <div style={{ borderTop: "1px solid #14142a", paddingTop: 18, display: "flex", gap: 18, color: "#8a87a8", fontSize: 11.5 }}>
-          <span style={{ color: "#22c55e" }}>● 2 nodos operativos</span>
-          <span style={{ color: "#22c55e" }}>● Sincronía activa</span>
-          <span style={{ color: "#f59e0b" }}>● 1 advertencia</span>
+        <div style={{ borderTop: "1px solid #14142a", paddingTop: 18, display: "flex", gap: 18, color: "#8a87a8", fontSize: 11.5, alignItems: "center" }}>
+          <span style={{ color: systemStatus.activeNodes > 0 ? "#22c55e" : "#ef4444" }}>
+            ● {systemStatus.activeNodes}/{systemStatus.totalNodes} nodo{systemStatus.totalNodes === 1 ? "" : "s"} operativo{systemStatus.activeNodes === 1 ? "" : "s"}
+          </span>
+          <span style={{ color: systemStatus.syncActive ? "#22c55e" : "#f59e0b" }}>
+            ● {systemStatus.syncActive ? "Sincronía activa" : "Sin sincronía activa"}
+          </span>
+          <span style={{ color: systemStatus.warnings > 0 ? "#f59e0b" : "#22c55e" }}>
+            ● {systemStatus.warnings} advertencia{systemStatus.warnings === 1 ? "" : "s"}
+          </span>
+          <span style={{
+            marginLeft: "auto",
+            color: systemStatus.operational ? "#22c55e" : "#ef4444",
+            border: `1px solid ${systemStatus.operational ? "rgba(34,197,94,.18)" : "rgba(239,68,68,.18)"}`,
+            background: systemStatus.operational ? "rgba(34,197,94,.08)" : "rgba(239,68,68,.08)",
+            borderRadius: 4,
+            padding: "3px 9px",
+            fontSize: 10.5,
+            fontWeight: 800
+          }}>
+            {systemStatus.operational ? "Sistema operativo" : "Sistema sin nodos activos"}
+          </span>
         </div>
       </section>
 
