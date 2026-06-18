@@ -2161,6 +2161,7 @@ const App = () => {
       case 'cost': return <PageCost/>;
       case 'ai': return <PageAI apiInsights={apiInsights} apiAnomalies={apiAnomalies}/>;
       case 'mining': return <PageMining/>;
+      case 'dataExplorer': return <PageDataExplorer/>;
       case 'reports': return <PageReports/>;
       case 'infra': return <PageInfra/>;
       case 'settings': return <PageSettings role={role} setRole={setRole}/>;
@@ -2182,4 +2183,5 @@ const App = () => {
 
 export default App;
 
+import PageDataExplorer from "./pages/PageDataExplorer";
 import "./claude-app.css";
