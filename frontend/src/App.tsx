@@ -297,6 +297,7 @@ const NAV_ITEMS = [
   { id:'cost', label:'Análisis de Costo', icon:'DollarSign' },
   { id:'ai', label:'Centro IA / Forecasting', icon:'BrainCircuit' },
   { id:'mining', label:'Minería de Datos', icon:'Database' },
+  { id:'dataExplorer', label:'Explorador de Datos', icon:'BarChart2' },
   { id:'reports', label:'Reportes', icon:'FileText' },
   { id:'infra', label:'Infraestructura', icon:'Server' },
   { id:'settings', label:'Configuración', icon:'Settings' }
@@ -374,7 +375,7 @@ const Sidebar = ({ page, setPage, role, setRole }) => {
 const Topbar = ({page, activeNodesText}) => {
   const titles = { dashboard:'Dashboard Ejecutivo', campus:'Mapa de Campus', buildings:'Edificios',
     deployments:'Despliegues', live:'Monitoreo en Vivo', cost:'Análisis de Costo',
-    ai:'Centro IA & Forecasting', mining:'Minería de Datos', reports:'Reportes',
+    ai:'Centro IA & Forecasting', mining:'Minería de Datos', dataExplorer:'Explorador de Datos', reports:'Reportes',
     infra:'Infraestructura', settings:'Configuración' };
   const [time, setTime] = useState(new Date());
   useEffect(() => { const t = setInterval(() => setTime(new Date()), 30000); return () => clearInterval(t); }, []);
