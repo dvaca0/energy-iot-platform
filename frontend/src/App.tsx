@@ -353,7 +353,6 @@ const Sidebar = ({ page, setPage, role, setRole }) => {
             <span style={{fontSize:10,color:'#6e6694'}}>▾</span>
           </button>
             </div>
-          )}
         </div>
       </div>
     </div>
