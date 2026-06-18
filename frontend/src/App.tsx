@@ -340,7 +340,7 @@ const Sidebar = ({ page, setPage, role, setRole }) => {
       </div>
 
       <nav style={{padding:'14px 0',flex:1,overflowY:'auto'}}>
-        {NAV.map((item) => (
+        {NAV_ITEMS.map((item) => (
           <button
             key={item.id}
             onClick={() => setPage(item.id)}
