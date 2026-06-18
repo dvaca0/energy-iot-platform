@@ -339,7 +339,7 @@ const Sidebar = ({ page, setPage, role, setRole }) => {
       </nav>
       <div style={{padding:'12px 8px', borderTop:'1px solid #1a1730'}}>
         <div style={{position:'relative'}}>
-          <button onClick={() => setRoleOpen(!roleOpen)} style={{
+          <button  style={{
             width:'100%', display:'flex', alignItems:'center', justifyContent:'space-between',
             padding:'8px 12px', borderRadius:9, border:'1px solid #2a2740',
             background:'#10101e', color:'#c4bdf0', fontSize:12, cursor:'pointer'
@@ -352,15 +352,6 @@ const Sidebar = ({ page, setPage, role, setRole }) => {
             </div>
             <span style={{fontSize:10,color:'#6e6694'}}>▾</span>
           </button>
-          {roleOpen && (
-            <div style={{position:'absolute',bottom:'100%',left:0,right:0,background:'#12101f',border:'1px solid #2a2740',borderRadius:9,overflow:'hidden',marginBottom:4}}>
-              {ROLES.map(r => (
-                <button key={r} onClick={() => { setRole(r); setRoleOpen(false); }} style={{
-                  width:'100%', padding:'9px 14px', textAlign:'left', border:'none',
-                  background: r===role ? '#7c5cbf22' : 'transparent',
-                  color: r===role ? PURPLE_L : '#9890c4', fontSize:13, cursor:'pointer'
-                }}>{r}</button>
-              ))}
             </div>
           )}
         </div>
