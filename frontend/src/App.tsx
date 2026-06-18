@@ -304,57 +304,68 @@ const NAV_ITEMS = [
 ];
 
 
+
 const Sidebar = ({ page, setPage, role, setRole }) => {
   return (
     <div style={{
-      width:230, minHeight:'100vh', background:'#08080f',
-      borderRight:'1px solid #1a1730', display:'flex', flexDirection:'column',
-      position:'fixed', top:0, left:0, zIndex:100
+      width: 230,
+      background: '#080810',
+      borderRight: '1px solid #1a1730',
+      position: 'fixed',
+      left: 0,
+      top: 0,
+      bottom: 0,
+      zIndex: 20,
+      display: 'flex',
+      flexDirection: 'column'
     }}>
-      <div style={{padding:'20px 16px 16px', borderBottom:'1px solid #1a1730'}}>
+      <div style={{padding:'20px 18px',borderBottom:'1px solid #1a1730'}}>
         <div style={{display:'flex',alignItems:'center',gap:10}}>
-          <div style={{background:'linear-gradient(135deg,#7c5cbf,#4f3d9e)',borderRadius:10,width:36,height:36,display:'flex',alignItems:'center',justifyContent:'center',color:'#fff'}}><Icon name="Bolt" size={18}/></div>
+          <div style={{
+            width:34,
+            height:34,
+            borderRadius:9,
+            background:'linear-gradient(135deg,#7c5cbf,#4b2fa3)',
+            display:'flex',
+            alignItems:'center',
+            justifyContent:'center'
+          }}>
+            <Icon name="Zap" size={18} color="#fff"/>
+          </div>
           <div>
-            <div style={{fontSize:12,fontWeight:800,color:'#f0eeff',letterSpacing:.3}}>ENERGY</div>
-            <div style={{fontSize:10,color:'#6e6694',letterSpacing:.5}}>INTELLIGENCE PLATFORM</div>
+            <div style={{color:'#f4f1ff',fontWeight:900,fontSize:14}}>Energy IQ</div>
+            <div style={{color:'#6e6694',fontSize:10,textTransform:'uppercase',letterSpacing:1}}>UCol Platform</div>
           </div>
         </div>
       </div>
-      <nav style={{flex:1,padding:'12px 8px',overflowY:'auto'}}>
-        {NAV_ITEMS.map(item => (
-          <button key={item.id} onClick={() => setPage(item.id)}
+
+      <nav style={{padding:'14px 0',flex:1,overflowY:'auto'}}>
+        {NAV.map((item) => (
+          <button
+            key={item.id}
+            onClick={() => setPage(item.id)}
             style={{
-              width:'100%', display:'flex', alignItems:'center', gap:10,
-              padding:'9px 12px', borderRadius:9, border:'none', marginBottom:2,
-              background: page===item.id ? '#7c5cbf22' : 'transparent',
+              width:'100%',
+              background: page===item.id ? '#121124' : 'transparent',
+              border:0,
+              display:'flex',
+              alignItems:'center',
+              gap:10,
+              padding:'10px 18px',
               color: page===item.id ? PURPLE_L : '#7a7499',
               fontWeight: page===item.id ? 700 : 400,
-              fontSize:13, cursor:'pointer', transition:'all .15s',
-              borderLeft: page===item.id ? `3px solid ${PURPLE_L}` : '3px solid transparent'
-            }}>
+              fontSize:13,
+              cursor:'pointer',
+              transition:'all .15s',
+              borderLeft: page===item.id ? `3px solid ${PURPLE_L}` : '3px solid transparent',
+              textAlign:'left'
+            }}
+          >
             <Icon name={iconForNav(item.icon)} size={15} color={page===item.id ? PURPLE_L : '#7a7499'}/>
             {item.label}
           </button>
         ))}
       </nav>
-      <div style={{padding:'12px 8px', borderTop:'1px solid #1a1730'}}>
-        <div style={{position:'relative'}}>
-          <button  style={{
-            width:'100%', display:'flex', alignItems:'center', justifyContent:'space-between',
-            padding:'8px 12px', borderRadius:9, border:'1px solid #2a2740',
-            background:'#10101e', color:'#c4bdf0', fontSize:12, cursor:'pointer'
-          }}>
-            <div style={{display:'flex',alignItems:'center',gap:8}}>
-              <div style={{width:24,height:24,borderRadius:'50%',background:'#7c5cbf44',display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,color:PURPLE_L,fontWeight:700}}>
-                {role[0]}
-              </div>
-              {role}
-            </div>
-            <span style={{fontSize:10,color:'#6e6694'}}>▾</span>
-          </button>
-            </div>
-        </div>
-      </div>
     </div>
   );
 };
