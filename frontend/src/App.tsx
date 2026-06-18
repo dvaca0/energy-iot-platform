@@ -303,10 +303,8 @@ const NAV_ITEMS = [
   { id:'settings', label:'Configuración', icon:'Settings' }
 ];
 
-const ROLES = ['Administrador','Ejecutivo','Técnico','Investigador'];
 
 const Sidebar = ({ page, setPage, role, setRole }) => {
-  const [roleOpen, setRoleOpen] = useState(false);
   return (
     <div style={{
       width:230, minHeight:'100vh', background:'#08080f',
