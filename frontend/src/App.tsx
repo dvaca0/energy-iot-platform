@@ -2073,6 +2073,7 @@ const PageSettings = ({ role, setRole }) => {
 
 
 const App = () => {
+  const [isAuthenticated, setIsAuthenticated] = useState(() => localStorage.getItem("energy_auth") === "true");
   const [apiBuildings, setApiBuildings] = useState(null);
   const [apiNodes, setApiNodes] = useState(null);
   const [apiInsights, setApiInsights] = useState(null);
@@ -2147,7 +2148,16 @@ const App = () => {
   }, []);
 
   const [page, setPage] = useState('dashboard');
-  const [role, setRole] = useState('Administrador');
+  const [role, setRole] = useState(() => localStorage.getItem("energy_role") || 'Administrador');
+
+  const handleLogin = (loginRole) => {
+    setRole(loginRole);
+    setIsAuthenticated(true);
+  };
+
+  if (!isAuthenticated) {
+    return <LoginPage onLogin={handleLogin} />;
+  }
   const activeNodesCount = (apiNodes || []).filter((node) => node.status === "online").length;
   const activeNodesText = `${activeNodesCount} nodo${activeNodesCount === 1 ? "" : "s"} activo${activeNodesCount === 1 ? "" : "s"}`;
 
@@ -2185,4 +2195,5 @@ const App = () => {
 export default App;
 
 import PageDataExplorer from "./pages/PageDataExplorer";
+import LoginPage from "./pages/LoginPage";
 import "./claude-app.css";
