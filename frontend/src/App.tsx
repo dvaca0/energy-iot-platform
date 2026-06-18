@@ -190,7 +190,7 @@ const StatusDot = ({ status }) => (
   }}/>
 );
 
-const StatCard = ({ label, value, sub, icon, color='#7c5cbf', trend }) => (
+const StatCard = ({ label, value, sub, icon, color='#7c5cbf', trend, trendLabel }) => (
   <Card style={{flex:1,minWidth:140,padding:'18px 20px',borderTop:`1px solid ${color}55`}}>
     <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:8}}>
       {icon && <Icon name={icon} size={14} color={color}/>} 
@@ -547,8 +547,10 @@ const PageDashboard = ({ apiAnomalies }) => {
   return (
     <div>
       <div style={{display:'flex',flexWrap:'wrap',gap:14,marginBottom:22}}>
-        <StatCard label="Costo Estimado Hoy" value={dashboardSummary ? mxn(dashboardSummary.estimated_cost_today_mxn) : "Cargando..."} sub={dashboardSummary?.most_expensive_building?.name ? `Mayor consumo: ${dashboardSummary.most_expensive_building.name}` : `${dashboardSummary?.online_nodes || 0}/${dashboardSummary?.total_nodes || 0} nodos activos`} color="#7c5cbf" trend={8} icon="Wallet"/>
-        <StatCard label="Costo Esta Semana" value={dashboardSummary ? mxn(dashboardSummary.estimated_cost_week_mxn) : "Cargando..."} sub="Acumulado lun–hoy" color="#ef4444" trend={12} icon="Calendar"/>
+        <StatCard label="Costo Estimado Hoy" value={dashboardSummary ? mxn(dashboardSummary.estimated_cost_today_mxn) : "Cargando..."} sub={dashboardSummary?.most_expensive_building?.name ? `Mayor consumo: ${dashboardSummary.most_expensive_building.name}` : `${dashboardSummary?.online_nodes || 0}/${dashboardSummary?.total_nodes || 0} nodos activos`} color="#7c5cbf" trend={dashboardSummary?.has_previous_week_data ? Number(dashboardSummary.week_comparison_pct) : null}
+            trendLabel={dashboardSummary?.has_previous_week_data ? dashboardSummary.comparison_label : "Histórico insuficiente"} icon="Wallet"/>
+        <StatCard label="Costo Esta Semana" value={dashboardSummary ? mxn(dashboardSummary.estimated_cost_week_mxn) : "Cargando..."} sub="Acumulado lun–hoy" color="#ef4444" trend={dashboardSummary?.has_previous_week_data ? Number(dashboardSummary.week_comparison_pct) : null}
+            trendLabel={dashboardSummary?.has_previous_week_data ? dashboardSummary.comparison_label : "Histórico insuficiente"} icon="Calendar"/>
         <StatCard label="Proyección Mensual" value={dashboardSummary ? mxn(dashboardSummary.projected_monthly_cost_mxn) : "Cargando..."} sub="Estimado GDMTH" color="#f59e0b" icon="TrendingUp"/>
         <StatCard label="Ahorro Potencial" value={dashboardSummary ? `${mxn(dashboardSummary.potential_savings_mxn_month)}/mes` : "Cargando..."} sub="Recomendaciones activas" color="#22c55e" icon="ArrowDown"/>
         <StatCard label="Edificio más costoso" value={dashboardSummary?.most_expensive_building?.name || "Cargando..."} sub={dashboardSummary?.most_expensive_building ? `${mxn(dashboardSummary.most_expensive_building.cost_week_mxn)} esta semana` : "Desde backend"} color="#a78bfa" icon="Building"/>
