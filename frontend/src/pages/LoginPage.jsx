@@ -84,7 +84,7 @@ export default function LoginPage({ onLogin }) {
       }
 
       localStorage.setItem("energy_auth", "true");
-      localStorage.setItem("energy_role", user.role);
+      localStorage.setItem("energy_role", user.role);\n      localStorage.setItem("energy_user", clean);
       onLogin(user.role);
     }, 500);
   };

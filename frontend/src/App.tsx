@@ -373,6 +373,21 @@ const Sidebar = ({ page, setPage, role, setRole }) => {
 
 // ─── TOPBAR ───────────────────────────────────────────────────────────────────
 const Topbar = ({page, activeNodesText}) => {
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const currentRole = localStorage.getItem("energy_role") || "Administrador";
+  const currentUser = localStorage.getItem("energy_user") || (
+    currentRole === "Ejecutivo" ? "ejecutivo@ucol.mx" :
+    currentRole === "Técnico" ? "tecnico@ucol.mx" :
+    currentRole === "Investigador" ? "investigador@ucol.mx" :
+    "admin@ucol.mx"
+  );
+
+  const logout = () => {
+    localStorage.removeItem("energy_auth");
+    localStorage.removeItem("energy_role");
+    localStorage.removeItem("energy_user");
+    window.location.reload();
+  };
   const titles = { dashboard:'Dashboard Ejecutivo', campus:'Mapa de Campus', buildings:'Edificios',
     deployments:'Despliegues', live:'Monitoreo en Vivo', cost:'Análisis de Costo',
     ai:'Centro IA & Forecasting', mining:'Minería de Datos', dataExplorer:'Explorador de Datos', reports:'Reportes',
@@ -387,7 +402,7 @@ const Topbar = ({page, activeNodesText}) => {
     }}>
       <div>
         <h1 style={{fontSize:16,fontWeight:700,color:'#f0eeff'}}>{titles[page] || page}</h1>
-        <p style={{fontSize:11,color:'#6e6694'}}>Universidad de Colima · GDMTH · Semana del 6–13 Ene 2025</p>
+        <p style={{fontSize:11,color:'#6e6694'}}>Universidad de Colima · GDMTH · jueves, 18 de junio de 2026</p>
       </div>
       <div style={{display:'flex',alignItems:'center',gap:16}}>
         <div style={{fontSize:12,color:'#6e6694'}}>
@@ -397,7 +412,61 @@ const Topbar = ({page, activeNodesText}) => {
           <StatusDot status="online"/>
           <span style={{fontSize:11,color:'#22c55e',fontWeight:600}}>{activeNodesText}</span>
         </div>
-        <div style={{width:32,height:32,borderRadius:'50%',background:'linear-gradient(135deg,#7c5cbf,#4f3d9e)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:13,fontWeight:700,color:'#fff'}}>U</div>
+        <div style={{position:"relative"}}>
+            <button
+              onClick={() => setUserMenuOpen(!userMenuOpen)}
+              style={{
+                width:36,
+                height:36,
+                borderRadius:"50%",
+                border:"1px solid #6d52b855",
+                background:"#6d52b8",
+                color:"#fff",
+                fontWeight:900,
+                cursor:"pointer"
+              }}
+            >
+              {currentRole.charAt(0)}
+            </button>
+
+            {userMenuOpen && (
+              <div style={{
+                position:"absolute",
+                right:0,
+                top:46,
+                width:260,
+                background:"#11111f",
+                border:"1px solid #2a2444",
+                borderRadius:14,
+                padding:14,
+                zIndex:50,
+                boxShadow:"0 18px 60px rgba(0,0,0,.45)"
+              }}>
+                <div style={{fontSize:11,color:"#7b739e",textTransform:"uppercase",letterSpacing:1.2,fontWeight:900}}>Sesión activa</div>
+                <div style={{marginTop:10,color:"#f4f1ff",fontWeight:900}}>{currentUser}</div>
+                <div style={{marginTop:4,color:"#a78bfa",fontSize:13}}>{currentRole}</div>
+                <div style={{marginTop:10,color:"#7b739e",fontSize:12}}>
+                  Energy Intelligence Platform · Universidad de Colima
+                </div>
+                <button
+                  onClick={logout}
+                  style={{
+                    marginTop:14,
+                    width:"100%",
+                    background:"#ef444422",
+                    border:"1px solid #ef444455",
+                    color:"#f87171",
+                    borderRadius:9,
+                    padding:"10px 12px",
+                    fontWeight:900,
+                    cursor:"pointer"
+                  }}
+                >
+                  Cerrar sesión
+                </button>
+              </div>
+            )}
+          </div>
       </div>
     </div>
   );
@@ -478,7 +547,7 @@ const PageDashboard = ({ apiAnomalies }) => {
   return (
     <div>
       <div style={{display:'flex',flexWrap:'wrap',gap:14,marginBottom:22}}>
-        <StatCard label="Costo Estimado Hoy" value={dashboardSummary ? mxn(dashboardSummary.estimated_cost_today_mxn) : "Cargando..."} sub="FIME + Lab. Redes" color="#7c5cbf" trend={8} icon="Wallet"/>
+        <StatCard label="Costo Estimado Hoy" value={dashboardSummary ? mxn(dashboardSummary.estimated_cost_today_mxn) : "Cargando..."} sub={dashboardSummary?.most_expensive_building?.name ? `Mayor consumo: ${dashboardSummary.most_expensive_building.name}` : `${dashboardSummary?.online_nodes || 0}/${dashboardSummary?.total_nodes || 0} nodos activos`} color="#7c5cbf" trend={8} icon="Wallet"/>
         <StatCard label="Costo Esta Semana" value={dashboardSummary ? mxn(dashboardSummary.estimated_cost_week_mxn) : "Cargando..."} sub="Acumulado lun–hoy" color="#ef4444" trend={12} icon="Calendar"/>
         <StatCard label="Proyección Mensual" value={dashboardSummary ? mxn(dashboardSummary.projected_monthly_cost_mxn) : "Cargando..."} sub="Estimado GDMTH" color="#f59e0b" icon="TrendingUp"/>
         <StatCard label="Ahorro Potencial" value={dashboardSummary ? `${mxn(dashboardSummary.potential_savings_mxn_month)}/mes` : "Cargando..."} sub="Recomendaciones activas" color="#22c55e" icon="ArrowDown"/>
