@@ -168,3 +168,9 @@ export async function askAiAssistant(question: string) {
 
   return data;
 }
+
+
+export const getCfeStatus = async () => {
+  const response = await api.get("/settings/cfe/status");
+  return response.data;
+};

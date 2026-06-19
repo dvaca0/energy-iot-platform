@@ -2,7 +2,8 @@
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import ucolLogo from "./assets/ucol-logo.png";
-import { getDashboardSummary, getHourlyCost, getBuildings, getNodes, getAiInsights, createDeployment, getDelegations, getAllOrgBuildings, getCampusesByDelegation, getUnitsByCampus, getBuildingsByUnit, getPanelsByBuilding, getLatestReadings, getLiveMetrics, getMetricsHourly, getMetricsTariffs, getMetricsDaily, getMetricsBuildings, getAnomalies, getCampusMetrics, getDeployments, getCostSummary, getSystemSettings, getInfrastructureStatus, getMiningAnalytics, getAiCenter, askAiAssistant } from "./services/api";
+import { getDashboardSummary, getHourlyCost, getBuildings, getNodes, getAiInsights, createDeployment, getDelegations, getAllOrgBuildings, getCampusesByDelegation, getUnitsByCampus, getBuildingsByUnit, getPanelsByBuilding, getLatestReadings, getLiveMetrics, getMetricsHourly, getMetricsTariffs, getMetricsDaily, getMetricsBuildings, getAnomalies,
+  getCfeStatus, getCampusMetrics, getDeployments, getCostSummary, getSystemSettings, getInfrastructureStatus, getMiningAnalytics, getAiCenter, askAiAssistant } from "./services/api";
 
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
@@ -2243,8 +2244,8 @@ const App = () => {
       .then((data) => console.log("UdeC org buildings:", data))
       .catch((error) => console.error("Org buildings API error:", error));
 
-    api.get("/settings/cfe/status")
-      .then((res) => setCfeStatus(res.data))
+    getCfeStatus()
+      .then((data) => setCfeStatus(data))
       .catch((error) => console.error("CFE status API error:", error));
 
     getAnomalies()
