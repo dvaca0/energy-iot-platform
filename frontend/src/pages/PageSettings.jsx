@@ -868,7 +868,7 @@ export default function PageSettings({ role, setRole, settings, onLogout }) {
 
               {/* Node status compact */}
               <div style={{ marginTop: 14, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-                {(nodesRes.status === "fulfilled" ? nodesRes.value.data : []).map(n => (
+                {(S.system.nodes || []).map(n => (
                   <div key={n.id} style={{ background: T.surfHi, border: `1px solid rgba(34,197,94,.15)`, borderRadius: 7, padding: "10px 12px" }}>
                     <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
                       <span style={{ fontSize: 12, fontWeight: 700, color: T.txt }}>{n.id}</span>
