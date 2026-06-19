@@ -198,9 +198,20 @@ const StatCard = ({ label, value, sub, icon, color='#7c5cbf', trend, trendLabel 
     </div>
     <div style={{fontSize:27,fontWeight:760,color:'#f6f4ff',letterSpacing:-0.8,lineHeight:1.05}}>{value}</div>
     {sub && <div style={{fontSize:12,color:'#7b739e',marginTop:8}}>{sub}</div>}
-    {trend && <div style={{display:'inline-flex',alignItems:'center',gap:4,fontSize:11,color:trend>0?'#ef4444':'#22c55e',marginTop:8,fontWeight:700}}>
-      <Icon name={trend>0?'TrendingUp':'ArrowDown'} size={12}/>{trend>0?'+':'-'}{Math.abs(trend)}% vs sem. anterior
-    </div>}
+    {trendLabel && (
+      <div style={{
+        display:'inline-flex',
+        alignItems:'center',
+        gap:4,
+        fontSize:11,
+        color: trend === null || trend === undefined ? '#8b83ad' : trend > 0 ? '#ef4444' : '#22c55e',
+        marginTop:8,
+        fontWeight:700
+      }}>
+        {trend !== null && trend !== undefined && <Icon name={trend > 0 ? 'TrendingUp' : 'ArrowDown'} size={12}/>}
+        {trendLabel}
+      </div>
+    )}
   </Card>
 );
 
