@@ -386,8 +386,9 @@ export default function PageSettings({ role, setRole, settings, onLogout }) {
           baseRate: tariffs.baseRate ?? 1.0375,
           interRate: tariffs.interRate ?? 1.8463,
           peakRate: tariffs.peakRate ?? 2.0789,
-          lastUpdate: tariffs.lastUpdate || "Configuración persistente local",
+          lastUpdate: cfeStatus.status === "ready" ? `${cfeStatus.month || ""}-${String(cfeStatus.year || "").slice(-2)} · ${cfeStatus.division || "CFE"}` : (tariffs.lastUpdate || "Configuración persistente local"),
           apiStatus: cfeStatus.label || tariffs.apiStatus || "Pendiente",
+          statusColor: cfeStatus.status === "ready" ? "success" : "warning",
           apiNote: cfeStatus.enabled ? "Scraper CFE configurado" : (tariffs.apiNote || "Scraper/API CFE pendiente"),
         },
         retention: {
@@ -436,6 +437,7 @@ export default function PageSettings({ role, setRole, settings, onLogout }) {
   const [thresholds, setThresholds] = useState({ ...S.thresholds });
   const [aiConfig,   setAiConfig]   = useState({ ...S.ai });
   const [saved,      setSaved]      = useState(false);
+  const [syncingCfe, setSyncingCfe] = useState(false);
   const [roleOpen,   setRoleOpen]   = useState(false);
 
   useEffect(() => {
@@ -463,6 +465,42 @@ export default function PageSettings({ role, setRole, settings, onLogout }) {
     } catch (error) {
       console.error("Settings save error:", error);
       alert("No se pudieron guardar los cambios.");
+    }
+  };
+
+
+  const handleCfeSync = async () => {
+    try {
+      setSyncingCfe(true);
+      const response = await api.post("/settings/cfe/scrape?state=Colima");
+      const data = response.data || {};
+      const updatedTariff = {
+        active: "GDMTH",
+        source: data.source_url ? "CFE web scraper" : "Manual fallback",
+        baseRate: data.base_mxn_kwh ?? S.tariff.baseRate,
+        interRate: data.intermediate_mxn_kwh ?? S.tariff.interRate,
+        peakRate: data.peak_mxn_kwh ?? S.tariff.peakRate,
+        fixedCharge: data.fixed_charge_mxn_month,
+        distributionRate: data.distribution_mxn_kw,
+        capacityRate: data.capacity_mxn_kw,
+        lastUpdate: `${data.month_label || ""}-${String(data.year || "").slice(-2)} · ${data.region || data.division || "CFE"}`,
+        apiStatus: "Scraper CFE activo",
+        apiNote: "Tarifa sincronizada desde CFE",
+        statusColor: "success",
+      };
+
+      setRealSettings(current => ({
+        ...(current || S),
+        tariff: updatedTariff,
+      }));
+
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2800);
+    } catch (error) {
+      console.error("CFE sync error:", error);
+      alert("No se pudo sincronizar la tarifa CFE.");
+    } finally {
+      setSyncingCfe(false);
     }
   };
 
@@ -723,7 +761,7 @@ export default function PageSettings({ role, setRole, settings, onLogout }) {
           <Card>
             <CardTitle icon={DollarSign} title="Configuración Tarifaria"
               sub="Parámetros CFE activos para el cálculo de costo estimado"
-              action={<Chip variant="warning">Manual</Chip>}
+              action={<Chip variant={S.tariff.statusColor === "success" ? "success" : "warning"}>{S.tariff.source === "CFE web scraper" ? "Automático" : "Manual"}</Chip>}
             />
             <div style={{ background: T.surfHi, border: `1px solid ${T.border}`, borderRadius: 8, padding: "14px 16px", marginBottom: 14 }}>
               <div style={{ fontSize: 10.5, color: T.muted, textTransform: "uppercase", letterSpacing: 0.9, fontWeight: 600, marginBottom: 5 }}>
@@ -741,8 +779,8 @@ export default function PageSettings({ role, setRole, settings, onLogout }) {
               { label: "Cargo base",             value: `$${S.tariff.baseRate}/kWh`,   color: null },
               { label: "Cargo intermedia",       value: `$${S.tariff.interRate}/kWh`,  color: null },
               { label: "Cargo punta",            value: `$${S.tariff.peakRate}/kWh`,   color: T.red },
-              { label: "Fuente",                 value: S.tariff.source,               color: T.amber },
-              { label: "Última actualización",   value: S.tariff.lastUpdate,           color: null },
+              { label: "Fuente",                 value: S.tariff.source,               color: S.tariff.source === "CFE web scraper" ? T.green : T.amber },
+              { label: "Última actualización",   value: S.tariff.lastUpdate,           color: S.tariff.source === "CFE web scraper" ? T.green : null },
             ].map(r => <Row key={r.label} label={r.label} value={r.value} valueColor={r.color} />)}
 
             <Divider style={{ margin: "14px 0" }} />
@@ -753,16 +791,21 @@ export default function PageSettings({ role, setRole, settings, onLogout }) {
               <div>
                 <div style={{ fontSize: 12.5, fontWeight: 500, color: T.sec }}>{S.tariff.apiNote}</div>
                 <div style={{ fontSize: 11, color: T.muted, marginTop: 2 }}>
-                  Estado: <span style={{ color: T.amber }}>{S.tariff.apiStatus}</span>
+                  Estado: <span style={{ color: S.tariff.statusColor === "success" ? T.green : T.amber }}>{S.tariff.apiStatus}</span>
                 </div>
               </div>
-              <button style={{
-                padding: "6px 14px", background: T.surfHi, border: `1px solid ${T.border}`,
-                borderRadius: 6, color: T.muted, fontSize: 11.5, cursor: "not-allowed",
+              <button onClick={handleCfeSync} disabled={syncingCfe} style={{
+                padding: "6px 14px",
+                background: syncingCfe ? T.surfHi : "rgba(34,197,94,.08)",
+                border: `1px solid ${syncingCfe ? T.border : "rgba(34,197,94,.25)"}`,
+                borderRadius: 6,
+                color: syncingCfe ? T.muted : T.green,
+                fontSize: 11.5,
+                cursor: syncingCfe ? "wait" : "pointer",
                 display: "flex", alignItems: "center", gap: 6,
               }}>
-                <RefreshCw size={11} color={T.muted} />
-                Sincronizar
+                <RefreshCw size={11} color={syncingCfe ? T.muted : T.green} />
+                {syncingCfe ? "Sincronizando..." : "Sincronizar"}
               </button>
             </div>
           </Card>
