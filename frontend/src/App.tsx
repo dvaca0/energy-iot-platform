@@ -1316,7 +1316,7 @@ const PageLive = () => {
 
 
 // ─── PAGE: COST ANALYTICS ─────────────────────────────────────────────────────
-const PageCost = () => {
+const PageCost = ({ cfeStatus }) => {
   const [summary, setSummary] = useState(null);
 
   useEffect(() => {
@@ -1398,7 +1398,7 @@ const PageCost = () => {
 
           <div style={{display:'flex',justifyContent:'space-between',fontSize:13,marginTop:20}}>
             <span style={{color:'#7b739e'}}>Estado CFE API</span>
-            <b>Manual fallback</b>
+            <b>{cfeStatus?.label || "Manual fallback"}</b>
           </div>
         </Card>
       </div>
@@ -2018,7 +2018,7 @@ const PageSettings = ({ role, setRole }) => {
             <div style={{fontSize:26,fontWeight:900,color:PURPLE_L}}>GDMTH</div>
             <div style={{fontSize:12,color:'#7b739e'}}>Gran Demanda en Media Tensión H · {tariffs.month || "JUN-26"}</div>
           </div>
-          <Badge color="#a78bfa">{tariffs.source || "Manual fallback"}</Badge>
+          <Badge color="#a78bfa">{tariffs.source || "{cfeStatus?.label || "Manual fallback"}"}</Badge>
         </div>
 
         {[
@@ -2176,6 +2176,7 @@ const App = () => {
   const [isAuthenticated, setIsAuthenticated] = useState(() => localStorage.getItem("energy_auth") === "true");
   const [apiBuildings, setApiBuildings] = useState(null);
   const [apiNodes, setApiNodes] = useState(null);
+  const [cfeStatus, setCfeStatus] = useState(null);
   const [apiInsights, setApiInsights] = useState(null);
   const [apiAnomalies, setApiAnomalies] = useState(null);
 
@@ -2242,6 +2243,10 @@ const App = () => {
       .then((data) => console.log("UdeC org buildings:", data))
       .catch((error) => console.error("Org buildings API error:", error));
 
+    api.get("/settings/cfe/status")
+      .then((res) => setCfeStatus(res.data))
+      .catch((error) => console.error("CFE status API error:", error));
+
     getAnomalies()
       .then((data) => setApiAnomalies(data))
       .catch((error) => console.error("Anomalies API error:", error));
@@ -2279,7 +2284,7 @@ const App = () => {
       case 'buildingDetail': return <PageBuildings/>;
       case 'deployments': return <PageDeployments/>;
       case 'live': return <PageLive/>;
-      case 'cost': return <PageCost/>;
+      case 'cost': return <PageCost cfeStatus={cfeStatus}/>;
       case 'ai': return <PageAI apiInsights={apiInsights} apiAnomalies={apiAnomalies}/>;
       case 'mining': return <PageMining/>;
       case 'dataExplorer': return <PageDataExplorer/>;
