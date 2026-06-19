@@ -646,7 +646,7 @@ export default function PageSettings({ role, setRole, settings, onLogout }) {
                     <div style={{ fontSize: 12.5, fontWeight: 500, color: T.txt, marginBottom: 2 }}>{it.label}</div>
                     <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                       <Chip variant="accent">{it.model}</Chip>
-                      {it.version && {it.version && <span style={{ fontSize: 10.5, color: T.muted }}>{it.version}</span>}}
+                      {it.version && <span style={{ fontSize: 10.5, color: T.muted }}>{it.version}</span>}
                     </div>
                   </div>
                   <div onClick={() => updateAiToggle(it.key, !aiConfig[it.key].enabled)} style={{
