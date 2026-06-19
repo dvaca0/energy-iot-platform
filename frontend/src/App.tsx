@@ -316,6 +316,25 @@ const NAV_ITEMS = [
 
 
 
+
+const ROLE_ACCESS = {
+  Administrador: "all",
+  Ejecutivo: ["dashboard", "campus", "buildings", "cost", "ai", "reports", "dataExplorer"],
+  Técnico: ["dashboard", "campus", "buildings", "deployments", "live", "infra", "reports"],
+  Investigador: ["dashboard", "campus", "buildings", "mining", "dataExplorer", "ai", "reports"],
+};
+
+const canAccessPage = (role, pageId) => {
+  const access = ROLE_ACCESS[role] || ROLE_ACCESS.Administrador;
+  return access === "all" || access.includes(pageId);
+};
+
+const firstAllowedPage = (role) => {
+  const access = ROLE_ACCESS[role] || ROLE_ACCESS.Administrador;
+  if (access === "all") return "dashboard";
+  return access[0] || "dashboard";
+};
+
 const Sidebar = ({ page, setPage, role, setRole }) => {
   return (
     <div style={{
@@ -351,7 +370,7 @@ const Sidebar = ({ page, setPage, role, setRole }) => {
       </div>
 
       <nav style={{padding:'14px 0',flex:1,overflowY:'auto'}}>
-        {NAV_ITEMS.map((item) => (
+        {NAV_ITEMS.filter((item) => canAccessPage(role, item.id)).map((item) => (
           <button
             key={item.id}
             onClick={() => setPage(item.id)}
@@ -2229,6 +2248,12 @@ const App = () => {
   }, []);
 
   const [page, setPage] = useState('dashboard');
+
+  useEffect(() => {
+    if (!canAccessPage(role, page)) {
+      setPage(firstAllowedPage(role));
+    }
+  }, [role, page]);
   const [role, setRole] = useState(() => localStorage.getItem("energy_role") || 'Administrador');
 
   const handleLogin = (loginRole) => {
@@ -2243,6 +2268,10 @@ const App = () => {
   const activeNodesText = `${activeNodesCount} nodo${activeNodesCount === 1 ? "" : "s"} activo${activeNodesCount === 1 ? "" : "s"}`;
 
   const renderPage = () => {
+    if (!canAccessPage(role, page)) {
+      return <PageDashboard apiAnomalies={apiAnomalies}/>;
+    }
+
     switch(page) {
       case 'dashboard': return <PageDashboard apiAnomalies={apiAnomalies}/>;
       case 'campus': return <PageCampus/>;
