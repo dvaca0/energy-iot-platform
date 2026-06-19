@@ -2285,7 +2285,7 @@ const App = () => {
       case 'dataExplorer': return <PageDataExplorer/>;
       case 'reports': return <PageReports/>;
       case 'infra': return <PageInfra/>;
-      case 'settings': return <PageSettings role={role} setRole={setRole}/>;
+      case 'settings': return <PageSettingsNew role={role} setRole={setRole} settings={null} onLogout={() => { localStorage.clear(); window.location.reload(); }}/>
       default: return <PageDashboard apiAnomalies={apiAnomalies}/>;
     }
   };
@@ -2306,4 +2306,5 @@ export default App;
 
 import PageDataExplorer from "./pages/PageDataExplorer";
 import LoginPage from "./pages/LoginPage";
+import PageSettingsNew from "./pages/PageSettings";
 import "./claude-app.css";
