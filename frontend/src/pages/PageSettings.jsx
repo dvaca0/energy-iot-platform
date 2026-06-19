@@ -90,12 +90,11 @@ const DEFAULT_SETTINGS = {
   },
   system: {
     campuses: 0,
-    buildings: 0,
-    monitoredBuildings:2,
-    activeDeployments: 2,
-    totalNodes:        2,
-    totalReadings:     14850,
-    coveragePct:       25,
+    units: 0,
+    monitoredBuildings: 0,
+    activeDeployments: 0,
+    onlineNodes: 0,
+    totalReadings: 0,
     frontendVersion:   "1.3.0",
     backendVersion:    "No conectado",
     apiVersion:        "v1 (mock)",
@@ -316,6 +315,7 @@ export default function PageSettings({ role, setRole, settings, onLogout }) {
         systemRes,
         delegationsRes,
         orgBuildingsRes,
+        unitsRes,
       ] = await Promise.allSettled([
         api.get("/nodes"),
         api.get("/buildings"),
@@ -323,6 +323,7 @@ export default function PageSettings({ role, setRole, settings, onLogout }) {
         api.get("/settings"),
         api.get("/org/delegations"),
         api.get("/org/buildings"),
+        api.get("/org/units"),
       ]);
 
       const nodes = nodesRes.status === "fulfilled" ? nodesRes.value.data || [] : [];
@@ -331,6 +332,7 @@ export default function PageSettings({ role, setRole, settings, onLogout }) {
       const system = systemRes.status === "fulfilled" ? systemRes.value.data || {} : {};
       const delegations = delegationsRes.status === "fulfilled" ? delegationsRes.value.data || [] : [];
       const orgBuildings = orgBuildingsRes.status === "fulfilled" ? orgBuildingsRes.value.data || [] : [];
+      const units = unitsRes.status === "fulfilled" ? unitsRes.value.data || [] : [];
 
       const tariffs = system.tariff || {};
       const thresholdsFromApi = system.thresholds || {};
@@ -402,10 +404,10 @@ export default function PageSettings({ role, setRole, settings, onLogout }) {
         },
         system: {
           campuses: delegations.length,
-          buildings: totalBuildings,
+          units: units.length,
           monitoredBuildings,
           activeDeployments: Number(dashboard.active_deployments || monitoredBuildings || 0),
-          totalNodes,
+          onlineNodes,
           totalReadings,
           coveragePct,
           frontendVersion: systemInfo.frontendVersion || "React/Vite activo",
@@ -837,10 +839,10 @@ export default function PageSettings({ role, setRole, settings, onLogout }) {
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 14 }}>
                 {[
                   { label: "Campus registrados",       value: S.system.campuses,           color: T.txt },
-                  { label: "Edificios totales",        value: S.system.buildings,           color: T.txt },
+                  { label: "Unidades organizacionales", value: S.system.units, color: T.txt },
                   { label: "Edificios monitoreados",   value: S.system.monitoredBuildings,  color: T.accentL },
                   { label: "Despliegues activos",      value: S.system.activeDeployments,   color: T.green },
-                  { label: "Nodos totales",            value: S.system.totalNodes,          color: T.txt },
+                  { label: "Nodos activos",            value: S.system.onlineNodes,          color: T.txt },
                   { label: "Lecturas acumuladas",      value: S.system.totalReadings.toLocaleString(), color: T.txt },
                 ].map(it => (
                   <div key={it.label} style={{ background: T.surfHi, borderRadius: 7, padding: "10px 12px", border: `1px solid ${T.borderS}` }}>
@@ -849,9 +851,18 @@ export default function PageSettings({ role, setRole, settings, onLogout }) {
                   </div>
                 ))}
               </div>
-              <CoverageBar pct={S.system.coveragePct} />
-              <div style={{ marginTop: 8, fontSize: 11, color: T.muted }}>
-                {S.system.monitoredBuildings} de {S.system.buildings} edificios con monitoreo activo
+              <div
+                style={{
+                  marginTop: 10,
+                  padding: "10px 12px",
+                  background: T.surfHi,
+                  border: `1px solid ${T.borderS}`,
+                  borderRadius: 8,
+                  fontSize: 11,
+                  color: T.muted,
+                }}
+              >
+                {S.system.activeDeployments} despliegue(s) de monitoreo activo(s)
               </div>
             </div>
 
