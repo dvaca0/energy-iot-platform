@@ -401,8 +401,8 @@ export default function PageSettings({ role, setRole, settings, onLogout }) {
           minHistoryDays: 7,
         },
         system: {
-          campuses: new Set([...buildings.map(b => b.campus).filter(Boolean), ...nodes.map(n => n.campus).filter(Boolean)]).size,
-          buildings: 0,
+          campuses: delegations.length,
+          buildings: totalBuildings,
           monitoredBuildings,
           activeDeployments: Number(dashboard.active_deployments || monitoredBuildings || 0),
           totalNodes,
@@ -411,7 +411,14 @@ export default function PageSettings({ role, setRole, settings, onLogout }) {
           frontendVersion: systemInfo.frontendVersion || "React/Vite activo",
           backendVersion: systemInfo.backendVersion || "FastAPI activo",
           apiVersion: systemInfo.apiVersion || "v1",
-          nodes: infraNodes,
+          nodes: nodes.map(n => ({
+            id: n.id,
+            ip: n.ip,
+            status: n.status,
+            last: n.last_sync ? new Date(n.last_sync).toLocaleString("es-MX") : "Sin sincronía",
+            building: n.building,
+            samples: n.samples || 0,
+          })),
           onlineNodes,
         },
       });
