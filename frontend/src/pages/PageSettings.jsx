@@ -321,7 +321,7 @@ export default function PageSettings({ role, setRole, settings, onLogout }) {
         api.get("/buildings"),
         api.get("/dashboard/summary"),
         api.get("/settings"),
-        api.get("/infra/status"),
+        api.get("/infra"),
         api.get("/metrics/campuses"),
       ]);
 
