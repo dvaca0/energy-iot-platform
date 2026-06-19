@@ -89,8 +89,8 @@ const DEFAULT_SETTINGS = {
     minHistoryDays:   7,
   },
   system: {
-    campuses: delegations.length,
-    buildings: totalBuildings,
+    campuses: 0,
+    buildings: 0,
     monitoredBuildings:2,
     activeDeployments: 2,
     totalNodes:        2,
