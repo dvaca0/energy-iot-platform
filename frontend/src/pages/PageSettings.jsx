@@ -76,7 +76,7 @@ const DEFAULT_SETTINGS = {
   retention: {
     edgeDays:      7,
     backendDays:   "Ilimitado",
-    readingInterval: system.retention?.readingInterval ?? 15,
+    readingInterval: 15,
     syncInterval:  60,
     bufferRecords: 3,
     bufferStatus:  "Normal",
@@ -379,10 +379,10 @@ export default function PageSettings({ role, setRole, settings, onLogout }) {
           apiNote: tariffs.apiNote || "Scraper/API CFE pendiente",
         },
         retention: {
-          edgeDays: system.retention?.edgeDays ?? 7,
-          backendDays: system.retention?.backendDays ?? "Ilimitado",
-          readingInterval: system.retention?.readingInterval ?? 15,
-          syncInterval: system.retention?.syncInterval ?? 60,
+          edgeDays: 7,
+          backendDays: "Ilimitado",
+          readingInterval: 15,
+          syncInterval: 60,
           bufferRecords: pendingBuffer,
           bufferStatus: pendingBuffer > 0 ? "Pendiente" : "Sin pendientes",
         },
