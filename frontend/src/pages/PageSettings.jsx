@@ -76,7 +76,7 @@ const DEFAULT_SETTINGS = {
   retention: {
     edgeDays:      7,
     backendDays:   "Ilimitado",
-    readingInterval: 15,
+    readingInterval: system.retention?.readingInterval ?? 15,
     syncInterval:  60,
     bufferRecords: 3,
     bufferStatus:  "Normal",
@@ -320,8 +320,8 @@ export default function PageSettings({ role, setRole, settings, onLogout }) {
         api.get("/nodes"),
         api.get("/buildings"),
         api.get("/dashboard/summary"),
-        api.get("/system/settings"),
-        api.get("/infrastructure/status"),
+        api.get("/settings"),
+        api.get("/infra/status"),
         api.get("/metrics/campuses"),
       ]);
 
@@ -332,7 +332,7 @@ export default function PageSettings({ role, setRole, settings, onLogout }) {
       const infra = infraRes.status === "fulfilled" ? infraRes.value.data || {} : {};
       const campuses = campusesRes.status === "fulfilled" ? campusesRes.value.data || [] : [];
 
-      const tariffs = system.tariffs || {};
+      const tariffs = system.tariff || {};
       const counts = system.counts || {};
       const thresholdsFromApi = system.thresholds || {};
       const systemInfo = system.system || {};
@@ -355,7 +355,7 @@ export default function PageSettings({ role, setRole, settings, onLogout }) {
           name: sessionEmail.split("@")[0],
           email: sessionEmail,
           role: sessionRole,
-          campus: "Universidad de Colima",
+          campus: sessionRole === "Administrador" ? "Todos los campus" : (nodes[0]?.campus || buildings[0]?.campus || "Sin campus asignado"),
           lastLogin: sessionStarted,
           sessionStatus: "Activa",
         },
@@ -371,39 +371,39 @@ export default function PageSettings({ role, setRole, settings, onLogout }) {
         tariff: {
           active: tariffs.active || tariffs.name || "GDMTH",
           source: tariffs.source || "Manual fallback",
-          baseRate: tariffs.base_rate ?? tariffs.base ?? 1.0375,
-          interRate: tariffs.intermediate_rate ?? tariffs.intermediate ?? 1.8463,
-          peakRate: tariffs.peak_rate ?? tariffs.peak ?? 2.0789,
-          lastUpdate: tariffs.last_update || systemInfo.tariff_last_update || "Pendiente de API CFE",
-          apiStatus: tariffs.api_status || "Pendiente",
-          apiNote: tariffs.api_note || "Scraper/API CFE pendiente",
+          baseRate: tariffs.baseRate ?? 1.0375,
+          interRate: tariffs.interRate ?? 1.8463,
+          peakRate: tariffs.peakRate ?? 2.0789,
+          lastUpdate: tariffs.lastUpdate || "Configuración persistente local",
+          apiStatus: tariffs.apiStatus || "Pendiente",
+          apiNote: tariffs.apiNote || "Scraper/API CFE pendiente",
         },
         retention: {
-          edgeDays: 7,
-          backendDays: "Ilimitado",
-          readingInterval: 15,
-          syncInterval: 60,
+          edgeDays: system.retention?.edgeDays ?? 7,
+          backendDays: system.retention?.backendDays ?? "Ilimitado",
+          readingInterval: system.retention?.readingInterval ?? 15,
+          syncInterval: system.retention?.syncInterval ?? 60,
           bufferRecords: pendingBuffer,
           bufferStatus: pendingBuffer > 0 ? "Pendiente" : "Sin pendientes",
         },
         ai: {
-          forecasting: { enabled: true, model: "Random Forest", version: "activo" },
-          anomaly: { enabled: true, model: "Isolation Forest", version: "activo" },
-          clustering: { enabled: true, model: "K-Means", version: "activo" },
+          forecasting: system.ai?.forecasting || { enabled: true, model: "Random Forest" },
+          anomaly: system.ai?.anomaly || { enabled: true, model: "Isolation Forest" },
+          clustering: system.ai?.clustering || { enabled: true, model: "K-Means" },
           confidence: "Backtesting cuando existe historial suficiente",
           minHistoryDays: 7,
         },
         system: {
-          campuses: counts.campuses || campuses.length || 0,
-          buildings: counts.buildings || totalBuildings,
+          campuses: new Set([...buildings.map(b => b.campus).filter(Boolean), ...nodes.map(n => n.campus).filter(Boolean)]).size,
+          buildings: totalBuildings,
           monitoredBuildings,
-          activeDeployments: dashboard.active_deployments || counts.deployments || 0,
+          activeDeployments: dashboard.active_deployments || 0,
           totalNodes,
           totalReadings: totalReadings || totalSamples,
           coveragePct,
-          frontendVersion: "1.3.0",
-          backendVersion: systemInfo.backend_version || "FastAPI activo",
-          apiVersion: systemInfo.api_version || "v1",
+          frontendVersion: systemInfo.frontendVersion || "React/Vite activo",
+          backendVersion: systemInfo.backendVersion || "FastAPI activo",
+          apiVersion: systemInfo.apiVersion || "v1",
           nodes: infraNodes,
           onlineNodes,
         },
@@ -430,9 +430,21 @@ export default function PageSettings({ role, setRole, settings, onLogout }) {
   const updateAiToggle = (key, val) =>
     setAiConfig(c => ({ ...c, [key]: { ...c[key], enabled: val } }));
 
-  const handleSave = () => {
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2800);
+  const handleSave = async () => {
+    try {
+      const response = await api.put("/settings", {
+        thresholds,
+        ai: aiConfig,
+        retention: S.retention,
+        tariff: S.tariff,
+      });
+      setRealSettings(current => ({ ...(current || S), ...response.data }));
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2800);
+    } catch (error) {
+      console.error("Settings save error:", error);
+      alert("No se pudieron guardar los cambios.");
+    }
   };
 
   const roleMap = {
@@ -476,7 +488,7 @@ export default function PageSettings({ role, setRole, settings, onLogout }) {
               animation: "fade-in-s .2s ease",
             }}>
               <Check size={13} color={T.green} />
-              Cambios guardados localmente
+              Cambios guardados en backend
             </div>
           )}
         </div>
@@ -627,7 +639,7 @@ export default function PageSettings({ role, setRole, settings, onLogout }) {
                     <div style={{ fontSize: 12.5, fontWeight: 500, color: T.txt, marginBottom: 2 }}>{it.label}</div>
                     <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                       <Chip variant="accent">{it.model}</Chip>
-                      <span style={{ fontSize: 10.5, color: T.muted }}>{it.version}</span>
+                      {it.version && <span style={{ fontSize: 10.5, color: T.muted }}>{it.version}</span>}
                     </div>
                   </div>
                   <div onClick={() => updateAiToggle(it.key, !aiConfig[it.key].enabled)} style={{
@@ -835,12 +847,10 @@ export default function PageSettings({ role, setRole, settings, onLogout }) {
                 Versiones del sistema
               </div>
               {[
-                { icon: Globe,  label: "Frontend (React)",     value: S.system.frontendVersion, status: "ok"      },
-                { icon: Server, label: "Backend (FastAPI)",    value: S.system.backendVersion,  status: "offline" },
-                { icon: Cpu,    label: "API version",          value: S.system.apiVersion,      status: "warning" },
-                { icon: Cpu,    label: "Firmware nodo N001",   value: "v1.4.2",                 status: "ok"      },
-                { icon: Cpu,    label: "Firmware nodo N002",   value: "v1.4.2",                 status: "ok"      },
-                { icon: Database,label:"SQLite edge buffer",   value: "Activo",                 status: "ok"      },
+                { icon: Globe,  label: "Frontend",        value: S.system.frontendVersion, status: "ok" },
+                { icon: Server, label: "Backend",         value: S.system.backendVersion,  status: "ok" },
+                { icon: Cpu,    label: "API",             value: S.system.apiVersion,      status: "ok" },
+                { icon: Database,label:"Buffer edge",     value: S.retention.bufferRecords > 0 ? `${S.retention.bufferRecords} pendientes` : "Sin pendientes", status: S.retention.bufferRecords > 0 ? "warning" : "ok" },
               ].map((r, i) => (
                 <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: `1px solid ${T.borderS}` }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
@@ -858,17 +868,14 @@ export default function PageSettings({ role, setRole, settings, onLogout }) {
 
               {/* Node status compact */}
               <div style={{ marginTop: 14, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-                {[
-                  { id: "N001", ip: "100.64.1.10", status: "online", last: "2 min" },
-                  { id: "N002", ip: "100.64.1.11", status: "online", last: "5 min" },
-                ].map(n => (
+                {(nodesRes.status === "fulfilled" ? nodesRes.value.data : []).map(n => (
                   <div key={n.id} style={{ background: T.surfHi, border: `1px solid rgba(34,197,94,.15)`, borderRadius: 7, padding: "10px 12px" }}>
                     <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
                       <span style={{ fontSize: 12, fontWeight: 700, color: T.txt }}>{n.id}</span>
                       <StatusDot status={n.status} />
                     </div>
                     <div style={{ fontSize: 10.5, color: T.muted, fontFamily: "monospace" }}>{n.ip}</div>
-                    <div style={{ fontSize: 10.5, color: T.muted, marginTop: 2 }}>Sync: {n.last}</div>
+                    <div style={{ fontSize: 10.5, color: T.muted, marginTop: 2 }}>Sync: {n.last_sync ? new Date(n.last_sync).toLocaleString("es-MX") : "Sin sincronía"}</div>
                   </div>
                 ))}
               </div>
