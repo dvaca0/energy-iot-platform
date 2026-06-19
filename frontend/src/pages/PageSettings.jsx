@@ -89,8 +89,8 @@ const DEFAULT_SETTINGS = {
     minHistoryDays:   7,
   },
   system: {
-    campuses: 0,
-    buildings: 0,
+    campuses: delegations.length,
+    buildings: totalBuildings,
     monitoredBuildings:2,
     activeDeployments: 2,
     totalNodes:        2,
@@ -348,8 +348,8 @@ export default function PageSettings({ role, setRole, settings, onLogout }) {
           .map(n => String(n.building).trim())
       );
 
-      const monitoredBuildings = activeNodeBuildingNames.size || Number(dashboard.active_deployments || 0);
-      const totalBuildings = orgBuildings.length || buildings.length;
+      const monitoredBuildings = activeNodeBuildingNames.size;
+      const totalBuildings = Math.max(orgBuildings.length, buildings.length);
 
       const totalReadings = nodes.reduce((sum, n) => sum + Number(n.samples || 0), 0);
 
