@@ -89,8 +89,8 @@ const DEFAULT_SETTINGS = {
     minHistoryDays:   7,
   },
   system: {
-    campuses: delegations.length,
-    buildings: totalBuildings,
+    campuses: 0,
+    buildings: 0,
     monitoredBuildings:2,
     activeDeployments: 2,
     totalNodes:        2,
@@ -402,7 +402,7 @@ export default function PageSettings({ role, setRole, settings, onLogout }) {
         },
         system: {
           campuses: new Set([...buildings.map(b => b.campus).filter(Boolean), ...nodes.map(n => n.campus).filter(Boolean)]).size,
-          buildings: totalBuildings,
+          buildings: 0,
           monitoredBuildings,
           activeDeployments: Number(dashboard.active_deployments || monitoredBuildings || 0),
           totalNodes,
