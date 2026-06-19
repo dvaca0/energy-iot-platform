@@ -316,6 +316,7 @@ export default function PageSettings({ role, setRole, settings, onLogout }) {
         delegationsRes,
         orgBuildingsRes,
         unitsRes,
+        cfeStatusRes,
       ] = await Promise.allSettled([
         api.get("/nodes"),
         api.get("/buildings"),
@@ -324,6 +325,7 @@ export default function PageSettings({ role, setRole, settings, onLogout }) {
         api.get("/org/delegations"),
         api.get("/org/buildings"),
         api.get("/org/units"),
+        api.get("/settings/cfe/status"),
       ]);
 
       const nodes = nodesRes.status === "fulfilled" ? nodesRes.value.data || [] : [];
@@ -333,6 +335,7 @@ export default function PageSettings({ role, setRole, settings, onLogout }) {
       const delegations = delegationsRes.status === "fulfilled" ? delegationsRes.value.data || [] : [];
       const orgBuildings = orgBuildingsRes.status === "fulfilled" ? orgBuildingsRes.value.data || [] : [];
       const units = unitsRes.status === "fulfilled" ? unitsRes.value.data || [] : [];
+      const cfeStatus = cfeStatusRes.status === "fulfilled" ? cfeStatusRes.value.data || {} : {};
 
       const tariffs = system.tariff || {};
       const thresholdsFromApi = system.thresholds || {};
@@ -379,13 +382,13 @@ export default function PageSettings({ role, setRole, settings, onLogout }) {
         },
         tariff: {
           active: tariffs.active || tariffs.name || "GDMTH",
-          source: tariffs.source || "Manual fallback",
+          source: cfeStatus.source || tariffs.source || "Manual fallback",
           baseRate: tariffs.baseRate ?? 1.0375,
           interRate: tariffs.interRate ?? 1.8463,
           peakRate: tariffs.peakRate ?? 2.0789,
           lastUpdate: tariffs.lastUpdate || "Configuración persistente local",
-          apiStatus: tariffs.apiStatus || "Pendiente",
-          apiNote: tariffs.apiNote || "Scraper/API CFE pendiente",
+          apiStatus: cfeStatus.label || tariffs.apiStatus || "Pendiente",
+          apiNote: cfeStatus.enabled ? "Scraper CFE configurado" : (tariffs.apiNote || "Scraper/API CFE pendiente"),
         },
         retention: {
           edgeDays: 7,
