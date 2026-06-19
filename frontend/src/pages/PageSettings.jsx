@@ -89,8 +89,8 @@ const DEFAULT_SETTINGS = {
     minHistoryDays:   7,
   },
   system: {
-    campuses:          3,
-    buildings:         8,
+    campuses: delegations.length,
+    buildings: totalBuildings,
     monitoredBuildings:2,
     activeDeployments: 2,
     totalNodes:        2,
@@ -314,40 +314,47 @@ export default function PageSettings({ role, setRole, settings, onLogout }) {
         buildingsRes,
         dashboardRes,
         systemRes,
-        infraRes,
-        campusesRes,
+        delegationsRes,
+        orgBuildingsRes,
       ] = await Promise.allSettled([
         api.get("/nodes"),
         api.get("/buildings"),
         api.get("/dashboard/summary"),
         api.get("/settings"),
-        api.get("/infra"),
-        api.get("/metrics/campuses"),
+        api.get("/org/delegations"),
+        api.get("/org/buildings"),
       ]);
 
       const nodes = nodesRes.status === "fulfilled" ? nodesRes.value.data || [] : [];
       const buildings = buildingsRes.status === "fulfilled" ? buildingsRes.value.data || [] : [];
       const dashboard = dashboardRes.status === "fulfilled" ? dashboardRes.value.data || {} : {};
       const system = systemRes.status === "fulfilled" ? systemRes.value.data || {} : {};
-      const infra = infraRes.status === "fulfilled" ? infraRes.value.data || {} : {};
-      const campuses = campusesRes.status === "fulfilled" ? campusesRes.value.data || [] : [];
+      const delegations = delegationsRes.status === "fulfilled" ? delegationsRes.value.data || [] : [];
+      const orgBuildings = orgBuildingsRes.status === "fulfilled" ? orgBuildingsRes.value.data || [] : [];
 
       const tariffs = system.tariff || {};
-      const counts = system.counts || {};
       const thresholdsFromApi = system.thresholds || {};
+      const retentionFromApi = system.retention || {};
+      const aiFromApi = system.ai || {};
       const systemInfo = system.system || {};
-      const infraSummary = infra.summary || {};
-      const infraNodes = infra.nodes || nodes;
 
       const onlineNodes = nodes.filter(n => n.status === "online").length;
       const totalNodes = nodes.length;
-      const monitoredBuildings = buildings.filter(b => b.node || b.status === "monitored" || b.status === "online").length;
-      const totalBuildings = buildings.length;
-      const totalReadings =
-        Number(counts.readings || counts.total_readings || infraSummary.total_readings || dashboard.total_readings || 0);
+
+      // Current real monitoring coverage: active online node/building assignments.
+      const activeNodeBuildingNames = new Set(
+        nodes
+          .filter(n => n.status === "online" && n.building)
+          .map(n => String(n.building).trim())
+      );
+
+      const monitoredBuildings = activeNodeBuildingNames.size || Number(dashboard.active_deployments || 0);
+      const totalBuildings = orgBuildings.length || buildings.length;
+
+      const totalReadings = nodes.reduce((sum, n) => sum + Number(n.samples || 0), 0);
 
       const pendingBuffer = nodes.reduce((sum, n) => sum + Number(n.buffer_pending || n.buffer || 0), 0);
-      const totalSamples = nodes.reduce((sum, n) => sum + Number(n.samples || 0), 0);
+
       const coveragePct = totalBuildings > 0 ? Math.round((monitoredBuildings / totalBuildings) * 100) : 0;
 
       setRealSettings({
@@ -397,9 +404,9 @@ export default function PageSettings({ role, setRole, settings, onLogout }) {
           campuses: new Set([...buildings.map(b => b.campus).filter(Boolean), ...nodes.map(n => n.campus).filter(Boolean)]).size,
           buildings: totalBuildings,
           monitoredBuildings,
-          activeDeployments: dashboard.active_deployments || 0,
+          activeDeployments: Number(dashboard.active_deployments || monitoredBuildings || 0),
           totalNodes,
-          totalReadings: totalReadings || totalSamples,
+          totalReadings,
           coveragePct,
           frontendVersion: systemInfo.frontendVersion || "React/Vite activo",
           backendVersion: systemInfo.backendVersion || "FastAPI activo",
@@ -639,7 +646,7 @@ export default function PageSettings({ role, setRole, settings, onLogout }) {
                     <div style={{ fontSize: 12.5, fontWeight: 500, color: T.txt, marginBottom: 2 }}>{it.label}</div>
                     <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                       <Chip variant="accent">{it.model}</Chip>
-                      {it.version && <span style={{ fontSize: 10.5, color: T.muted }}>{it.version}</span>}
+                      {it.version && {it.version && <span style={{ fontSize: 10.5, color: T.muted }}>{it.version}</span>}}
                     </div>
                   </div>
                   <div onClick={() => updateAiToggle(it.key, !aiConfig[it.key].enabled)} style={{
@@ -869,12 +876,12 @@ export default function PageSettings({ role, setRole, settings, onLogout }) {
               {/* Node status compact */}
               <div style={{ marginTop: 14, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
                 {(S.system.nodes || []).map(n => (
-                  <div key={n.id} style={{ background: T.surfHi, border: `1px solid rgba(34,197,94,.15)`, borderRadius: 7, padding: "10px 12px" }}>
+                  <div key={n.id} style={{ background: T.surfHi, border: `1px solid ${n.status === "online" ? "rgba(34,197,94,.15)" : "rgba(92,88,128,.25)"}`, borderRadius: 7, padding: "10px 12px" }}>
                     <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
                       <span style={{ fontSize: 12, fontWeight: 700, color: T.txt }}>{n.id}</span>
                       <StatusDot status={n.status} />
                     </div>
-                    <div style={{ fontSize: 10.5, color: T.muted, fontFamily: "monospace" }}>{n.ip}</div>
+                    <div style={{ fontSize: 10.5, color: T.muted, fontFamily: "monospace" }}>{n.ip || "Sin IP"}</div>
                     <div style={{ fontSize: 10.5, color: T.muted, marginTop: 2 }}>Sync: {n.last_sync ? new Date(n.last_sync).toLocaleString("es-MX") : "Sin sincronía"}</div>
                   </div>
                 ))}
