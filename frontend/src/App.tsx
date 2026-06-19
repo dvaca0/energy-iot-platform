@@ -2248,13 +2248,13 @@ const App = () => {
   }, []);
 
   const [page, setPage] = useState('dashboard');
+  const [role, setRole] = useState(() => localStorage.getItem("energy_role") || 'Administrador');
 
   useEffect(() => {
     if (!canAccessPage(role, page)) {
       setPage(firstAllowedPage(role));
     }
   }, [role, page]);
-  const [role, setRole] = useState(() => localStorage.getItem("energy_role") || 'Administrador');
 
   const handleLogin = (loginRole) => {
     setRole(loginRole);
