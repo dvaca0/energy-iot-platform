@@ -1,10 +1,11 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   User, Mail, Shield, MapPin, Clock, LogOut, Check, X, Minus,
   Zap, AlertTriangle, DollarSign, Database, BrainCircuit,
   Building2, Globe, Server, Activity, RefreshCw, Save,
   ChevronDown, Info, Cpu, Radio, Gauge, Lock,
 } from "lucide-react";
+import { api } from "../services/api";
 
 // ─── Design tokens ────────────────────────────────────────────────────────────
 const T = {
@@ -295,13 +296,133 @@ const CoverageBar = ({ pct }) => (
 
 // ─── Main component ───────────────────────────────────────────────────────────
 export default function PageSettings({ role, setRole, settings, onLogout }) {
-  const S = settings || DEFAULT_SETTINGS;
+  const [realSettings, setRealSettings] = useState(settings || null);
+  const S = realSettings || settings || DEFAULT_SETTINGS;
+
+  useEffect(() => {
+    const sessionEmail = localStorage.getItem("energy_user") || "admin@ucol.mx";
+    const sessionRole = localStorage.getItem("energy_role") || role || "Administrador";
+    const sessionStarted = localStorage.getItem("energy_session_started") || new Date().toLocaleString("es-MX");
+
+    if (!localStorage.getItem("energy_session_started")) {
+      localStorage.setItem("energy_session_started", sessionStarted);
+    }
+
+    const load = async () => {
+      const [
+        nodesRes,
+        buildingsRes,
+        dashboardRes,
+        systemRes,
+        infraRes,
+        campusesRes,
+      ] = await Promise.allSettled([
+        api.get("/nodes"),
+        api.get("/buildings"),
+        api.get("/dashboard/summary"),
+        api.get("/system/settings"),
+        api.get("/infrastructure/status"),
+        api.get("/metrics/campuses"),
+      ]);
+
+      const nodes = nodesRes.status === "fulfilled" ? nodesRes.value.data || [] : [];
+      const buildings = buildingsRes.status === "fulfilled" ? buildingsRes.value.data || [] : [];
+      const dashboard = dashboardRes.status === "fulfilled" ? dashboardRes.value.data || {} : {};
+      const system = systemRes.status === "fulfilled" ? systemRes.value.data || {} : {};
+      const infra = infraRes.status === "fulfilled" ? infraRes.value.data || {} : {};
+      const campuses = campusesRes.status === "fulfilled" ? campusesRes.value.data || [] : [];
+
+      const tariffs = system.tariffs || {};
+      const counts = system.counts || {};
+      const thresholdsFromApi = system.thresholds || {};
+      const systemInfo = system.system || {};
+      const infraSummary = infra.summary || {};
+      const infraNodes = infra.nodes || nodes;
+
+      const onlineNodes = nodes.filter(n => n.status === "online").length;
+      const totalNodes = nodes.length;
+      const monitoredBuildings = buildings.filter(b => b.node || b.status === "monitored" || b.status === "online").length;
+      const totalBuildings = buildings.length;
+      const totalReadings =
+        Number(counts.readings || counts.total_readings || infraSummary.total_readings || dashboard.total_readings || 0);
+
+      const pendingBuffer = nodes.reduce((sum, n) => sum + Number(n.buffer_pending || n.buffer || 0), 0);
+      const totalSamples = nodes.reduce((sum, n) => sum + Number(n.samples || 0), 0);
+      const coveragePct = totalBuildings > 0 ? Math.round((monitoredBuildings / totalBuildings) * 100) : 0;
+
+      setRealSettings({
+        user: {
+          name: sessionEmail.split("@")[0],
+          email: sessionEmail,
+          role: sessionRole,
+          campus: "Universidad de Colima",
+          lastLogin: sessionStarted,
+          sessionStatus: "Activa",
+        },
+        thresholds: {
+          minPowerFactor: thresholdsFromApi.min_power_factor ?? thresholdsFromApi.minPowerFactor ?? 0.90,
+          maxCurrent: thresholdsFromApi.max_current ?? thresholdsFromApi.maxCurrent ?? 200,
+          voltageDeviation: thresholdsFromApi.voltage_deviation ?? thresholdsFromApi.voltageDeviation ?? 10,
+          freqDeviation: thresholdsFromApi.frequency_deviation ?? thresholdsFromApi.freqDeviation ?? 0.5,
+          costAnomaly: thresholdsFromApi.cost_anomaly ?? thresholdsFromApi.costAnomaly ?? 30,
+          demandSpike: thresholdsFromApi.demand_spike ?? thresholdsFromApi.demandSpike ?? 25,
+          nodeOfflineTimeout: thresholdsFromApi.node_offline_timeout ?? thresholdsFromApi.nodeOfflineTimeout ?? 300,
+        },
+        tariff: {
+          active: tariffs.active || tariffs.name || "GDMTH",
+          source: tariffs.source || "Manual fallback",
+          baseRate: tariffs.base_rate ?? tariffs.base ?? 1.0375,
+          interRate: tariffs.intermediate_rate ?? tariffs.intermediate ?? 1.8463,
+          peakRate: tariffs.peak_rate ?? tariffs.peak ?? 2.0789,
+          lastUpdate: tariffs.last_update || systemInfo.tariff_last_update || "Pendiente de API CFE",
+          apiStatus: tariffs.api_status || "Pendiente",
+          apiNote: tariffs.api_note || "Scraper/API CFE pendiente",
+        },
+        retention: {
+          edgeDays: 7,
+          backendDays: "Ilimitado",
+          readingInterval: 15,
+          syncInterval: 60,
+          bufferRecords: pendingBuffer,
+          bufferStatus: pendingBuffer > 0 ? "Pendiente" : "Sin pendientes",
+        },
+        ai: {
+          forecasting: { enabled: true, model: "Random Forest", version: "activo" },
+          anomaly: { enabled: true, model: "Isolation Forest", version: "activo" },
+          clustering: { enabled: true, model: "K-Means", version: "activo" },
+          confidence: "Backtesting cuando existe historial suficiente",
+          minHistoryDays: 7,
+        },
+        system: {
+          campuses: counts.campuses || campuses.length || 0,
+          buildings: counts.buildings || totalBuildings,
+          monitoredBuildings,
+          activeDeployments: dashboard.active_deployments || counts.deployments || 0,
+          totalNodes,
+          totalReadings: totalReadings || totalSamples,
+          coveragePct,
+          frontendVersion: "1.3.0",
+          backendVersion: systemInfo.backend_version || "FastAPI activo",
+          apiVersion: systemInfo.api_version || "v1",
+          nodes: infraNodes,
+          onlineNodes,
+        },
+      });
+    };
+
+    load().catch(error => console.error("Settings real data load error:", error));
+  }, [role]);
 
   // Local editable state
   const [thresholds, setThresholds] = useState({ ...S.thresholds });
   const [aiConfig,   setAiConfig]   = useState({ ...S.ai });
   const [saved,      setSaved]      = useState(false);
   const [roleOpen,   setRoleOpen]   = useState(false);
+
+  useEffect(() => {
+    setThresholds({ ...S.thresholds });
+    setAiConfig({ ...S.ai });
+  }, [realSettings]);
 
   const updateThreshold = (key, val) =>
     setThresholds(t => ({ ...t, [key]: parseFloat(val) }));
@@ -355,7 +476,7 @@ export default function PageSettings({ role, setRole, settings, onLogout }) {
               animation: "fade-in-s .2s ease",
             }}>
               <Check size={13} color={T.green} />
-              Cambios guardados correctamente
+              Cambios guardados localmente
             </div>
           )}
         </div>
@@ -385,7 +506,7 @@ export default function PageSettings({ role, setRole, settings, onLogout }) {
                 border: "1px solid rgba(139,92,246,.3)",
                 display: "flex", alignItems: "center", justifyContent: "center",
                 fontSize: 16, fontWeight: 700, color: T.accentL, flexShrink: 0, letterSpacing: 0.5,
-              }}>UC</div>
+              }}>{(S.user.email || "U").slice(0,2).toUpperCase()}</div>
               <div>
                 <div style={{ fontSize: 14.5, fontWeight: 700, color: T.txt }}>{S.user.name}</div>
                 <div style={{ fontSize: 11.5, color: T.muted, marginTop: 2 }}>{S.user.email}</div>
