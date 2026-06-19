@@ -2018,7 +2018,7 @@ const PageSettings = ({ role, setRole }) => {
             <div style={{fontSize:26,fontWeight:900,color:PURPLE_L}}>GDMTH</div>
             <div style={{fontSize:12,color:'#7b739e'}}>Gran Demanda en Media Tensión H · {tariffs.month || "JUN-26"}</div>
           </div>
-          <Badge color="#a78bfa">{tariffs.source || "{cfeStatus?.label || "Manual fallback"}"}</Badge>
+          <Badge color={cfeStatus?.status === "ready" ? "#22c55e" : "#f59e0b"}>{cfeStatus?.label || tariffs.source || "Manual fallback"}</Badge>
         </div>
 
         {[
