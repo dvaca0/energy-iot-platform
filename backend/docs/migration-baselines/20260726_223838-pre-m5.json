@@ -1,0 +1,111 @@
+{
+  "baseline": {
+    "generated_at": "2026-07-26T22:38:36.828367Z",
+    "database": "/home/manager/energy-platform/backend/energy_platform.db",
+    "counts": {
+      "energy_readings": 225636,
+      "nodes": 3,
+      "deployments": 2,
+      "buildings": 1
+    },
+    "rows_per_node": [
+      {
+        "node_id": 1,
+        "code": "N001",
+        "rows": 101943
+      },
+      {
+        "node_id": 2,
+        "code": "N002",
+        "rows": 0
+      },
+      {
+        "node_id": 3,
+        "code": "N003",
+        "rows": 123693
+      }
+    ],
+    "rows_per_deployment": [
+      {
+        "deployment_id": 4,
+        "rows": 101943
+      },
+      {
+        "deployment_id": 5,
+        "rows": 123693
+      }
+    ],
+    "rows_per_building": [
+      {
+        "building_id": 8,
+        "rows": 225636
+      }
+    ],
+    "rows_per_context": [
+      {
+        "context": "production",
+        "rows": 225636
+      }
+    ],
+    "null_counts": {
+      "deployment_id_null": 0,
+      "building_id_null": 0,
+      "electrical_panel_id_null": 225636,
+      "ingested_at_null": 225636
+    },
+    "captured_at": {
+      "min": "2026-05-13 14:20:15.325000",
+      "max": "2026-07-26 22:37:40.384000"
+    },
+    "measurement_totals": {
+      "energy_kwh": {
+        "total": 1998221930.000671,
+        "non_null_rows": 101283
+      },
+      "power_kw": {
+        "total": 4600344.960367,
+        "non_null_rows": 225636
+      }
+    },
+    "measurement_fields_absent": [
+      "apparent_power_va",
+      "reactive_power_var"
+    ]
+  },
+  "rebuild_verification": {
+    "performed": true,
+    "common_columns": [
+      "id",
+      "node_id",
+      "building_id",
+      "deployment_id",
+      "timestamp",
+      "voltage",
+      "current",
+      "power_kw",
+      "energy_kwh",
+      "power_factor",
+      "frequency_hz",
+      "phase_a_voltage",
+      "phase_b_voltage",
+      "phase_c_voltage",
+      "phase_a_current",
+      "phase_b_current",
+      "phase_c_current"
+    ],
+    "columns_only_in_new": [
+      "electrical_panel_id",
+      "context",
+      "ingested_at"
+    ],
+    "bounded_by_max_id": 225594,
+    "row_count_original": 225594,
+    "row_count_rebuilt_bounded": 225594,
+    "exhaustive_rows_in_rebuilt_not_in_original": 0,
+    "exhaustive_rows_in_original_not_in_rebuilt": 0,
+    "sample_size": 500,
+    "sample_mismatches": [],
+    "identical": true
+  },
+  "body_sha256": "37df65734be34e6104e8f950fcf9169d012623bd88cd527e71c61dd994ea0232"
+}

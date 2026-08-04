@@ -1,0 +1,876 @@
+{
+  "report": {
+    "examined": 225832,
+    "agreements": 3335,
+    "disagreements": 222497,
+    "ambiguous": 0,
+    "by_reason": {
+      "ATTRIBUTED_IN_WINDOW": 102104,
+      "BENCH_NODE": 123728
+    },
+    "by_flag": {
+      "OPEN_ENDED_DEPLOYMENT": 102104,
+      "PLACEHOLDER_BUILDING": 102104
+    },
+    "by_diff_class": {
+      "ATTRIBUTION_DIFFERS": 32,
+      "CONTEXT_ONLY": 120361,
+      "PANEL_ENRICHED": 102104
+    },
+    "attribution_differs": 32,
+    "groups": [
+      {
+        "node_code": "N003",
+        "reason": "BENCH_NODE",
+        "diff_class": "CONTEXT_ONLY",
+        "differing_fields": [
+          "context"
+        ],
+        "current_context": "laboratory",
+        "resolver_context": "bench",
+        "current_deployment": null,
+        "resolver_deployment": null,
+        "current_building": null,
+        "resolver_building": null,
+        "current_panel": null,
+        "resolver_panel": null,
+        "flags": [],
+        "rows": 120361,
+        "min_reading_id": 90816,
+        "max_reading_id": 216020,
+        "min_captured_at": "2026-05-13 14:20:15.325000",
+        "max_captured_at": "2026-06-20 21:51:33.531000",
+        "example_reading_id": 90816
+      },
+      {
+        "node_code": "N001",
+        "reason": "ATTRIBUTED_IN_WINDOW",
+        "diff_class": "PANEL_ENRICHED",
+        "differing_fields": [
+          "panel"
+        ],
+        "current_context": "production",
+        "resolver_context": "production",
+        "current_deployment": 4,
+        "resolver_deployment": 4,
+        "current_building": 8,
+        "resolver_building": 8,
+        "current_panel": null,
+        "resolver_panel": 8,
+        "flags": [
+          "PLACEHOLDER_BUILDING",
+          "OPEN_ENDED_DEPLOYMENT"
+        ],
+        "rows": 102104,
+        "min_reading_id": 1,
+        "max_reading_id": 225832,
+        "min_captured_at": "2026-06-14 21:57:34.692460",
+        "max_captured_at": "2026-07-26 23:17:55.396000",
+        "example_reading_id": 1
+      },
+      {
+        "node_code": "N003",
+        "reason": "BENCH_NODE",
+        "diff_class": "ATTRIBUTION_DIFFERS",
+        "differing_fields": [
+          "deployment",
+          "building",
+          "context"
+        ],
+        "current_context": "production",
+        "resolver_context": "bench",
+        "current_deployment": 5,
+        "resolver_deployment": null,
+        "current_building": 8,
+        "resolver_building": null,
+        "current_panel": null,
+        "resolver_panel": null,
+        "flags": [],
+        "rows": 32,
+        "min_reading_id": 225648,
+        "max_reading_id": 225783,
+        "min_captured_at": "2026-07-26 22:40:16.000000",
+        "max_captured_at": "2026-07-26 23:06:29.000000",
+        "example_reading_id": 225648
+      }
+    ],
+    "sample_disagreements": [
+      {
+        "reading_id": 1,
+        "node_id": 1,
+        "node_code": "N001",
+        "captured_at": "2026-06-14 21:57:34.692460",
+        "current_context": "production",
+        "resolver_context": "production",
+        "current_deployment": 4,
+        "resolver_deployment": 4,
+        "current_building": 8,
+        "resolver_building": 8,
+        "current_panel": null,
+        "resolver_panel": 8,
+        "reason": "ATTRIBUTED_IN_WINDOW",
+        "flags": [
+          "PLACEHOLDER_BUILDING",
+          "OPEN_ENDED_DEPLOYMENT"
+        ],
+        "candidates": [],
+        "differing_fields": [
+          "panel"
+        ],
+        "diff_class": "PANEL_ENRICHED"
+      },
+      {
+        "reading_id": 2,
+        "node_id": 1,
+        "node_code": "N001",
+        "captured_at": "2026-06-14 22:03:13.575694",
+        "current_context": "production",
+        "resolver_context": "production",
+        "current_deployment": 4,
+        "resolver_deployment": 4,
+        "current_building": 8,
+        "resolver_building": 8,
+        "current_panel": null,
+        "resolver_panel": 8,
+        "reason": "ATTRIBUTED_IN_WINDOW",
+        "flags": [
+          "PLACEHOLDER_BUILDING",
+          "OPEN_ENDED_DEPLOYMENT"
+        ],
+        "candidates": [],
+        "differing_fields": [
+          "panel"
+        ],
+        "diff_class": "PANEL_ENRICHED"
+      },
+      {
+        "reading_id": 3,
+        "node_id": 1,
+        "node_code": "N001",
+        "captured_at": "2026-06-14 22:04:01.853677",
+        "current_context": "production",
+        "resolver_context": "production",
+        "current_deployment": 4,
+        "resolver_deployment": 4,
+        "current_building": 8,
+        "resolver_building": 8,
+        "current_panel": null,
+        "resolver_panel": 8,
+        "reason": "ATTRIBUTED_IN_WINDOW",
+        "flags": [
+          "PLACEHOLDER_BUILDING",
+          "OPEN_ENDED_DEPLOYMENT"
+        ],
+        "candidates": [],
+        "differing_fields": [
+          "panel"
+        ],
+        "diff_class": "PANEL_ENRICHED"
+      },
+      {
+        "reading_id": 4,
+        "node_id": 1,
+        "node_code": "N001",
+        "captured_at": "2026-06-14 22:04:03.433710",
+        "current_context": "production",
+        "resolver_context": "production",
+        "current_deployment": 4,
+        "resolver_deployment": 4,
+        "current_building": 8,
+        "resolver_building": 8,
+        "current_panel": null,
+        "resolver_panel": 8,
+        "reason": "ATTRIBUTED_IN_WINDOW",
+        "flags": [
+          "PLACEHOLDER_BUILDING",
+          "OPEN_ENDED_DEPLOYMENT"
+        ],
+        "candidates": [],
+        "differing_fields": [
+          "panel"
+        ],
+        "diff_class": "PANEL_ENRICHED"
+      },
+      {
+        "reading_id": 5,
+        "node_id": 1,
+        "node_code": "N001",
+        "captured_at": "2026-06-14 22:05:40.811518",
+        "current_context": "production",
+        "resolver_context": "production",
+        "current_deployment": 4,
+        "resolver_deployment": 4,
+        "current_building": 8,
+        "resolver_building": 8,
+        "current_panel": null,
+        "resolver_panel": 8,
+        "reason": "ATTRIBUTED_IN_WINDOW",
+        "flags": [
+          "PLACEHOLDER_BUILDING",
+          "OPEN_ENDED_DEPLOYMENT"
+        ],
+        "candidates": [],
+        "differing_fields": [
+          "panel"
+        ],
+        "diff_class": "PANEL_ENRICHED"
+      },
+      {
+        "reading_id": 6,
+        "node_id": 1,
+        "node_code": "N001",
+        "captured_at": "2026-06-14 22:08:05.717907",
+        "current_context": "production",
+        "resolver_context": "production",
+        "current_deployment": 4,
+        "resolver_deployment": 4,
+        "current_building": 8,
+        "resolver_building": 8,
+        "current_panel": null,
+        "resolver_panel": 8,
+        "reason": "ATTRIBUTED_IN_WINDOW",
+        "flags": [
+          "PLACEHOLDER_BUILDING",
+          "OPEN_ENDED_DEPLOYMENT"
+        ],
+        "candidates": [],
+        "differing_fields": [
+          "panel"
+        ],
+        "diff_class": "PANEL_ENRICHED"
+      },
+      {
+        "reading_id": 7,
+        "node_id": 1,
+        "node_code": "N001",
+        "captured_at": "2026-06-14 22:11:19.318269",
+        "current_context": "production",
+        "resolver_context": "production",
+        "current_deployment": 4,
+        "resolver_deployment": 4,
+        "current_building": 8,
+        "resolver_building": 8,
+        "current_panel": null,
+        "resolver_panel": 8,
+        "reason": "ATTRIBUTED_IN_WINDOW",
+        "flags": [
+          "PLACEHOLDER_BUILDING",
+          "OPEN_ENDED_DEPLOYMENT"
+        ],
+        "candidates": [],
+        "differing_fields": [
+          "panel"
+        ],
+        "diff_class": "PANEL_ENRICHED"
+      },
+      {
+        "reading_id": 8,
+        "node_id": 1,
+        "node_code": "N001",
+        "captured_at": "2026-06-14 22:13:03.658115",
+        "current_context": "production",
+        "resolver_context": "production",
+        "current_deployment": 4,
+        "resolver_deployment": 4,
+        "current_building": 8,
+        "resolver_building": 8,
+        "current_panel": null,
+        "resolver_panel": 8,
+        "reason": "ATTRIBUTED_IN_WINDOW",
+        "flags": [
+          "PLACEHOLDER_BUILDING",
+          "OPEN_ENDED_DEPLOYMENT"
+        ],
+        "candidates": [],
+        "differing_fields": [
+          "panel"
+        ],
+        "diff_class": "PANEL_ENRICHED"
+      },
+      {
+        "reading_id": 9,
+        "node_id": 1,
+        "node_code": "N001",
+        "captured_at": "2026-06-14 22:14:25.457789",
+        "current_context": "production",
+        "resolver_context": "production",
+        "current_deployment": 4,
+        "resolver_deployment": 4,
+        "current_building": 8,
+        "resolver_building": 8,
+        "current_panel": null,
+        "resolver_panel": 8,
+        "reason": "ATTRIBUTED_IN_WINDOW",
+        "flags": [
+          "PLACEHOLDER_BUILDING",
+          "OPEN_ENDED_DEPLOYMENT"
+        ],
+        "candidates": [],
+        "differing_fields": [
+          "panel"
+        ],
+        "diff_class": "PANEL_ENRICHED"
+      },
+      {
+        "reading_id": 10,
+        "node_id": 1,
+        "node_code": "N001",
+        "captured_at": "2026-06-14 22:23:22.281115",
+        "current_context": "production",
+        "resolver_context": "production",
+        "current_deployment": 4,
+        "resolver_deployment": 4,
+        "current_building": 8,
+        "resolver_building": 8,
+        "current_panel": null,
+        "resolver_panel": 8,
+        "reason": "ATTRIBUTED_IN_WINDOW",
+        "flags": [
+          "PLACEHOLDER_BUILDING",
+          "OPEN_ENDED_DEPLOYMENT"
+        ],
+        "candidates": [],
+        "differing_fields": [
+          "panel"
+        ],
+        "diff_class": "PANEL_ENRICHED"
+      },
+      {
+        "reading_id": 11,
+        "node_id": 1,
+        "node_code": "N001",
+        "captured_at": "2026-06-14 22:32:59.143360",
+        "current_context": "production",
+        "resolver_context": "production",
+        "current_deployment": 4,
+        "resolver_deployment": 4,
+        "current_building": 8,
+        "resolver_building": 8,
+        "current_panel": null,
+        "resolver_panel": 8,
+        "reason": "ATTRIBUTED_IN_WINDOW",
+        "flags": [
+          "PLACEHOLDER_BUILDING",
+          "OPEN_ENDED_DEPLOYMENT"
+        ],
+        "candidates": [],
+        "differing_fields": [
+          "panel"
+        ],
+        "diff_class": "PANEL_ENRICHED"
+      },
+      {
+        "reading_id": 12,
+        "node_id": 1,
+        "node_code": "N001",
+        "captured_at": "2026-06-14 22:33:17.372267",
+        "current_context": "production",
+        "resolver_context": "production",
+        "current_deployment": 4,
+        "resolver_deployment": 4,
+        "current_building": 8,
+        "resolver_building": 8,
+        "current_panel": null,
+        "resolver_panel": 8,
+        "reason": "ATTRIBUTED_IN_WINDOW",
+        "flags": [
+          "PLACEHOLDER_BUILDING",
+          "OPEN_ENDED_DEPLOYMENT"
+        ],
+        "candidates": [],
+        "differing_fields": [
+          "panel"
+        ],
+        "diff_class": "PANEL_ENRICHED"
+      },
+      {
+        "reading_id": 13,
+        "node_id": 1,
+        "node_code": "N001",
+        "captured_at": "2026-06-14 22:33:32.450694",
+        "current_context": "production",
+        "resolver_context": "production",
+        "current_deployment": 4,
+        "resolver_deployment": 4,
+        "current_building": 8,
+        "resolver_building": 8,
+        "current_panel": null,
+        "resolver_panel": 8,
+        "reason": "ATTRIBUTED_IN_WINDOW",
+        "flags": [
+          "PLACEHOLDER_BUILDING",
+          "OPEN_ENDED_DEPLOYMENT"
+        ],
+        "candidates": [],
+        "differing_fields": [
+          "panel"
+        ],
+        "diff_class": "PANEL_ENRICHED"
+      },
+      {
+        "reading_id": 14,
+        "node_id": 1,
+        "node_code": "N001",
+        "captured_at": "2026-06-14 22:33:47.609245",
+        "current_context": "production",
+        "resolver_context": "production",
+        "current_deployment": 4,
+        "resolver_deployment": 4,
+        "current_building": 8,
+        "resolver_building": 8,
+        "current_panel": null,
+        "resolver_panel": 8,
+        "reason": "ATTRIBUTED_IN_WINDOW",
+        "flags": [
+          "PLACEHOLDER_BUILDING",
+          "OPEN_ENDED_DEPLOYMENT"
+        ],
+        "candidates": [],
+        "differing_fields": [
+          "panel"
+        ],
+        "diff_class": "PANEL_ENRICHED"
+      },
+      {
+        "reading_id": 15,
+        "node_id": 1,
+        "node_code": "N001",
+        "captured_at": "2026-06-14 22:34:02.761765",
+        "current_context": "production",
+        "resolver_context": "production",
+        "current_deployment": 4,
+        "resolver_deployment": 4,
+        "current_building": 8,
+        "resolver_building": 8,
+        "current_panel": null,
+        "resolver_panel": 8,
+        "reason": "ATTRIBUTED_IN_WINDOW",
+        "flags": [
+          "PLACEHOLDER_BUILDING",
+          "OPEN_ENDED_DEPLOYMENT"
+        ],
+        "candidates": [],
+        "differing_fields": [
+          "panel"
+        ],
+        "diff_class": "PANEL_ENRICHED"
+      },
+      {
+        "reading_id": 16,
+        "node_id": 1,
+        "node_code": "N001",
+        "captured_at": "2026-06-14 22:34:17.867405",
+        "current_context": "production",
+        "resolver_context": "production",
+        "current_deployment": 4,
+        "resolver_deployment": 4,
+        "current_building": 8,
+        "resolver_building": 8,
+        "current_panel": null,
+        "resolver_panel": 8,
+        "reason": "ATTRIBUTED_IN_WINDOW",
+        "flags": [
+          "PLACEHOLDER_BUILDING",
+          "OPEN_ENDED_DEPLOYMENT"
+        ],
+        "candidates": [],
+        "differing_fields": [
+          "panel"
+        ],
+        "diff_class": "PANEL_ENRICHED"
+      },
+      {
+        "reading_id": 17,
+        "node_id": 1,
+        "node_code": "N001",
+        "captured_at": "2026-06-14 22:34:33.049680",
+        "current_context": "production",
+        "resolver_context": "production",
+        "current_deployment": 4,
+        "resolver_deployment": 4,
+        "current_building": 8,
+        "resolver_building": 8,
+        "current_panel": null,
+        "resolver_panel": 8,
+        "reason": "ATTRIBUTED_IN_WINDOW",
+        "flags": [
+          "PLACEHOLDER_BUILDING",
+          "OPEN_ENDED_DEPLOYMENT"
+        ],
+        "candidates": [],
+        "differing_fields": [
+          "panel"
+        ],
+        "diff_class": "PANEL_ENRICHED"
+      },
+      {
+        "reading_id": 18,
+        "node_id": 1,
+        "node_code": "N001",
+        "captured_at": "2026-06-14 22:34:48.154261",
+        "current_context": "production",
+        "resolver_context": "production",
+        "current_deployment": 4,
+        "resolver_deployment": 4,
+        "current_building": 8,
+        "resolver_building": 8,
+        "current_panel": null,
+        "resolver_panel": 8,
+        "reason": "ATTRIBUTED_IN_WINDOW",
+        "flags": [
+          "PLACEHOLDER_BUILDING",
+          "OPEN_ENDED_DEPLOYMENT"
+        ],
+        "candidates": [],
+        "differing_fields": [
+          "panel"
+        ],
+        "diff_class": "PANEL_ENRICHED"
+      },
+      {
+        "reading_id": 19,
+        "node_id": 1,
+        "node_code": "N001",
+        "captured_at": "2026-06-14 22:35:03.383931",
+        "current_context": "production",
+        "resolver_context": "production",
+        "current_deployment": 4,
+        "resolver_deployment": 4,
+        "current_building": 8,
+        "resolver_building": 8,
+        "current_panel": null,
+        "resolver_panel": 8,
+        "reason": "ATTRIBUTED_IN_WINDOW",
+        "flags": [
+          "PLACEHOLDER_BUILDING",
+          "OPEN_ENDED_DEPLOYMENT"
+        ],
+        "candidates": [],
+        "differing_fields": [
+          "panel"
+        ],
+        "diff_class": "PANEL_ENRICHED"
+      },
+      {
+        "reading_id": 20,
+        "node_id": 1,
+        "node_code": "N001",
+        "captured_at": "2026-06-14 22:35:18.536294",
+        "current_context": "production",
+        "resolver_context": "production",
+        "current_deployment": 4,
+        "resolver_deployment": 4,
+        "current_building": 8,
+        "resolver_building": 8,
+        "current_panel": null,
+        "resolver_panel": 8,
+        "reason": "ATTRIBUTED_IN_WINDOW",
+        "flags": [
+          "PLACEHOLDER_BUILDING",
+          "OPEN_ENDED_DEPLOYMENT"
+        ],
+        "candidates": [],
+        "differing_fields": [
+          "panel"
+        ],
+        "diff_class": "PANEL_ENRICHED"
+      },
+      {
+        "reading_id": 21,
+        "node_id": 1,
+        "node_code": "N001",
+        "captured_at": "2026-06-14 22:35:33.645634",
+        "current_context": "production",
+        "resolver_context": "production",
+        "current_deployment": 4,
+        "resolver_deployment": 4,
+        "current_building": 8,
+        "resolver_building": 8,
+        "current_panel": null,
+        "resolver_panel": 8,
+        "reason": "ATTRIBUTED_IN_WINDOW",
+        "flags": [
+          "PLACEHOLDER_BUILDING",
+          "OPEN_ENDED_DEPLOYMENT"
+        ],
+        "candidates": [],
+        "differing_fields": [
+          "panel"
+        ],
+        "diff_class": "PANEL_ENRICHED"
+      },
+      {
+        "reading_id": 22,
+        "node_id": 1,
+        "node_code": "N001",
+        "captured_at": "2026-06-14 22:35:48.745824",
+        "current_context": "production",
+        "resolver_context": "production",
+        "current_deployment": 4,
+        "resolver_deployment": 4,
+        "current_building": 8,
+        "resolver_building": 8,
+        "current_panel": null,
+        "resolver_panel": 8,
+        "reason": "ATTRIBUTED_IN_WINDOW",
+        "flags": [
+          "PLACEHOLDER_BUILDING",
+          "OPEN_ENDED_DEPLOYMENT"
+        ],
+        "candidates": [],
+        "differing_fields": [
+          "panel"
+        ],
+        "diff_class": "PANEL_ENRICHED"
+      },
+      {
+        "reading_id": 23,
+        "node_id": 1,
+        "node_code": "N001",
+        "captured_at": "2026-06-14 22:36:03.930569",
+        "current_context": "production",
+        "resolver_context": "production",
+        "current_deployment": 4,
+        "resolver_deployment": 4,
+        "current_building": 8,
+        "resolver_building": 8,
+        "current_panel": null,
+        "resolver_panel": 8,
+        "reason": "ATTRIBUTED_IN_WINDOW",
+        "flags": [
+          "PLACEHOLDER_BUILDING",
+          "OPEN_ENDED_DEPLOYMENT"
+        ],
+        "candidates": [],
+        "differing_fields": [
+          "panel"
+        ],
+        "diff_class": "PANEL_ENRICHED"
+      },
+      {
+        "reading_id": 24,
+        "node_id": 1,
+        "node_code": "N001",
+        "captured_at": "2026-06-14 22:36:19.087708",
+        "current_context": "production",
+        "resolver_context": "production",
+        "current_deployment": 4,
+        "resolver_deployment": 4,
+        "current_building": 8,
+        "resolver_building": 8,
+        "current_panel": null,
+        "resolver_panel": 8,
+        "reason": "ATTRIBUTED_IN_WINDOW",
+        "flags": [
+          "PLACEHOLDER_BUILDING",
+          "OPEN_ENDED_DEPLOYMENT"
+        ],
+        "candidates": [],
+        "differing_fields": [
+          "panel"
+        ],
+        "diff_class": "PANEL_ENRICHED"
+      },
+      {
+        "reading_id": 25,
+        "node_id": 1,
+        "node_code": "N001",
+        "captured_at": "2026-06-14 22:36:34.220574",
+        "current_context": "production",
+        "resolver_context": "production",
+        "current_deployment": 4,
+        "resolver_deployment": 4,
+        "current_building": 8,
+        "resolver_building": 8,
+        "current_panel": null,
+        "resolver_panel": 8,
+        "reason": "ATTRIBUTED_IN_WINDOW",
+        "flags": [
+          "PLACEHOLDER_BUILDING",
+          "OPEN_ENDED_DEPLOYMENT"
+        ],
+        "candidates": [],
+        "differing_fields": [
+          "panel"
+        ],
+        "diff_class": "PANEL_ENRICHED"
+      }
+    ],
+    "ambiguous_rows": [],
+    "elapsed_s": 6.144
+  },
+  "benchmark": {
+    "calls": 50000,
+    "mean_us": 5.117,
+    "median_us": 4.88,
+    "p95_us": 5.386,
+    "p99_us": 10.105,
+    "max_us": 355.638,
+    "resolve_per_second": 195438,
+    "state_load_s": 0.0002,
+    "state_deployments": 2,
+    "live_ingestion_rows_per_min": 5,
+    "live_ingestion_cost_ms_per_min": 0.0256,
+    "replay_20k_seconds": 0.1023
+  },
+  "purity": {
+    "deterministic_repeat": true,
+    "idempotent": true,
+    "order_independent": true,
+    "state_reload_agrees": true,
+    "no_clock_calls": true,
+    "no_write_statements": true,
+    "all_passed": true
+  },
+  "replay": {
+    "real_data": {
+      "reading_id": 90816,
+      "captured_at": "2026-05-13 14:20:15.325000",
+      "node_deployment_windows": [
+        {
+          "id": 5,
+          "start": "2026-06-14",
+          "end": "2026-06-21",
+          "status": "completed"
+        }
+      ],
+      "stored_deployment": null,
+      "stored_building": null,
+      "stored_context": "laboratory",
+      "resolver_deployment": null,
+      "resolver_building": null,
+      "resolver_reason": "BENCH_NODE"
+    },
+    "synthetic": {
+      "node": "N001",
+      "deployment_boundary": "2026-06-14",
+      "cases": [
+        {
+          "case": "3 days before the deployment starts",
+          "captured_at": "2026-06-11T00:00:00",
+          "deployment": null,
+          "building": null,
+          "reason": "OUTSIDE_DEPLOYMENT_WINDOW",
+          "stable_across_calls": true
+        },
+        {
+          "case": "1 second before the deployment starts",
+          "captured_at": "2026-06-13T23:59:59",
+          "deployment": null,
+          "building": null,
+          "reason": "OUTSIDE_DEPLOYMENT_WINDOW",
+          "stable_across_calls": true
+        },
+        {
+          "case": "the instant the deployment starts",
+          "captured_at": "2026-06-14T00:00:00",
+          "deployment": 4,
+          "building": 8,
+          "reason": "ATTRIBUTED_IN_WINDOW",
+          "stable_across_calls": true
+        },
+        {
+          "case": "3 days after the deployment starts",
+          "captured_at": "2026-06-17T00:00:00",
+          "deployment": 4,
+          "building": 8,
+          "reason": "ATTRIBUTED_IN_WINDOW",
+          "stable_across_calls": true
+        }
+      ],
+      "upload_time_is_not_an_input": true,
+      "all_stable": true,
+      "boundary_respected": true
+    }
+  },
+  "indexes": {
+    "existing_indexes": [
+      "idx_deployments_node_dates",
+      "idx_nodes_last_sync",
+      "idx_readings_building_timestamp",
+      "idx_readings_context_timestamp",
+      "idx_readings_deployment_timestamp",
+      "idx_readings_node_timestamp",
+      "idx_readings_timestamp",
+      "ix_buildings_code",
+      "ix_buildings_id",
+      "ix_buildings_name",
+      "ix_campuses_id",
+      "ix_campuses_name",
+      "ix_delegations_id",
+      "ix_delegations_name",
+      "ix_deployments_id",
+      "ix_electrical_panels_id",
+      "ix_electrical_panels_name",
+      "ix_energy_readings_id",
+      "ix_energy_readings_timestamp",
+      "ix_m5_attribution_backup_id",
+      "ix_monitor_alert_events_alert_id",
+      "ix_monitor_alert_events_event_type",
+      "ix_monitor_alert_events_id",
+      "ix_monitor_alert_events_occurred_at",
+      "ix_monitor_alerts_alert_id",
+      "ix_monitor_alerts_created",
+      "ix_monitor_alerts_created_at",
+      "ix_monitor_alerts_fingerprint",
+      "ix_monitor_alerts_id",
+      "ix_monitor_alerts_node_code",
+      "ix_monitor_alerts_rule_id",
+      "ix_monitor_alerts_severity",
+      "ix_monitor_alerts_state",
+      "ix_monitor_alerts_status",
+      "ix_monitor_alerts_subsystem",
+      "ix_monitor_events_alert",
+      "ix_monitor_hb_node_received",
+      "ix_monitor_node_heartbeat_latest_received_at",
+      "ix_monitor_node_heartbeats_id",
+      "ix_monitor_node_heartbeats_node_code",
+      "ix_monitor_node_heartbeats_received_at",
+      "ix_monitor_notification_outbox_channel",
+      "ix_monitor_notification_outbox_created_at",
+      "ix_monitor_notification_outbox_dedupe_key",
+      "ix_monitor_notification_outbox_id",
+      "ix_monitor_notification_outbox_status",
+      "ix_monitor_outbox_pending",
+      "ix_monitor_server_heartbeats_id",
+      "ix_monitor_server_heartbeats_recorded_at",
+      "ix_nodes_code",
+      "ix_nodes_id",
+      "ix_organizational_units_id",
+      "ix_organizational_units_name",
+      "ix_smart_plug_readings_id",
+      "ix_smart_plug_readings_smart_plug_id",
+      "ix_smart_plug_readings_timestamp",
+      "ix_smart_plugs_id",
+      "ix_smart_plugs_mac",
+      "ix_tariff_periods_id",
+      "sqlite_autoindex_deployment_status_transitions_1",
+      "sqlite_autoindex_deployment_statuses_1",
+      "sqlite_autoindex_measurement_contexts_1",
+      "sqlite_autoindex_migration_markers_1",
+      "sqlite_autoindex_monitor_alerts_1",
+      "sqlite_autoindex_monitor_node_heartbeat_latest_1",
+      "sqlite_autoindex_node_commission_states_1",
+      "sqlite_autoindex_schema_migrations_1",
+      "sqlite_autoindex_smart_plug_readings_1"
+    ],
+    "query_plans": {
+      "deployments_by_node": [
+        "SEARCH deployments USING INDEX idx_deployments_node_dates (node_id=?)"
+      ],
+      "node_lookup_by_code": [
+        "SEARCH nodes USING INDEX ix_nodes_code (code=?)"
+      ],
+      "contamination_window": [
+        "SEARCH n USING COVERING INDEX ix_nodes_id (id=? AND rowid=?)",
+        "SCALAR SUBQUERY 3",
+        "SEARCH nodes USING COVERING INDEX ix_nodes_code (code=?)",
+        "REUSE SUBQUERY 3",
+        "REUSE SUBQUERY 3",
+        "SEARCH er USING INDEX idx_readings_node_timestamp (node_id=?)",
+        "SCALAR SUBQUERY 4",
+        "SEARCH migration_markers USING INDEX sqlite_autoindex_migration_markers_1 (name=?)"
+      ]
+    }
+  }
+}
