@@ -110,6 +110,14 @@ desktop.ini
 *.swo
 *~
 
+# ── On-box staging checkout ──────────────────────────────────────────────────
+# `frontend-src/` is a second checkout of the frontend, byte-identical to
+# `frontend/src`, served on :5175 as the review environment before a change is
+# repeated in production. It is a deployment artefact of this particular host,
+# not a second codebase, so only `frontend/` is tracked.
+# See docs/Deployment.md § Staging.
+frontend-src/
+
 # ── Scratch files ────────────────────────────────────────────────────────────
 part[0-9].txt
 test.txt
