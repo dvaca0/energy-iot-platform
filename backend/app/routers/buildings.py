@@ -6,6 +6,7 @@ from app.db.models import Building
 
 router = APIRouter()
 
+
 @router.get("")
 def list_buildings(db: Session = Depends(get_db)):
     buildings = db.query(Building).all()
@@ -39,9 +40,17 @@ def get_building(building_id: int, db: Session = Depends(get_db)):
         "code": building.code,
         "name": building.name,
         "campus": building.campus.name if building.campus else None,
-        "delegation": building.campus.delegation.name if building.campus and building.campus.delegation else None,
-        "organizational_unit": building.organizational_unit.name if building.organizational_unit else None,
-        "unit_type": building.organizational_unit.unit_type if building.organizational_unit else None,
+        "delegation": (
+            building.campus.delegation.name
+            if building.campus and building.campus.delegation
+            else None
+        ),
+        "organizational_unit": (
+            building.organizational_unit.name if building.organizational_unit else None
+        ),
+        "unit_type": (
+            building.organizational_unit.unit_type if building.organizational_unit else None
+        ),
         "is_user_defined": building.is_user_defined,
         "is_placeholder": building.is_placeholder,
         "notes": building.notes,

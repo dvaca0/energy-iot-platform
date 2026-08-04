@@ -12,9 +12,10 @@ A plug is identified by MAC address. IPs change with DHCP and are refreshed on
 every report; they are never used as identity, so a plug that reappears on a
 new IP updates the stored IP instead of creating a duplicate.
 """
+
 import logging
 import re
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
@@ -22,7 +23,6 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.db import lifecycle
-from app.services import deployment_ops as ops
 from app.db.database import get_db
 from app.db.models import (
     Building,
@@ -31,6 +31,7 @@ from app.db.models import (
     SmartPlug,
     SmartPlugReading,
 )
+from app.services import deployment_ops as ops
 
 router = APIRouter()
 
@@ -56,7 +57,7 @@ def normalize_mac(mac: str) -> str:
     if len(cleaned) != 12:
         return str(mac).strip().upper()
 
-    return ":".join(cleaned[i:i + 2] for i in range(0, 12, 2))
+    return ":".join(cleaned[i : i + 2] for i in range(0, 12, 2))
 
 
 MAC_RE = re.compile(r"^[0-9A-F]{2}(:[0-9A-F]{2}){5}$")
@@ -147,26 +148,21 @@ def serialize_plug(db: Session, plug: SmartPlug, include_energy_today: bool = Tr
         "id": plug_slug(plug.mac),
         "mac": plug.mac,
         "model": plug.model,
-
         "ip": plug.ip_address,
         "hostname": plug.hostname,
         "serial": plug.serial,
         "firmware": plug.firmware,
         "rssi": plug.rssi,
         "temperature_c": plug.temperature_c,
-
         "node": plug.node.code if plug.node else None,
         "building": building,
         "deployment": deployment,
         "friendly_name": plug.friendly_name,
         "outlet_location": plug.outlet_location,
-
         "online": online,
         "last_seen": plug.last_seen.isoformat() if plug.last_seen else None,
-
         # The node allowed to report this plug, and when it claimed it.
         "owner_claimed_at": plug.owner_claimed_at.isoformat() if plug.owner_claimed_at else None,
-
         # Stale telemetry is hidden rather than shown as if it were current.
         "power_w": plug.power_w if online else None,
         "voltage_v": plug.voltage_v if online else None,
@@ -242,9 +238,7 @@ def get_smart_plug(plug_id: str, db: Session = Depends(get_db)):
     detail["created_at"] = plug.created_at.isoformat() if plug.created_at else None
     detail["updated_at"] = plug.updated_at.isoformat() if plug.updated_at else None
     detail["samples"] = (
-        db.query(SmartPlugReading)
-        .filter(SmartPlugReading.smart_plug_id == plug.id)
-        .count()
+        db.query(SmartPlugReading).filter(SmartPlugReading.smart_plug_id == plug.id).count()
     )
 
     return detail
@@ -405,6 +399,7 @@ class DiscoveryPayload(BaseModel):
     node_id is the Node code (for example N001) so the edge does not need to
     know database ids, matching the existing measurement ingestion contract.
     """
+
     node_id: str
     plugs: list[DiscoveredPlug] = []
 
@@ -420,7 +415,7 @@ def parse_edge_timestamp(value: str | None) -> datetime:
 
     # History is stored in naive UTC, consistent with energy_readings.
     if parsed.tzinfo:
-        parsed = parsed.astimezone(timezone.utc).replace(tzinfo=None)
+        parsed = parsed.astimezone(UTC).replace(tzinfo=None)
 
     return parsed
 
@@ -468,7 +463,8 @@ def report_discovery(payload: DiscoveryPayload, db: Session = Depends(get_db)):
             rejected_malformed.append(str(reported.mac)[:32])
             log.warning(
                 "smart-plug report from %s rejected: malformed MAC %r",
-                payload.node_id, str(reported.mac)[:32],
+                payload.node_id,
+                str(reported.mac)[:32],
             )
             continue
 
@@ -479,7 +475,8 @@ def report_discovery(payload: DiscoveryPayload, db: Session = Depends(get_db)):
             rejected_duplicate.append(mac)
             log.warning(
                 "smart-plug report from %s rejected: duplicate MAC %s in payload",
-                payload.node_id, mac,
+                payload.node_id,
+                mac,
             )
             continue
 
@@ -511,7 +508,9 @@ def report_discovery(payload: DiscoveryPayload, db: Session = Depends(get_db)):
             rejected_not_owner.append(mac)
             log.warning(
                 "smart-plug report from %s rejected: %s is owned by %s",
-                payload.node_id, mac, owner.code if owner else plug.node_id,
+                payload.node_id,
+                mac,
+                owner.code if owner else plug.node_id,
             )
             continue
         else:
@@ -558,9 +557,10 @@ def report_discovery(payload: DiscoveryPayload, db: Session = Depends(get_db)):
             if not valid_timestamp(timestamp):
                 rejected_timestamps += 1
                 log.warning(
-                    "smart-plug measurement from %s for %s rejected: "
-                    "implausible timestamp %s",
-                    payload.node_id, mac, timestamp.isoformat(),
+                    "smart-plug measurement from %s for %s rejected: " "implausible timestamp %s",
+                    payload.node_id,
+                    mac,
+                    timestamp.isoformat(),
                 )
                 continue
 
@@ -628,8 +628,11 @@ def report_discovery(payload: DiscoveryPayload, db: Session = Depends(get_db)):
         log.warning(
             "smart-plug report from %s: %d malformed, %d duplicate, "
             "%d not-owned, %d bad timestamp(s)",
-            payload.node_id, len(rejected_malformed), len(rejected_duplicate),
-            len(rejected_not_owner), rejected_timestamps,
+            payload.node_id,
+            len(rejected_malformed),
+            len(rejected_duplicate),
+            len(rejected_not_owner),
+            rejected_timestamps,
         )
 
     return {
@@ -653,9 +656,7 @@ class OwnershipTransfer(BaseModel):
 
 
 @router.post("/{plug_id}/transfer")
-def transfer_ownership(
-    plug_id: str, payload: OwnershipTransfer, db: Session = Depends(get_db)
-):
+def transfer_ownership(plug_id: str, payload: OwnershipTransfer, db: Session = Depends(get_db)):
     """Move a plug to a different owner node, explicitly.
 
     Ownership is never reassigned automatically: a plug seen by two Raspberry
@@ -679,7 +680,9 @@ def transfer_ownership(
 
     log.info(
         "smart-plug %s ownership transferred from %s to %s",
-        plug.mac, previous.code if previous else None, node.code,
+        plug.mac,
+        previous.code if previous else None,
+        node.code,
     )
 
     return {

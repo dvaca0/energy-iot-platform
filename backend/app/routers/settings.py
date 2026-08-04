@@ -1,10 +1,12 @@
 from typing import Any
+
 from fastapi import APIRouter
 from pydantic import BaseModel
 
 from app.services.platform_settings import get_platform_settings, save_platform_settings
 
 router = APIRouter()
+
 
 class SettingsPayload(BaseModel):
     thresholds: dict[str, Any] | None = None
@@ -13,17 +15,22 @@ class SettingsPayload(BaseModel):
     ai: dict[str, Any] | None = None
     system: dict[str, Any] | None = None
 
+
 @router.get("")
 def read_settings():
     return get_platform_settings()
+
 
 @router.put("")
 def update_settings(payload: SettingsPayload):
     clean = {k: v for k, v in payload.model_dump().items() if v is not None}
     return save_platform_settings(clean)
 
+
 from fastapi import Query
+
 from app.services.cfe_scraper import scrape_gdmth_tariff
+
 
 @router.post("/cfe/scrape")
 def scrape_cfe_gdmth(
@@ -63,13 +70,15 @@ def scrape_cfe_gdmth(
     }
 
     current = get_platform_settings()
-    updated = save_platform_settings({
-        **current,
-        "tariff": {
-            **current.get("tariff", {}),
-            **tariff,
+    updated = save_platform_settings(
+        {
+            **current,
+            "tariff": {
+                **current.get("tariff", {}),
+                **tariff,
+            },
         }
-    })
+    )
 
     return {
         **scraped,

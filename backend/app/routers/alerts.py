@@ -1,13 +1,13 @@
-from datetime import datetime, timedelta
 import shutil
 import subprocess
+from datetime import datetime
 
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from app.db import commissioning, lifecycle, scope
 from app.db.database import get_db
-from app.db.models import Node, EnergyReading, Deployment
+from app.db.models import Deployment, EnergyReading, Node
 
 router = APIRouter()
 
@@ -64,9 +64,7 @@ def alert_status(db: Session = Depends(get_db)):
     # `is_monitored` comes from node_commission_states, so which states are
     # watched is data. No deployment transition can change it (ADR-0001).
     monitored = commissioning.monitored_states(db)
-    monitored_nodes = (
-        db.query(Node).filter(Node.commission_state.in_(monitored)).all()
-    )
+    monitored_nodes = db.query(Node).filter(Node.commission_state.in_(monitored)).all()
 
     # Reported for context only — never used to decide what is monitored.
     operational_deployments = (
@@ -88,14 +86,28 @@ def alert_status(db: Session = Depends(get_db)):
 
     for node in monitored_nodes:
         if not node.last_sync:
-            alerts.append(alert("critical", f"{node.code} no heartbeat", "Node has never synchronized"))
+            alerts.append(
+                alert("critical", f"{node.code} no heartbeat", "Node has never synchronized")
+            )
         else:
             age = (now - node.last_sync).total_seconds()
             if age > NODE_STALE_SECONDS:
-                alerts.append(alert("critical", f"{node.code} heartbeat stale", f"{int(age)} seconds since last sync"))
+                alerts.append(
+                    alert(
+                        "critical",
+                        f"{node.code} heartbeat stale",
+                        f"{int(age)} seconds since last sync",
+                    )
+                )
 
         if node.buffer_pending and node.buffer_pending > 0:
-            alerts.append(alert("warning", f"{node.code} buffer pending", f"{node.buffer_pending} samples pending"))
+            alerts.append(
+                alert(
+                    "warning",
+                    f"{node.code} buffer pending",
+                    f"{node.buffer_pending} samples pending",
+                )
+            )
 
         latest = (
             scope.production_readings(db)
@@ -117,26 +129,50 @@ def alert_status(db: Session = Depends(get_db)):
                 # Installed and commissioned but not attached to a campaign:
                 # a commissioning gap, not an equipment fault. Matches the
                 # monitoring subsystem's node.standby rule.
-                alerts.append(alert(
-                    "warning", f"{node.code} awaiting deployment",
-                    "Commissioned but no deployment covers it, so readings are not being retained",
-                ))
+                alerts.append(
+                    alert(
+                        "warning",
+                        f"{node.code} awaiting deployment",
+                        "Commissioned but no deployment covers it, so readings are not being retained",
+                    )
+                )
             elif measures_production:
-                alerts.append(alert(
-                    "critical", f"{node.code} no readings",
-                    "No production readings for this commissioned node",
-                ))
+                alerts.append(
+                    alert(
+                        "critical",
+                        f"{node.code} no readings",
+                        "No production readings for this commissioned node",
+                    )
+                )
         else:
             reading_age = (now - latest.timestamp).total_seconds()
             if reading_age > READING_STALE_SECONDS:
-                alerts.append(alert("critical", f"{node.code} readings stale", f"{int(reading_age)} seconds since latest reading"))
+                alerts.append(
+                    alert(
+                        "critical",
+                        f"{node.code} readings stale",
+                        f"{int(reading_age)} seconds since latest reading",
+                    )
+                )
 
             if measures_production:
                 if latest.power_factor is not None and latest.power_factor < 0.70:
-                    alerts.append(alert("warning", f"{node.code} low power factor", f"PF={latest.power_factor:.2f}"))
+                    alerts.append(
+                        alert(
+                            "warning",
+                            f"{node.code} low power factor",
+                            f"PF={latest.power_factor:.2f}",
+                        )
+                    )
 
                 if latest.frequency_hz is not None and not (59.5 <= latest.frequency_hz <= 60.5):
-                    alerts.append(alert("critical", f"{node.code} frequency out of range", f"{latest.frequency_hz:.2f} Hz"))
+                    alerts.append(
+                        alert(
+                            "critical",
+                            f"{node.code} frequency out of range",
+                            f"{latest.frequency_hz:.2f} Hz",
+                        )
+                    )
 
     level = "ok"
     if any(a["level"] == "critical" for a in alerts):

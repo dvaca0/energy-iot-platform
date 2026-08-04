@@ -1,16 +1,16 @@
-from datetime import datetime, timedelta, timezone
-from zoneinfo import ZoneInfo
-from collections import defaultdict
 import builtins
+from collections import defaultdict
+from datetime import UTC, datetime, timedelta
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from app.db import scope
 from app.db.database import get_db
-from app.db.models import EnergyReading, Building
-from app.services.cost_engine import estimate_reading_cost
+from app.db.models import Building, EnergyReading
 from app.services import energy_aggregate as agg
+from app.services.cost_engine import estimate_reading_cost
 
 router = APIRouter()
 
@@ -32,7 +32,7 @@ def range_start(range_value: str | None):
 
 def to_local(ts: datetime):
     if ts.tzinfo is None:
-        ts = ts.replace(tzinfo=timezone.utc)
+        ts = ts.replace(tzinfo=UTC)
     return ts.astimezone(LOCAL_TZ)
 
 
@@ -125,15 +125,9 @@ def data_explorer(
 
     selected_ids = []
     if building_ids:
-        selected_ids = [
-            int(value)
-            for value in building_ids.split(",")
-            if value.strip().isdigit()
-        ]
+        selected_ids = [int(value) for value in building_ids.split(",") if value.strip().isdigit()]
 
-    query = scope.production_readings(db, context).filter(
-        EnergyReading.energy_kwh.isnot(None)
-    )
+    query = scope.production_readings(db, context).filter(EnergyReading.energy_kwh.isnot(None))
 
     if start:
         query = query.filter(EnergyReading.timestamp >= start)
@@ -141,32 +135,26 @@ def data_explorer(
     if selected_ids:
         query = query.filter(EnergyReading.building_id.in_(selected_ids))
 
-    readings = (
-        query
-        .order_by(EnergyReading.timestamp.desc())
-        .limit(100000)
-        .all()
-    )
+    readings = query.order_by(EnergyReading.timestamp.desc()).limit(100000).all()
     readings = list(reversed(readings))
 
-    buildings_by_id = {
-        building.id: building.name
-        for building in db.query(Building).all()
-    }
+    buildings_by_id = {building.id: building.name for building in db.query(Building).all()}
 
-    selected_buildings = sorted({
-        r.building_id for r in readings if r.building_id is not None
-    })
+    selected_buildings = sorted({r.building_id for r in readings if r.building_id is not None})
 
-    bucketed = defaultdict(lambda: defaultdict(lambda: {
-        "power_values": [],
-        "energy_delta": 0,
-        "cost_mxn": 0,
-        "current_values": [],
-        "voltage_values": [],
-        "pf_values": [],
-        "freq_values": [],
-    }))
+    bucketed = defaultdict(
+        lambda: defaultdict(
+            lambda: {
+                "power_values": [],
+                "energy_delta": 0,
+                "cost_mxn": 0,
+                "current_values": [],
+                "voltage_values": [],
+                "pf_values": [],
+                "freq_values": [],
+            }
+        )
+    )
 
     heatmap = defaultdict(lambda: defaultdict(lambda: {"kwh": 0, "cost_mxn": 0}))
     tariff_totals = defaultdict(lambda: {"kwh": 0, "cost_mxn": 0})
@@ -222,20 +210,21 @@ def data_explorer(
         if reading.voltage is not None:
             voltage_values.append(float(reading.voltage))
 
-        recent.append({
-            "timestamp": to_local(reading.timestamp).isoformat(),
-            "building": building_name,
-            "node": str(reading.node_id),
-            "power_kw": round(float(reading.power_kw or 0), 4),
-            "voltage": round(float(reading.voltage or 0), 3),
-            "current": round(float(reading.current or 0), 3),
-            "power_factor": round(float(reading.power_factor or 0), 4),
-            "frequency_hz": round(float(reading.frequency_hz or 0), 3),
-            "energy_kwh": round(delta_kwh, 5),
-            "tariff_period": period_label(tariff_period),
-            "cost_mxn": round(cost_mxn, 4),
-        })
-
+        recent.append(
+            {
+                "timestamp": to_local(reading.timestamp).isoformat(),
+                "building": building_name,
+                "node": str(reading.node_id),
+                "power_kw": round(float(reading.power_kw or 0), 4),
+                "voltage": round(float(reading.voltage or 0), 3),
+                "current": round(float(reading.current or 0), 3),
+                "power_factor": round(float(reading.power_factor or 0), 4),
+                "frequency_hz": round(float(reading.frequency_hz or 0), 3),
+                "energy_kwh": round(delta_kwh, 5),
+                "tariff_period": period_label(tariff_period),
+                "cost_mxn": round(cost_mxn, 4),
+            }
+        )
 
     def avg(values):
         return round(sum(values) / len(values), 4) if values else 0

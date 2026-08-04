@@ -60,9 +60,7 @@ class TelegramChannel(NotificationChannel):
         return self._config.chat_id or None
 
     def is_configured(self) -> bool:
-        return bool(
-            self._config.enabled and self._config.bot_token and self._config.chat_id
-        )
+        return bool(self._config.enabled and self._config.bot_token and self._config.chat_id)
 
     def _url(self, method: str) -> str:
         return f"{API_BASE}/bot{self._config.bot_token}/{method}"
@@ -148,9 +146,7 @@ class TelegramChannel(NotificationChannel):
             return {"ok": False, "error": "no bot token configured"}
 
         try:
-            response = self._session.get(
-                self._url("getMe"), timeout=self._config.timeout_seconds
-            )
+            response = self._session.get(self._url("getMe"), timeout=self._config.timeout_seconds)
             data = response.json()
         except requests.RequestException as exc:
             return {"ok": False, "error": str(exc)}

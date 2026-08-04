@@ -21,7 +21,6 @@ from __future__ import annotations
 
 import json
 import os
-from copy import deepcopy
 from dataclasses import dataclass, field, fields, is_dataclass
 from pathlib import Path
 from typing import Any, TypeVar
@@ -655,21 +654,21 @@ def write_default_config_file(path: Path | None = None) -> Path:
 
 
 __all__ = [
-    "MonitoringConfig",
-    "TelegramConfig",
-    "HeartbeatConfig",
-    "EscalationConfig",
-    "ServerThresholds",
-    "NodeThresholds",
-    "ElectricalThresholds",
     "DatabaseThresholds",
-    "QuietHours",
+    "ElectricalThresholds",
+    "EscalationConfig",
+    "HeartbeatConfig",
+    "MonitoringConfig",
+    "NodeThresholds",
     "NotificationConfig",
+    "QuietHours",
     "ReportConfig",
     "SchedulerConfig",
+    "ServerThresholds",
     "StorageConfig",
+    "TelegramConfig",
+    "config_as_dict",
     "get_config",
     "load_config",
-    "config_as_dict",
     "write_default_config_file",
 ]

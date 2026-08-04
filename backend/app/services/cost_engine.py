@@ -1,9 +1,10 @@
+from datetime import UTC, date, datetime, timedelta
 from functools import lru_cache
+from zoneinfo import ZoneInfo
+
+from sqlalchemy.orm import Session
 
 from app.services.platform_settings import get_platform_settings
-from datetime import datetime, timezone, date, timedelta
-from zoneinfo import ZoneInfo
-from sqlalchemy.orm import Session
 
 LOCAL_TZ = ZoneInfo("America/Mexico_City")
 
@@ -12,7 +13,7 @@ _RATE_CACHE_SECONDS = 60
 
 
 def _now_utc():
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 def clear_tariff_cache():
@@ -35,10 +36,24 @@ def get_active_tariff_rates():
 
     rates = {
         "base": float(tariff.get("baseRate") or tariff.get("base") or 1.0375),
-        "intermediate": float(tariff.get("interRate") or tariff.get("intermediate") or tariff.get("intermedia") or 1.8463),
-        "intermedia": float(tariff.get("interRate") or tariff.get("intermedia") or tariff.get("intermediate") or 1.8463),
-        "peak": float(tariff.get("peakRate") or tariff.get("peak") or tariff.get("punta") or 2.0789),
-        "punta": float(tariff.get("peakRate") or tariff.get("punta") or tariff.get("peak") or 2.0789),
+        "intermediate": float(
+            tariff.get("interRate")
+            or tariff.get("intermediate")
+            or tariff.get("intermedia")
+            or 1.8463
+        ),
+        "intermedia": float(
+            tariff.get("interRate")
+            or tariff.get("intermedia")
+            or tariff.get("intermediate")
+            or 1.8463
+        ),
+        "peak": float(
+            tariff.get("peakRate") or tariff.get("peak") or tariff.get("punta") or 2.0789
+        ),
+        "punta": float(
+            tariff.get("peakRate") or tariff.get("punta") or tariff.get("peak") or 2.0789
+        ),
         "source": tariff.get("source", "Manual fallback"),
     }
 
@@ -49,7 +64,7 @@ def get_active_tariff_rates():
 
 def to_local_time(timestamp: datetime):
     if timestamp.tzinfo is None:
-        timestamp = timestamp.replace(tzinfo=timezone.utc)
+        timestamp = timestamp.replace(tzinfo=UTC)
     return timestamp.astimezone(LOCAL_TZ)
 
 

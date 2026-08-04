@@ -1,11 +1,12 @@
 from datetime import datetime
+
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.db import lifecycle
 from app.db.database import get_db
-from app.db.models import Node, Deployment, EnergyReading
+from app.db.models import Deployment, EnergyReading, Node
 
 router = APIRouter(tags=["Edge"])
 
@@ -77,27 +78,25 @@ def ingest_batch(payload: BatchPayload, db: Session = Depends(get_db)):
 
     for m in payload.measurements:
 
-        ts = datetime.fromisoformat(
-            m.captured_at.replace("Z", "+00:00")
-        )
+        ts = datetime.fromisoformat(m.captured_at.replace("Z", "+00:00"))
 
         reading = EnergyReading(
             node_id=node.id,
             building_id=deployment.building_id,
             deployment_id=deployment.id,
             timestamp=ts,
-
-            voltage=((m.voltage_a or 0)+(m.voltage_b or 0)+(m.voltage_c or 0))/3,
+            voltage=((m.voltage_a or 0) + (m.voltage_b or 0) + (m.voltage_c or 0)) / 3,
             current=m.total_current,
-            power_kw=(m.total_active_power or 0)/1000.0,
+            power_kw=(m.total_active_power or 0) / 1000.0,
             energy_kwh=None,
-            power_factor=((m.power_factor_a or 0)+(m.power_factor_b or 0)+(m.power_factor_c or 0))/3,
-            frequency_hz=((m.frequency_a or 0)+(m.frequency_b or 0)+(m.frequency_c or 0))/3,
-
+            power_factor=(
+                (m.power_factor_a or 0) + (m.power_factor_b or 0) + (m.power_factor_c or 0)
+            )
+            / 3,
+            frequency_hz=((m.frequency_a or 0) + (m.frequency_b or 0) + (m.frequency_c or 0)) / 3,
             phase_a_voltage=m.voltage_a,
             phase_b_voltage=m.voltage_b,
             phase_c_voltage=m.voltage_c,
-
             phase_a_current=m.current_a,
             phase_b_current=m.current_b,
             phase_c_current=m.current_c,
@@ -131,7 +130,4 @@ def heartbeat(payload: HeartbeatPayload, db: Session = Depends(get_db)):
     node.last_sync = datetime.utcnow()
     db.commit()
 
-    return {
-        "status": "ok",
-        "last_sync": node.last_sync.isoformat()
-    }
+    return {"status": "ok", "last_sync": node.last_sync.isoformat()}

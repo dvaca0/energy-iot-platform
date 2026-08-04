@@ -3,20 +3,26 @@
 Runs against a throwaway SQLite database (the get_db dependency is overridden),
 so production history is never touched.
 """
+
 import os
 import sys
 from datetime import datetime, timedelta
 
-sys.path.insert(0, "/home/manager/energy-platform/backend")
-os.chdir("/home/manager/energy-platform/backend")
+# Paths are derived from this file's location so the suites run from any
+# checkout — CI, a contributor's machine, the server — not only from the
+# directory they were written in.
+_BACKEND = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_REPO = os.path.dirname(_BACKEND)
 
+sys.path.insert(0, _BACKEND)
+os.chdir(_BACKEND)
+
+from app.db import models
+from app.db.database import Base, get_db
+from app.main import app
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-
-from app.main import app
-from app.db.database import Base, get_db
-from app.db import models
 
 os.makedirs("/tmp/energy-platform-tests", exist_ok=True)
 TMP_DB = "/tmp/energy-platform-tests/test_plugs.db"
@@ -30,8 +36,8 @@ Base.metadata.create_all(bind=test_engine)
 # The lifecycle reference tables come from SQL migrations, not from the
 # ORM metadata, and ingest/discovery now read them through
 # app.db.lifecycle. Without them this suite fails before its first check.
-sys.path.insert(0, "/home/manager/energy-platform/backend")
-from tests.lifecycle_fixtures import seed_lifecycle_tables  # noqa: E402
+sys.path.insert(0, _BACKEND)
+from tests.lifecycle_fixtures import seed_lifecycle_tables
 
 seed_lifecycle_tables(test_engine)
 
@@ -52,7 +58,10 @@ PASS, FAIL = [], []
 
 def check(name, condition, detail=""):
     (PASS if condition else FAIL).append(name)
-    print(f"  {'PASS' if condition else 'FAIL'}  {name}" + (f"  <- {detail}" if detail and not condition else ""))
+    print(
+        f"  {'PASS' if condition else 'FAIL'}  {name}"
+        + (f"  <- {detail}" if detail and not condition else "")
+    )
 
 
 # ---------------------------------------------------------------- fixtures
@@ -60,7 +69,11 @@ db = TestSession()
 db.add(models.Delegation(id=1, name="Colima"))
 db.add(models.Campus(id=1, name="Campus Coquimatlan", delegation_id=1))
 db.add(models.OrganizationalUnit(id=1, name="FIME", campus_id=1))
-db.add(models.Building(id=8, code="B-TEST", name="Edificio de prueba", campus_id=1, organizational_unit_id=1))
+db.add(
+    models.Building(
+        id=8, code="B-TEST", name="Edificio de prueba", campus_id=1, organizational_unit_id=1
+    )
+)
 db.add(models.ElectricalPanel(id=8, name="Tablero principal", building_id=8))
 db.add(models.Node(id=1, code="N001", name="Edge Node 001"))
 db.add(models.Node(id=3, code="N003", name="Energy Node 003"))
@@ -68,9 +81,19 @@ db.add(models.Node(id=3, code="N003", name="Energy Node 003"))
 # one CURRENTLY measuring a building — assignment resolves the deployment through
 # them, deliberately, so a plug is never attached to a campaign that ended months
 # ago. A fixture that sets only `status` leaves the plug with no deployment.
-db.add(models.Deployment(id=4, node_id=1, building_id=8, electrical_panel_id=8,
-                         start_date="2026-06-14", end_date="2026-06-21", status="active",
-                         activated_at=datetime(2026, 6, 14), closed_at=None))
+db.add(
+    models.Deployment(
+        id=4,
+        node_id=1,
+        building_id=8,
+        electrical_panel_id=8,
+        start_date="2026-06-14",
+        end_date="2026-06-21",
+        status="active",
+        activated_at=datetime(2026, 6, 14),
+        closed_at=None,
+    )
+)
 db.commit()
 db.close()
 
@@ -84,7 +107,9 @@ def iso(dt):
 
 print("\n=== 1. Empty inventory ===")
 r = client.get("/api/smart-plugs")
-check("GET /api/smart-plugs returns 200 + empty list", r.status_code == 200 and r.json() == [], r.text)
+check(
+    "GET /api/smart-plugs returns 200 + empty list", r.status_code == 200 and r.json() == [], r.text
+)
 
 print("\n=== 2. Discovery from Raspberry N001 (4 real MACs) ===")
 payload = {
@@ -101,12 +126,26 @@ payload = {
             "online": True,
             "last_seen": iso(now),
             "measurements": [
-                {"captured_at": iso(now - timedelta(seconds=30)), "power_w": 100.0 + i * 50,
-                 "voltage_v": 121.3, "current_a": 0.9, "power_factor": 0.97,
-                 "energy_total_kwh": 10.0 + i, "temperature_c": 40.5, "rssi": -55},
-                {"captured_at": iso(now - timedelta(seconds=15)), "power_w": 110.0 + i * 50,
-                 "voltage_v": 121.1, "current_a": 0.95, "power_factor": 0.98,
-                 "energy_total_kwh": 10.01 + i, "temperature_c": 40.6, "rssi": -56},
+                {
+                    "captured_at": iso(now - timedelta(seconds=30)),
+                    "power_w": 100.0 + i * 50,
+                    "voltage_v": 121.3,
+                    "current_a": 0.9,
+                    "power_factor": 0.97,
+                    "energy_total_kwh": 10.0 + i,
+                    "temperature_c": 40.5,
+                    "rssi": -55,
+                },
+                {
+                    "captured_at": iso(now - timedelta(seconds=15)),
+                    "power_w": 110.0 + i * 50,
+                    "voltage_v": 121.1,
+                    "current_a": 0.95,
+                    "power_factor": 0.98,
+                    "energy_total_kwh": 10.01 + i,
+                    "temperature_c": 40.6,
+                    "rssi": -56,
+                },
             ],
         }
         for i, m in enumerate(MACS)
@@ -128,8 +167,11 @@ check("all plugs online", all(p["online"] for p in plugs))
 check("telemetry present", plugs[0]["power_w"] == 110.0, str(plugs[0]["power_w"]))
 check("firmware stored", plugs[0]["firmware"] == "1.4.4")
 check("node attributed", plugs[0]["node"] == "N001", str(plugs[0]["node"]))
-check("energy_today computed from deltas", plugs[0]["energy_today_kwh"] is not None,
-      str(plugs[0]["energy_today_kwh"]))
+check(
+    "energy_today computed from deltas",
+    plugs[0]["energy_today_kwh"] is not None,
+    str(plugs[0]["energy_today_kwh"]),
+)
 
 print("\n=== 4. Idempotent replay (buffer retry must not duplicate) ===")
 r = client.post("/api/smart-plugs/discovery", json=payload)
@@ -141,13 +183,15 @@ check("duplicates detected", body.get("readings_duplicated") == 8, str(body))
 print("\n=== 5. IP change (same MAC, new subnet) — must NOT duplicate ===")
 ip_change = {
     "node_id": "N001",
-    "plugs": [{
-        "mac": "AC:EB:E6:F6:53:88",
-        "ip": "10.20.30.77",  # different subnet entirely
-        "online": True,
-        "last_seen": iso(now + timedelta(seconds=20)),
-        "measurements": [],
-    }],
+    "plugs": [
+        {
+            "mac": "AC:EB:E6:F6:53:88",
+            "ip": "10.20.30.77",  # different subnet entirely
+            "online": True,
+            "last_seen": iso(now + timedelta(seconds=20)),
+            "measurements": [],
+        }
+    ],
 }
 r = client.post("/api/smart-plugs/discovery", json=ip_change)
 check("IP change creates no duplicate", r.json().get("plugs_created") == 0, r.text)
@@ -158,16 +202,23 @@ check("still exactly 4 plugs", len(plugs) == 4, str(len(plugs)))
 check("stored IP updated to new subnet", target["ip"] == "10.20.30.77", str(target["ip"]))
 
 print("\n=== 6. Assignment ===")
-r = client.post("/api/smart-plugs/acebe6f65388/assign", json={
-    "friendly_name": "Rack de switches",
-    "building": "Edificio de prueba",
-    "deployment": "Campana Laboratorio de Redes",
-    "outlet_location": "Rack A - Contacto 3",
-})
+r = client.post(
+    "/api/smart-plugs/acebe6f65388/assign",
+    json={
+        "friendly_name": "Rack de switches",
+        "building": "Edificio de prueba",
+        "deployment": "Campana Laboratorio de Redes",
+        "outlet_location": "Rack A - Contacto 3",
+    },
+)
 assigned = r.json()
 check("assign returns 200", r.status_code == 200, r.text)
 check("friendly_name persisted", assigned["friendly_name"] == "Rack de switches")
-check("building label round-trips", assigned["building"] == "Edificio de prueba", str(assigned["building"]))
+check(
+    "building label round-trips",
+    assigned["building"] == "Edificio de prueba",
+    str(assigned["building"]),
+)
 check("deployment label round-trips", assigned["deployment"] == "Campana Laboratorio de Redes")
 check("outlet_location persisted", assigned["outlet_location"] == "Rack A - Contacto 3")
 
@@ -203,12 +254,22 @@ check("stale telemetry hidden", off["power_w"] is None, str(off["power_w"]))
 print("\n=== 9. Automatic recovery on rediscovery ===")
 back = {
     "node_id": "N001",
-    "plugs": [{
-        "mac": "AC:EB:E6:F2:91:B8", "ip": "192.168.5.9", "online": True,
-        "last_seen": iso(datetime.utcnow()),
-        "measurements": [{"captured_at": iso(datetime.utcnow()), "power_w": 77.0,
-                          "voltage_v": 120.9, "energy_total_kwh": 12.0}],
-    }],
+    "plugs": [
+        {
+            "mac": "AC:EB:E6:F2:91:B8",
+            "ip": "192.168.5.9",
+            "online": True,
+            "last_seen": iso(datetime.utcnow()),
+            "measurements": [
+                {
+                    "captured_at": iso(datetime.utcnow()),
+                    "power_w": 77.0,
+                    "voltage_v": 120.9,
+                    "energy_total_kwh": 12.0,
+                }
+            ],
+        }
+    ],
 }
 client.post("/api/smart-plugs/discovery", json=back)
 r = client.get("/api/smart-plugs")
@@ -234,9 +295,12 @@ live = r.json()
 check("live returns 200", r.status_code == 200, r.text)
 check("only online plugs listed", all(p["online"] for p in live["smart_plugs"]))
 check("highest_consumer identified", live["highest_consumer"] is not None)
-check("sorted by power desc",
-      [p["power_w"] for p in live["smart_plugs"]] == sorted([p["power_w"] for p in live["smart_plugs"]], reverse=True),
-      str([p["power_w"] for p in live["smart_plugs"]]))
+check(
+    "sorted by power desc",
+    [p["power_w"] for p in live["smart_plugs"]]
+    == sorted([p["power_w"] for p in live["smart_plugs"]], reverse=True),
+    str([p["power_w"] for p in live["smart_plugs"]]),
+)
 check("total_power_w computed", live["total_power_w"] > 0, str(live["total_power_w"]))
 
 print("\n=== 12. History ===")
@@ -244,33 +308,57 @@ r = client.get("/api/smart-plugs/acebe6f65388/history?hours=24")
 hist = r.json()
 check("history returns 200", r.status_code == 200, r.text)
 check("history has points", len(hist) >= 2, str(len(hist)))
-check("history ascending by time", [h["timestamp"] for h in hist] == sorted(h["timestamp"] for h in hist))
+check(
+    "history ascending by time",
+    [h["timestamp"] for h in hist] == sorted(h["timestamp"] for h in hist),
+)
 check("history carries power", hist[0]["power_w"] is not None)
 
 print("\n=== 13. Lookup by MAC and 404 ===")
 check("lookup by colon MAC", client.get("/api/smart-plugs/AC:EB:E6:F6:53:88").status_code == 200)
 check("lookup by bare hex", client.get("/api/smart-plugs/acebe6f65388").status_code == 200)
 check("unknown plug -> 404", client.get("/api/smart-plugs/deadbeefdead").status_code == 404)
-check("unknown node in discovery -> 404",
-      client.post("/api/smart-plugs/discovery", json={"node_id": "NOPE", "plugs": []}).status_code == 404)
+check(
+    "unknown node in discovery -> 404",
+    client.post("/api/smart-plugs/discovery", json={"node_id": "NOPE", "plugs": []}).status_code
+    == 404,
+)
 
 print("\n=== 14. Energy Node ingestion untouched ===")
-r = client.post("/api/v1/measurements/batch", json={
-    "device_id": "N001",
-    "measurements": [{"captured_at": iso(datetime.utcnow()), "voltage_a": 121.0, "current_a": 5.0,
-                      "total_active_power": 1800.0, "total_current": 15.0}],
-})
-check("energy node batch still ingests", r.status_code == 200 and r.json().get("inserted") == 1, r.text)
+r = client.post(
+    "/api/v1/measurements/batch",
+    json={
+        "device_id": "N001",
+        "measurements": [
+            {
+                "captured_at": iso(datetime.utcnow()),
+                "voltage_a": 121.0,
+                "current_a": 5.0,
+                "total_active_power": 1800.0,
+                "total_current": 15.0,
+            }
+        ],
+    },
+)
+check(
+    "energy node batch still ingests",
+    r.status_code == 200 and r.json().get("inserted") == 1,
+    r.text,
+)
 r = client.post("/api/edge/heartbeat", json={"node_id": "N001"})
 check("heartbeat still works", r.status_code == 200, r.text)
 
 db = TestSession()
-check("plug readings did NOT go into energy_readings",
-      db.query(models.EnergyReading).count() == 1,
-      str(db.query(models.EnergyReading).count()))
-check("plug history stored separately",
-      db.query(models.SmartPlugReading).count() >= 9,
-      str(db.query(models.SmartPlugReading).count()))
+check(
+    "plug readings did NOT go into energy_readings",
+    db.query(models.EnergyReading).count() == 1,
+    str(db.query(models.EnergyReading).count()),
+)
+check(
+    "plug history stored separately",
+    db.query(models.SmartPlugReading).count() >= 9,
+    str(db.query(models.SmartPlugReading).count()),
+)
 db.close()
 
 print("\n" + "=" * 60)

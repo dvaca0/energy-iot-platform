@@ -40,7 +40,7 @@ from __future__ import annotations
 import json
 import logging
 from collections.abc import Iterable
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from pydantic import BaseModel, Field
@@ -60,6 +60,7 @@ log = logging.getLogger("monitoring.heartbeat")
 # --------------------------------------------------------------------------
 # Wire format
 # --------------------------------------------------------------------------
+
 
 class HeartbeatPayload(BaseModel):
     """Health report sent by a node.
@@ -153,7 +154,7 @@ def _parse_dt(value: str | None) -> datetime | None:
     except (TypeError, ValueError):
         return None
     if parsed.tzinfo is not None:
-        parsed = parsed.astimezone(timezone.utc).replace(tzinfo=None)
+        parsed = parsed.astimezone(UTC).replace(tzinfo=None)
     return parsed
 
 
@@ -273,6 +274,7 @@ def record_heartbeat(
 # Liveness state
 # --------------------------------------------------------------------------
 
+
 def _missed_beats(age_seconds: float, config: MonitoringConfig) -> int:
     """Number of expected heartbeats that did not arrive.
 
@@ -317,9 +319,7 @@ def collect_node_state(
     state: dict[str, dict[str, Any]] = {}
 
     nodes = session.query(Node).all()
-    latest_rows = {
-        row.node_code: row for row in session.query(NodeHeartbeatLatest).all()
-    }
+    latest_rows = {row.node_code: row for row in session.query(NodeHeartbeatLatest).all()}
 
     # Newest measurement per node: one grouped aggregate rather than a
     # correlated subquery per node on every tick.
@@ -398,9 +398,7 @@ def collect_node_state(
             "building": building.name if building else None,
             "campus": campus.name if campus else None,
             "last_reading_at": reading_at,
-            "reading_age_seconds": (
-                (now - reading_at).total_seconds() if reading_at else None
-            ),
+            "reading_age_seconds": ((now - reading_at).total_seconds() if reading_at else None),
         }
 
     # Heartbeats from codes that are not registered nodes: kept so the security
@@ -415,9 +413,7 @@ def collect_node_state(
             "name": None,
             "latest": latest,
             "heartbeat": (
-                session.get(NodeHeartbeat, latest.heartbeat_id)
-                if latest.heartbeat_id
-                else None
+                session.get(NodeHeartbeat, latest.heartbeat_id) if latest.heartbeat_id else None
             ),
             "heartbeat_age_seconds": (
                 (now - latest.received_at).total_seconds() if latest.received_at else None
@@ -490,6 +486,7 @@ def recovery_details(state: dict[str, Any], config: MonitoringConfig) -> dict[st
 # --------------------------------------------------------------------------
 # Rules
 # --------------------------------------------------------------------------
+
 
 def _node_location(state: dict[str, Any]) -> dict[str, Any]:
     """Location fields shared by every node finding."""
@@ -655,9 +652,30 @@ def check_node_resources(ctx: RuleContext) -> Iterable[Finding]:
         location = _node_location(state)
 
         for metric, value, warn, crit, label, unit in (
-            ("cpu_percent", beat.cpu_percent, thresholds.cpu_warning, thresholds.cpu_critical, "CPU", "%"),
-            ("memory_percent", beat.memory_percent, thresholds.memory_warning, thresholds.memory_critical, "memory", "%"),
-            ("disk_percent", beat.disk_percent, thresholds.disk_warning, thresholds.disk_critical, "disk", "%"),
+            (
+                "cpu_percent",
+                beat.cpu_percent,
+                thresholds.cpu_warning,
+                thresholds.cpu_critical,
+                "CPU",
+                "%",
+            ),
+            (
+                "memory_percent",
+                beat.memory_percent,
+                thresholds.memory_warning,
+                thresholds.memory_critical,
+                "memory",
+                "%",
+            ),
+            (
+                "disk_percent",
+                beat.disk_percent,
+                thresholds.disk_warning,
+                thresholds.disk_critical,
+                "disk",
+                "%",
+            ),
             (
                 "cpu_temperature_c",
                 beat.cpu_temperature_c,
@@ -683,10 +701,12 @@ def check_node_resources(ctx: RuleContext) -> Iterable[Finding]:
                     expected_value=f"< {warn:.0f}{unit}",
                     suggested_commands=["top -b -n1 | head -15", "df -h", "vcgencmd measure_temp"],
                     suggested_actions=[
-                        "A Raspberry Pi throttles above 80 °C and can produce unstable "
-                        "ADC readings when hot."
-                        if metric == "cpu_temperature_c"
-                        else "Sustained pressure here eventually stops local buffering."
+                        (
+                            "A Raspberry Pi throttles above 80 °C and can produce unstable "
+                            "ADC readings when hot."
+                            if metric == "cpu_temperature_c"
+                            else "Sustained pressure here eventually stops local buffering."
+                        )
                     ],
                     **location,
                 )
@@ -778,7 +798,10 @@ def check_node_power(ctx: RuleContext) -> Iterable[Finding]:
                     metric="filesystem",
                     current_value="read-only",
                     expected_value="read-write",
-                    suggested_causes=["SD card wear-out or corruption", "I/O errors forcing remount"],
+                    suggested_causes=[
+                        "SD card wear-out or corruption",
+                        "I/O errors forcing remount",
+                    ],
                     suggested_commands=["mount | grep ' / '", "dmesg | tail -50"],
                     suggested_actions=[
                         "Data from this node is being lost now. Replace the SD card.",
@@ -858,14 +881,14 @@ def check_node_storage(ctx: RuleContext) -> Iterable[Finding]:
                     metric="sqlite_size_mb",
                     current_value=f"{beat.sqlite_size_mb:.0f} MB",
                     expected_value=f"< {thresholds.sqlite_size_warning_mb:.0f} MB",
-                    suggested_actions=["Confirm the retention window is being applied on the node."],
+                    suggested_actions=[
+                        "Confirm the retention window is being applied on the node."
+                    ],
                     **location,
                 )
             )
 
-        severity = ctx.threshold_severity(
-            beat.sqlite_wal_mb, thresholds.wal_size_warning_mb, None
-        )
+        severity = ctx.threshold_severity(beat.sqlite_wal_mb, thresholds.wal_size_warning_mb, None)
         if severity is not Severity.OK:
             findings.append(
                 Finding(
@@ -1063,7 +1086,11 @@ def check_node_collector(ctx: RuleContext) -> Iterable[Finding]:
                         current_value="unavailable",
                         expected_value="available",
                         suggested_causes=[hint],
-                        suggested_commands=["i2cdetect -y 1", "ls -l /dev/spidev*", "dmesg | tail -30"],
+                        suggested_commands=[
+                            "i2cdetect -y 1",
+                            "ls -l /dev/spidev*",
+                            "dmesg | tail -30",
+                        ],
                         suggested_actions=["Readings from this node are suspect until resolved."],
                         **location,
                     )
@@ -1264,7 +1291,7 @@ def check_unknown_nodes(ctx: RuleContext) -> Iterable[Finding]:
 
 __all__ = [
     "HeartbeatPayload",
-    "record_heartbeat",
     "collect_node_state",
+    "record_heartbeat",
     "recovery_details",
 ]

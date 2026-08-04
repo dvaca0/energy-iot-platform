@@ -21,6 +21,7 @@ picked up automatically by every caller that already asks the right question.
 The tables are read once and cached; they change only by migration. Call
 `refresh()` after any deliberate change within a running process.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -119,21 +120,26 @@ def attributing_statuses(db: Session) -> tuple[str, ...]:
     and M8 removes the need for it in the ingest path entirely.
     """
     statuses, _ = _load(db)
-    return tuple(s.code for s in sorted(statuses.values(), key=lambda s: s.sort_order)
-                 if s.allows_attribution)
+    return tuple(
+        s.code
+        for s in sorted(statuses.values(), key=lambda s: s.sort_order)
+        if s.allows_attribution
+    )
 
 
 def operational_statuses(db: Session) -> tuple[str, ...]:
     """Statuses in which the node is expected to be measuring."""
     statuses, _ = _load(db)
-    return tuple(s.code for s in sorted(statuses.values(), key=lambda s: s.sort_order)
-                 if s.is_operational)
+    return tuple(
+        s.code for s in sorted(statuses.values(), key=lambda s: s.sort_order) if s.is_operational
+    )
 
 
 def terminal_statuses(db: Session) -> tuple[str, ...]:
     statuses, _ = _load(db)
-    return tuple(s.code for s in sorted(statuses.values(), key=lambda s: s.sort_order)
-                 if s.is_terminal)
+    return tuple(
+        s.code for s in sorted(statuses.values(), key=lambda s: s.sort_order) if s.is_terminal
+    )
 
 
 def is_terminal(db: Session, code: str) -> bool:

@@ -41,6 +41,7 @@ router = APIRouter()
 # Node ingestion
 # --------------------------------------------------------------------------
 
+
 @router.post("/heartbeat")
 def post_heartbeat(
     payload: HeartbeatPayload,
@@ -76,6 +77,7 @@ def post_heartbeat(
 # Status
 # --------------------------------------------------------------------------
 
+
 @router.get("/status")
 def get_status(db: Session = Depends(get_db)):
     """Full platform status snapshot, collected on demand."""
@@ -103,6 +105,7 @@ def monitoring_health(db: Session = Depends(get_db)):
 # Alerts
 # --------------------------------------------------------------------------
 
+
 @router.get("/alerts")
 def list_alerts(
     status: str | None = Query(None, pattern="^(open|resolved|acknowledged|all)$"),
@@ -129,9 +132,7 @@ def list_alerts(
 
 
 @router.get("/alerts/statistics")
-def alert_statistics(
-    days: int = Query(7, ge=1, le=365), db: Session = Depends(get_db)
-):
+def alert_statistics(days: int = Query(7, ge=1, le=365), db: Session = Depends(get_db)):
     """Aggregate alert counts, for a dashboard."""
     return history.statistics(db, days=days)
 
@@ -148,9 +149,7 @@ def get_alert(alert_id: str, db: Session = Depends(get_db)):
 
 
 @router.post("/alerts/{alert_id}/acknowledge")
-def acknowledge_alert(
-    alert_id: str, by: str | None = None, db: Session = Depends(get_db)
-):
+def acknowledge_alert(alert_id: str, by: str | None = None, db: Session = Depends(get_db)):
     """Acknowledge an alert: stops reminders, keeps it open."""
     alert = acknowledge(db, alert_id, by=by)
     if alert is None:
@@ -162,6 +161,7 @@ def acknowledge_alert(
 # --------------------------------------------------------------------------
 # Nodes
 # --------------------------------------------------------------------------
+
 
 @router.get("/nodes/{node_code}/heartbeats")
 def node_heartbeats(
@@ -180,6 +180,7 @@ def node_heartbeats(
 # --------------------------------------------------------------------------
 # Configuration and diagnostics
 # --------------------------------------------------------------------------
+
 
 @router.get("/config")
 def get_monitoring_config():

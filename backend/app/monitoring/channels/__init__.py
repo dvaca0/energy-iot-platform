@@ -45,9 +45,9 @@ def channel_by_name(
 
 
 __all__ = [
+    "DeliveryResult",
     "NotificationChannel",
     "OutboundMessage",
-    "DeliveryResult",
     "TelegramChannel",
     "build_channels",
     "channel_by_name",

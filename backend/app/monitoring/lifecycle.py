@@ -140,7 +140,7 @@ def commission_states(session: Session) -> dict[str, CommissionState]:
                 "COALESCE(description,'') FROM node_commission_states"
             )
         ).all()
-    except Exception:  # noqa: BLE001 - older schema, or table missing
+    except Exception:
         log.warning("node_commission_states unavailable; monitoring policy will be silent")
         _commission_cache = {}
         return _commission_cache
@@ -174,7 +174,7 @@ def operational_statuses(session: Session) -> frozenset[str]:
         from app.db import lifecycle as db_lifecycle
 
         _operational_cache = frozenset(db_lifecycle.operational_statuses(session))
-    except Exception:  # noqa: BLE001
+    except Exception:
         log.warning("deployment_statuses unavailable; treating no deployment as operational")
         _operational_cache = frozenset()
     return _operational_cache
@@ -216,7 +216,11 @@ def classify(
         override = str(override).lower()
         if override == "maintenance":
             return MonitoringPolicy(
-                False, False, False, False, False,
+                False,
+                False,
+                False,
+                False,
+                False,
                 rationale="under maintenance — alerting suppressed by configuration",
                 commission_state=commission,
             )
@@ -229,14 +233,22 @@ def classify(
         # Unknown state: monitor the machine only. Better to under-report than
         # to invent a policy for a state this code has never seen.
         return MonitoringPolicy(
-            False, False, False, False, True,
+            False,
+            False,
+            False,
+            False,
+            True,
             rationale=f"unrecognised commission state {commission!r} — hardware only",
             commission_state=commission,
         )
 
     if not info.is_monitored:
         return MonitoringPolicy(
-            False, False, False, False, False,
+            False,
+            False,
+            False,
+            False,
+            False,
             rationale=f"{info.label.lower()} — {info.description or 'silence is expected'}",
             commission_state=commission,
         )
@@ -290,7 +302,7 @@ def classify(
         # equipment going quiet is information, not an incident.
         heartbeat_pages=False,
         rationale=(
-            f"commissioned, no operational deployment"
+            "commissioned, no operational deployment"
             + (f" (latest: {status})" if status else "")
             + " — electrical alerting suppressed"
         ),
@@ -320,13 +332,13 @@ def policy_for(state: dict[str, Any]) -> MonitoringPolicy:
 
 
 __all__ = [
+    "SILENT",
     "CommissionState",
     "MonitoringPolicy",
-    "SILENT",
-    "classify",
     "annotate",
-    "policy_for",
+    "classify",
     "commission_states",
     "operational_statuses",
+    "policy_for",
     "refresh",
 ]

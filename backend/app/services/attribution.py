@@ -31,12 +31,13 @@ timestamp there is no correct answer, so the resolver returns
 silently picks one. Every outcome, including every refusal, carries a reason
 code emitted here — never inferred later during rendering.
 """
+
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import datetime
 from types import MappingProxyType
-from typing import Mapping
 
 
 # --------------------------------------------------------------- reason codes
@@ -86,13 +87,15 @@ class Flag:
 
 # Node context -> the reason emitted when that context forbids attribution.
 # A mapping rather than a chain of ifs, so adding a context is data.
-_CONTEXT_REASON = MappingProxyType({
-    "bench": Reason.BENCH_NODE,
-    "laboratory": Reason.LABORATORY_NODE,
-    "calibration": Reason.CALIBRATION_NODE,
-    "simulation": Reason.SIMULATION_NODE,
-    "commissioning": Reason.COMMISSIONING_NODE,
-})
+_CONTEXT_REASON = MappingProxyType(
+    {
+        "bench": Reason.BENCH_NODE,
+        "laboratory": Reason.LABORATORY_NODE,
+        "calibration": Reason.CALIBRATION_NODE,
+        "simulation": Reason.SIMULATION_NODE,
+        "commissioning": Reason.COMMISSIONING_NODE,
+    }
+)
 
 
 # ------------------------------------------------------------------ structures
@@ -116,8 +119,8 @@ class DeploymentWindow:
     node_id: int
     building_id: int | None
     electrical_panel_id: int | None
-    activated_at: datetime | None   # None means never activated
-    closed_at: datetime | None      # None means still open
+    activated_at: datetime | None  # None means never activated
+    closed_at: datetime | None  # None means still open
     status: str
     allows_attribution: bool
 
@@ -202,8 +205,7 @@ def load_state(conn) -> ResolverState:
     convention.
     """
     windows: dict[int, list[DeploymentWindow]] = {}
-    rows = conn.execute(
-        """
+    rows = conn.execute("""
         SELECT d.id, d.node_id, d.building_id, d.electrical_panel_id,
                d.activated_at, d.closed_at, d.status,
                COALESCE(s.allows_attribution, 0),
@@ -211,8 +213,7 @@ def load_state(conn) -> ResolverState:
           FROM deployments d
           LEFT JOIN deployment_statuses s ON s.code = d.status
          ORDER BY d.node_id, d.activated_at, d.id
-        """
-    ).fetchall()
+        """).fetchall()
     for row in rows:
         windows.setdefault(row[1], []).append(
             DeploymentWindow(
@@ -232,37 +233,28 @@ def load_state(conn) -> ResolverState:
     node_context: dict[int, str] = {}
     node_code: dict[int, str] = {}
     node_may_upload: dict[int, bool] = {}
-    for node_id, code, context, may_upload in conn.execute(
-        """
+    for node_id, code, context, may_upload in conn.execute("""
         SELECT n.id, n.code, n.measurement_context,
                COALESCE(s.may_upload, 0)
           FROM nodes n
           LEFT JOIN node_commission_states s ON s.code = n.commission_state
          ORDER BY n.id
-        """
-    ):
+        """):
         node_context[node_id] = context
         node_code[node_id] = code
         node_may_upload[node_id] = bool(may_upload)
 
     placeholders = frozenset(
-        row[0] for row in conn.execute(
-            "SELECT id FROM buildings WHERE is_placeholder = 1"
-        )
+        row[0] for row in conn.execute("SELECT id FROM buildings WHERE is_placeholder = 1")
     )
     attributable = frozenset(
-        row[0] for row in conn.execute(
-            "SELECT code FROM measurement_contexts WHERE may_attribute = 1"
-        )
+        row[0]
+        for row in conn.execute("SELECT code FROM measurement_contexts WHERE may_attribute = 1")
     )
-    known = frozenset(
-        row[0] for row in conn.execute("SELECT code FROM measurement_contexts")
-    )
+    known = frozenset(row[0] for row in conn.execute("SELECT code FROM measurement_contexts"))
 
     return ResolverState(
-        windows_by_node=MappingProxyType(
-            {k: tuple(v) for k, v in windows.items()}
-        ),
+        windows_by_node=MappingProxyType({k: tuple(v) for k, v in windows.items()}),
         node_context=MappingProxyType(node_context),
         node_code=MappingProxyType(node_code),
         node_may_upload=MappingProxyType(node_may_upload),
@@ -303,7 +295,10 @@ def resolve(state: ResolverState, node_id: int, captured_at: datetime | None) ->
     # considered — classification and attribution are independent (ADR-0003).
     if context not in state.attributable_contexts:
         return Decision(
-            None, None, None, context,
+            None,
+            None,
+            None,
+            context,
             _CONTEXT_REASON.get(context, Reason.UNKNOWN_CONTEXT),
             flags=base,
         )
@@ -321,7 +316,11 @@ def resolve(state: ResolverState, node_id: int, captured_at: datetime | None) ->
 
     if not attributing:
         return Decision(
-            None, None, None, context, Reason.DEPLOYMENT_NOT_ATTRIBUTING,
+            None,
+            None,
+            None,
+            context,
+            Reason.DEPLOYMENT_NOT_ATTRIBUTING,
             flags=base,
             candidates=tuple(sorted(w.deployment_id for w in covering)),
         )
@@ -329,7 +328,11 @@ def resolve(state: ResolverState, node_id: int, captured_at: datetime | None) ->
     if len(attributing) > 1:
         # Genuinely ambiguous. Never tie-break — report and attribute nothing.
         return Decision(
-            None, None, None, context, Reason.MULTIPLE_MATCHES,
+            None,
+            None,
+            None,
+            context,
+            Reason.MULTIPLE_MATCHES,
             flags=base,
             candidates=tuple(sorted(w.deployment_id for w in attributing)),
         )

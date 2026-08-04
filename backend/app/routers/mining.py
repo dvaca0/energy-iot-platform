@@ -1,18 +1,17 @@
-from app.services.platform_settings import get_thresholds
 from collections import defaultdict
-from datetime import datetime, timedelta, time
+from datetime import datetime, timedelta
 from math import sqrt
 
 from fastapi import APIRouter, Depends
-from sqlalchemy.orm import Session
-
 from sqlalchemy import text as sa_text
+from sqlalchemy.orm import Session
 
 from app.db import scope
 from app.db.database import get_db
-from app.db.models import EnergyReading, Building
-from app.services.cost_engine import to_local_time
+from app.db.models import Building
 from app.services import energy_aggregate as agg
+from app.services.cost_engine import to_local_time
+from app.services.platform_settings import get_thresholds
 
 router = APIRouter()
 
@@ -59,8 +58,7 @@ def mining_analytics(db: Session = Depends(get_db)):
     stats_by_building = {
         row[0]: row
         for row in db.execute(
-            sa_text(
-                f"""
+            sa_text(f"""
                 SELECT building_id,
                        COUNT(*)                  AS samples,
                        AVG(power_kw)             AS avg_power,
@@ -72,8 +70,7 @@ def mining_analytics(db: Session = Depends(get_db)):
                    AND timestamp >= :start
                    AND energy_kwh IS NOT NULL
                  GROUP BY building_id
-                """
-            ),
+                """),
             {**{f"c{i}": code for i, code in enumerate(contexts)}, "start": start},
         )
     }
@@ -83,28 +80,28 @@ def mining_analytics(db: Session = Depends(get_db)):
         sample_count = int(stats[1]) if stats else 0
 
         if sample_count < 2:
-            building_results.append({
-                "id": building.id,
-                "name": building.name,
-                "campus": building.campus.name,
-                "organizational_unit": building.organizational_unit.name,
-                "status": "insufficient_data",
-                "samples": sample_count,
-                "total_kwh": 0,
-                "avg_power_kw": 0,
-                "peak_power_kw": 0,
-                "night_kwh": 0,
-                "avg_pf": 0,
-                "cluster": "Sin datos suficientes",
-                "cluster_reason": "Se requieren al menos 2 lecturas reales.",
-            })
+            building_results.append(
+                {
+                    "id": building.id,
+                    "name": building.name,
+                    "campus": building.campus.name,
+                    "organizational_unit": building.organizational_unit.name,
+                    "status": "insufficient_data",
+                    "samples": sample_count,
+                    "total_kwh": 0,
+                    "avg_power_kw": 0,
+                    "peak_power_kw": 0,
+                    "night_kwh": 0,
+                    "avg_pf": 0,
+                    "cluster": "Sin datos suficientes",
+                    "cluster_reason": "Se requieren al menos 2 lecturas reales.",
+                }
+            )
             continue
 
         building_buckets = buckets_by_building.get(building.id, [])
         total_kwh = agg.totals(building_buckets)[0]
-        night_kwh = agg.totals(
-            [b for b in building_buckets if b.local_hour_of_day < 6]
-        )[0]
+        night_kwh = agg.totals([b for b in building_buckets if b.local_hour_of_day < 6])[0]
 
         avg_power = float(stats[2] or 0)
         peak_power = float(stats[3] or 0)
@@ -113,13 +110,13 @@ def mining_analytics(db: Session = Depends(get_db)):
         # Population variance, the same quantity the per-reading loop computed.
         # Clamped at zero: floating-point cancellation can make E[p^2] - E[p]^2
         # very slightly negative when every sample is near-identical.
-        variance = max(float(stats[5] or 0) - avg_power ** 2, 0.0)
+        variance = max(float(stats[5] or 0) - avg_power**2, 0.0)
         std_power = sqrt(variance)
         cv = std_power / avg_power if avg_power > 0 else 0
 
         night_ratio = night_kwh / total_kwh if total_kwh > 0 else 0
 
-        if avg_pf and avg_pf < float(get_thresholds().get('minPowerFactor', 0.90)):
+        if avg_pf and avg_pf < float(get_thresholds().get("minPowerFactor", 0.90)):
             cluster = "Bajo Factor de Potencia"
             reason = f"Factor de potencia promedio {avg_pf:.2f}, menor al umbral configurado."
         elif night_ratio > 0.25:
@@ -135,23 +132,25 @@ def mining_analytics(db: Session = Depends(get_db)):
             cluster = "Uso Variable"
             reason = "Patrón variable detectado con lecturas reales."
 
-        building_results.append({
-            "id": building.id,
-            "name": building.name,
-            "campus": building.campus.name,
-            "organizational_unit": building.organizational_unit.name,
-            "status": "ok",
-            "samples": sample_count,
-            "total_kwh": round(total_kwh, 4),
-            "avg_power_kw": round(avg_power, 4),
-            "peak_power_kw": round(peak_power, 4),
-            "night_kwh": round(night_kwh, 4),
-            "night_ratio_pct": round(night_ratio * 100, 2),
-            "avg_pf": round(avg_pf, 4),
-            "power_cv": round(cv, 4),
-            "cluster": cluster,
-            "cluster_reason": reason,
-        })
+        building_results.append(
+            {
+                "id": building.id,
+                "name": building.name,
+                "campus": building.campus.name,
+                "organizational_unit": building.organizational_unit.name,
+                "status": "ok",
+                "samples": sample_count,
+                "total_kwh": round(total_kwh, 4),
+                "avg_power_kw": round(avg_power, 4),
+                "peak_power_kw": round(peak_power, 4),
+                "night_kwh": round(night_kwh, 4),
+                "night_ratio_pct": round(night_ratio * 100, 2),
+                "avg_pf": round(avg_pf, 4),
+                "power_cv": round(cv, 4),
+                "cluster": cluster,
+                "cluster_reason": reason,
+            }
+        )
 
     monitored = [b for b in building_results if b["status"] == "ok"]
 
@@ -170,12 +169,14 @@ def mining_analytics(db: Session = Depends(get_db)):
     ]
 
     if not cluster_cards:
-        cluster_cards = [{
-            "name": "Sin datos suficientes",
-            "description": "Aún no hay suficientes edificios monitoreados para clustering.",
-            "buildings": [],
-            "count": 0,
-        }]
+        cluster_cards = [
+            {
+                "name": "Sin datos suficientes",
+                "description": "Aún no hay suficientes edificios monitoreados para clustering.",
+                "buildings": [],
+                "count": 0,
+            }
+        ]
 
     correlation = {
         "available": False,
@@ -208,7 +209,8 @@ def mining_analytics(db: Session = Depends(get_db)):
             binds = {f"c{i}": code for i, code in enumerate(contexts)}
             binds.update({"bid": building_id, "start": start})
 
-            rows = db.execute(sa_text(f"""
+            rows = db.execute(
+                sa_text(f"""
                 SELECT strftime('%Y-%m-%dT%H', timestamp) AS h, AVG(power_kw)
                   FROM energy_readings
                  WHERE context IN ({placeholders})
@@ -216,7 +218,9 @@ def mining_analytics(db: Session = Depends(get_db)):
                    AND timestamp >= :start
                    AND power_kw IS NOT NULL
                  GROUP BY h
-            """), binds).fetchall()
+            """),
+                binds,
+            ).fetchall()
 
             out = {}
             for hour_utc, avg_kw in rows:
@@ -235,7 +239,11 @@ def mining_analytics(db: Session = Depends(get_db)):
         correlation = {
             "available": coeff is not None,
             "title": f"Correlación {a['name']} vs {b['name']}",
-            "message": "Correlación calculada con potencia horaria real." if coeff is not None else "No hay suficientes puntos horarios comunes.",
+            "message": (
+                "Correlación calculada con potencia horaria real."
+                if coeff is not None
+                else "No hay suficientes puntos horarios comunes."
+            ),
             "coefficient": round(coeff, 4) if coeff is not None else None,
             "series_a": [{"label": k, "value": round(sa[k], 4)} for k in common[-12:]],
             "series_b": [{"label": k, "value": round(sb[k], 4)} for k in common[-12:]],
@@ -246,45 +254,55 @@ def mining_analytics(db: Session = Depends(get_db)):
     patterns = []
 
     for b in monitored:
-        if b["avg_pf"] and b["avg_pf"] < float(get_thresholds().get('minPowerFactor', 0.90)):
-            patterns.append({
-                "title": "Bajo factor de potencia",
-                "building": b["name"],
-                "description": f"PF promedio {b['avg_pf']:.2f}. Revisar cargas inductivas o compensación.",
-                "severity": "medium",
-            })
+        if b["avg_pf"] and b["avg_pf"] < float(get_thresholds().get("minPowerFactor", 0.90)):
+            patterns.append(
+                {
+                    "title": "Bajo factor de potencia",
+                    "building": b["name"],
+                    "description": f"PF promedio {b['avg_pf']:.2f}. Revisar cargas inductivas o compensación.",
+                    "severity": "medium",
+                }
+            )
 
         if b["night_ratio_pct"] > 25:
-            patterns.append({
-                "title": "Consumo nocturno alto",
-                "building": b["name"],
-                "description": f"{b['night_ratio_pct']:.1f}% del consumo ocurrió entre 00:00 y 06:00.",
-                "severity": "warning",
-            })
+            patterns.append(
+                {
+                    "title": "Consumo nocturno alto",
+                    "building": b["name"],
+                    "description": f"{b['night_ratio_pct']:.1f}% del consumo ocurrió entre 00:00 y 06:00.",
+                    "severity": "warning",
+                }
+            )
 
         if b["peak_power_kw"] > 50:
-            patterns.append({
-                "title": "Pico de demanda",
-                "building": b["name"],
-                "description": f"Pico detectado de {b['peak_power_kw']:.2f} kW.",
-                "severity": "high",
-            })
+            patterns.append(
+                {
+                    "title": "Pico de demanda",
+                    "building": b["name"],
+                    "description": f"Pico detectado de {b['peak_power_kw']:.2f} kW.",
+                    "severity": "high",
+                }
+            )
 
         if b["power_cv"] < 0.15 and b["samples"] >= 20:
-            patterns.append({
-                "title": "Carga constante",
-                "building": b["name"],
-                "description": f"Variación baja de potencia; CV={b['power_cv']:.2f}.",
-                "severity": "info",
-            })
+            patterns.append(
+                {
+                    "title": "Carga constante",
+                    "building": b["name"],
+                    "description": f"Variación baja de potencia; CV={b['power_cv']:.2f}.",
+                    "severity": "info",
+                }
+            )
 
     if not patterns:
-        patterns.append({
-            "title": "Sin patrones concluyentes",
-            "building": "Sistema",
-            "description": "Se requieren más lecturas o más edificios monitoreados.",
-            "severity": "info",
-        })
+        patterns.append(
+            {
+                "title": "Sin patrones concluyentes",
+                "building": "Sistema",
+                "description": "Se requieren más lecturas o más edificios monitoreados.",
+                "severity": "info",
+            }
+        )
 
     insights = [
         {

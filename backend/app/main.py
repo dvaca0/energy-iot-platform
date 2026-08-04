@@ -1,10 +1,31 @@
 from dotenv import load_dotenv
-load_dotenv(dotenv_path='.env')
+
+load_dotenv(dotenv_path=".env")
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.routers import dashboard, buildings, nodes, deployments, cost, ai, org, readings, metrics, edge, anomalies, settings, infra, metrics, mining, ai_center, reports, data_explorer, alerts, smart_plugs
+from app.routers import (
+    ai,
+    ai_center,
+    alerts,
+    anomalies,
+    buildings,
+    cost,
+    dashboard,
+    data_explorer,
+    deployments,
+    edge,
+    infra,
+    metrics,
+    mining,
+    nodes,
+    org,
+    readings,
+    reports,
+    settings,
+    smart_plugs,
+)
 
 app = FastAPI(
     title="University Energy Intelligence Platform API",
@@ -38,6 +59,7 @@ app.include_router(infra.router, prefix="/api/infra", tags=["Infrastructure"])
 def health():
     return {"status": "ok", "service": "energy-platform-backend"}
 
+
 app.include_router(mining.router, prefix="/api/mining", tags=["Mining"])
 
 app.include_router(ai_center.router, prefix="/api/ai-center", tags=["AI Center"])
@@ -53,6 +75,6 @@ app.include_router(smart_plugs.router, prefix="/api/smart-plugs", tags=["Smart P
 # Monitoring subsystem. Importing the package registers every health rule and
 # makes its tables known to SQLAlchemy; the tables themselves are created by
 # the monitoring service, not here, so the API process never alters the schema.
-from app.monitoring.router import router as monitoring_router  # noqa: E402
+from app.monitoring.router import router as monitoring_router
 
 app.include_router(monitoring_router, prefix="/api/monitoring", tags=["Monitoring"])

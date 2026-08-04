@@ -35,6 +35,6 @@ from app.monitoring.config import get_config
 from app.monitoring.rules import registered_rules
 from app.monitoring.storage import create_tables
 
-__all__ = ["get_config", "registered_rules", "create_tables"]
+__all__ = ["create_tables", "get_config", "registered_rules"]
 
 __version__ = "1.0.0"

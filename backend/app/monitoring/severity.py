@@ -29,7 +29,7 @@ class Severity(IntEnum):
     EMERGENCY = 5
 
     @classmethod
-    def parse(cls, value: "str | int | Severity | None", default: "Severity | None" = None) -> "Severity":
+    def parse(cls, value: str | int | Severity | None, default: Severity | None = None) -> Severity:
         """Coerce a stored string, an int or an instance into a Severity.
 
         Falls back to ``default`` (or ``INFO``) for anything unrecognised, so a
@@ -101,17 +101,17 @@ STATUS_RESOLVED = "RESOLVED"
 STATUS_REMINDER = "REMINDER"
 
 
-def worst(severities: "list[Severity] | tuple[Severity, ...]") -> Severity:
+def worst(severities: list[Severity] | tuple[Severity, ...]) -> Severity:
     """Highest severity in a collection, or ``OK`` when empty."""
     return max(severities, default=Severity.OK)
 
 
 __all__ = [
-    "Severity",
-    "worst",
+    "STATUS_ESCALATED",
     "STATUS_NEW",
     "STATUS_ONGOING",
-    "STATUS_ESCALATED",
-    "STATUS_RESOLVED",
     "STATUS_REMINDER",
+    "STATUS_RESOLVED",
+    "Severity",
+    "worst",
 ]

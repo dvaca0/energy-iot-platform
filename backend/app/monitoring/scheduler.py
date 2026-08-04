@@ -30,7 +30,7 @@ import signal
 import sys
 import threading
 import time
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -80,7 +80,7 @@ class MonitoringScheduler:
 
             try:
                 self.tick()
-            except Exception:  # noqa: BLE001 - the loop must never die
+            except Exception:
                 log.exception("Tick %d failed", self._tick)
                 self._report_self_failure()
 
@@ -280,7 +280,7 @@ class MonitoringScheduler:
                     bypass_policy=True,
                     config=self.config,
                 )
-        except Exception:  # noqa: BLE001
+        except Exception:
             log.exception("Could not queue monitoring-gap notification")
 
     def _report_self_failure(self) -> None:
@@ -316,12 +316,10 @@ class MonitoringScheduler:
                     bypass_policy=True,
                     config=self.config,
                 )
-        except Exception:  # noqa: BLE001
+        except Exception:
             log.exception("Could not persist self-failure alert")
 
-    def _record_server_heartbeat(
-        self, session, server: dict[str, Any], now: datetime
-    ) -> None:
+    def _record_server_heartbeat(self, session, server: dict[str, Any], now: datetime) -> None:
         """Persist the server's own health snapshot."""
         disks = server.get("disks") or {}
         root = disks.get("/") or next(iter(disks.values()), {})
@@ -419,4 +417,4 @@ if __name__ == "__main__":
     sys.exit(main())
 
 
-__all__ = ["MonitoringScheduler", "watchdog_status", "main"]
+__all__ = ["MonitoringScheduler", "main", "watchdog_status"]

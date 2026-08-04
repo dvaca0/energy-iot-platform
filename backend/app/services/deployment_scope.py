@@ -22,6 +22,7 @@ reinterprets ``status``; callers that need the administrative view keep asking
 ``lifecycle``. Conflating the two is what would make a genuinely archived
 deployment look live, or hide an active one behind a stale label.
 """
+
 from __future__ import annotations
 
 from datetime import datetime, timedelta
@@ -77,7 +78,9 @@ def last_reading_by_deployment(db: Session) -> dict[int, datetime]:
     for deployment_id, latest in rows:
         if latest is None:
             continue
-        out[deployment_id] = latest if isinstance(latest, datetime) else datetime.fromisoformat(latest)
+        out[deployment_id] = (
+            latest if isinstance(latest, datetime) else datetime.fromisoformat(latest)
+        )
     return out
 
 

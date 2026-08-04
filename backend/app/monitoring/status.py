@@ -25,7 +25,6 @@ from typing import Any
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.db.models import Building, Campus, Deployment, EnergyReading, Node
 from app.monitoring import lifecycle
 from app.monitoring.alerts import open_alert_summary
 from app.monitoring.channels import OutboundMessage
@@ -134,9 +133,7 @@ def build_status(
         reading = latest_readings.get(state.get("node_id"))
 
         missed = state.get("missed_beats") or 0
-        if state.get("unregistered"):
-            node_severity = Severity.WARNING
-        elif not state.get("ever_seen"):
+        if state.get("unregistered") or not state.get("ever_seen"):
             node_severity = Severity.WARNING
         elif missed >= config.heartbeat.missed_critical:
             node_severity = Severity.CRITICAL
@@ -164,14 +161,10 @@ def build_status(
                 "deployment": state.get("deployment_label"),
                 "deployment_status": state.get("deployment_status"),
                 "last_reading_at": (
-                    state["last_reading_at"].isoformat()
-                    if state.get("last_reading_at")
-                    else None
+                    state["last_reading_at"].isoformat() if state.get("last_reading_at") else None
                 ),
                 "reading_age_seconds": state.get("reading_age_seconds"),
-                "last_sync": (
-                    state["last_sync"].isoformat() if state.get("last_sync") else None
-                ),
+                "last_sync": (state["last_sync"].isoformat() if state.get("last_sync") else None),
                 # Node telemetry, present only once the heartbeat agent is deployed.
                 "cpu_percent": beat.cpu_percent if beat else None,
                 "memory_percent": beat.memory_percent if beat else None,

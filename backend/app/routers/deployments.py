@@ -1,22 +1,22 @@
 from datetime import datetime, timedelta
+
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from app.db import commissioning, lifecycle
+from app.db import lifecycle
 from app.db.database import get_db
+from app.db.models import (
+    Building,
+    Campus,
+    Deployment,
+    ElectricalPanel,
+    Node,
+    OrganizationalUnit,
+)
 from app.services import deployment_ops as ops
 from app.services import deployment_scope
 from app.services.deployment_ops import LifecycleError
-from app.db.models import (
-    Campus,
-    OrganizationalUnit,
-    Building,
-    ElectricalPanel,
-    Node,
-    Deployment,
-    EnergyReading,
-)
 
 router = APIRouter()
 
@@ -89,61 +89,59 @@ def list_deployments(db: Session = Depends(get_db)):
         # the node, not of the campaign, and must never overwrite the lifecycle
         # (ADR-0001). Before M7 this value *replaced* `status`, so a completed
         # campaign on a live node reported as active.
-        node_online = bool(
-            deployment.node.last_sync and deployment.node.last_sync >= online_limit
-        )
+        node_online = bool(deployment.node.last_sync and deployment.node.last_sync >= online_limit)
         state = lifecycle.get(db, deployment.status)
 
-        result.append({
-            "id": deployment.id,
-            "node_id": deployment.node.code,
-            "node_name": deployment.node.name,
-            "building_name": deployment.building.name,
-            "building_is_placeholder": deployment.building.is_placeholder,
-            "campus": deployment.building.campus.name,
-            "delegation": deployment.building.campus.delegation.name,
-            "organizational_unit": deployment.building.organizational_unit.name,
-            "electrical_panel": deployment.electrical_panel.name,
-
-            # The stored lifecycle, authoritative and unmodified.
-            "status": deployment.status,
-            "status_label": state.label if state else deployment.status,
-
-            # What the operator may do next. Verbs, not state names — a client
-            # renders buttons from this and never needs to know the machine.
-            "available_actions": ops.available_actions(db, deployment),
-
-            # Runtime health, kept strictly separate from the lifecycle above.
-            "node_online": node_online,
-            "node_commission_state": deployment.node.commission_state,
-            "is_current_for_node": current_by_node.get(deployment.node_id) == deployment.id,
-
-            # Observed measurement state, also strictly separate from `status`.
-            # `telemetry_state` answers "is this deployment producing data right
-            # now"; `status` answers "what did an operator declare". The
-            # dashboard groups and badges on the former, so a completed-but-
-            # live campaign is not mislabelled as archived.
-            "telemetry_state": deployment_scope.telemetry_state(
-                latest_reading.get(deployment.id), now
-            ),
-            "last_reading_at": (
-                latest_reading[deployment.id].isoformat()
-                if deployment.id in latest_reading else None
-            ),
-
-            # The plan, as scheduled by a human.
-            "start_date": deployment.start_date,
-            "end_date": deployment.end_date,
-
-            # What actually happened. Business names: `activated_at` and
-            # `closed_at` are storage, and an operator should never have to
-            # think about them.
-            "measuring_since": deployment.activated_at.isoformat() if deployment.activated_at else None,
-            "measuring_until": deployment.closed_at.isoformat() if deployment.closed_at else None,
-            "reading_count": ops.attributed_reading_count(db, deployment.id),
-
-            "notes": deployment.notes,
-        })
+        result.append(
+            {
+                "id": deployment.id,
+                "node_id": deployment.node.code,
+                "node_name": deployment.node.name,
+                "building_name": deployment.building.name,
+                "building_is_placeholder": deployment.building.is_placeholder,
+                "campus": deployment.building.campus.name,
+                "delegation": deployment.building.campus.delegation.name,
+                "organizational_unit": deployment.building.organizational_unit.name,
+                "electrical_panel": deployment.electrical_panel.name,
+                # The stored lifecycle, authoritative and unmodified.
+                "status": deployment.status,
+                "status_label": state.label if state else deployment.status,
+                # What the operator may do next. Verbs, not state names — a client
+                # renders buttons from this and never needs to know the machine.
+                "available_actions": ops.available_actions(db, deployment),
+                # Runtime health, kept strictly separate from the lifecycle above.
+                "node_online": node_online,
+                "node_commission_state": deployment.node.commission_state,
+                "is_current_for_node": current_by_node.get(deployment.node_id) == deployment.id,
+                # Observed measurement state, also strictly separate from `status`.
+                # `telemetry_state` answers "is this deployment producing data right
+                # now"; `status` answers "what did an operator declare". The
+                # dashboard groups and badges on the former, so a completed-but-
+                # live campaign is not mislabelled as archived.
+                "telemetry_state": deployment_scope.telemetry_state(
+                    latest_reading.get(deployment.id), now
+                ),
+                "last_reading_at": (
+                    latest_reading[deployment.id].isoformat()
+                    if deployment.id in latest_reading
+                    else None
+                ),
+                # The plan, as scheduled by a human.
+                "start_date": deployment.start_date,
+                "end_date": deployment.end_date,
+                # What actually happened. Business names: `activated_at` and
+                # `closed_at` are storage, and an operator should never have to
+                # think about them.
+                "measuring_since": (
+                    deployment.activated_at.isoformat() if deployment.activated_at else None
+                ),
+                "measuring_until": (
+                    deployment.closed_at.isoformat() if deployment.closed_at else None
+                ),
+                "reading_count": ops.attributed_reading_count(db, deployment.id),
+                "notes": deployment.notes,
+            }
+        )
 
     return result
 
@@ -165,14 +163,27 @@ def deployment_lifecycle(db: Session = Depends(get_db)):
             for s in lifecycle.all_statuses(db)
         ],
         "actions": [
-            {"action": action, "label": ops.ACTION_LABELS[action],
-             "from_status": frm, "to_status": to}
+            {
+                "action": action,
+                "label": ops.ACTION_LABELS[action],
+                "from_status": frm,
+                "to_status": to,
+            }
             for action, (frm, to) in ops.ACTIONS.items()
-        ] + [
-            {"action": "cancel", "label": ops.ACTION_LABELS["cancel"],
-             "from_status": None, "to_status": "cancelled"},
-            {"action": "edit", "label": ops.ACTION_LABELS["edit"],
-             "from_status": None, "to_status": None},
+        ]
+        + [
+            {
+                "action": "cancel",
+                "label": ops.ACTION_LABELS["cancel"],
+                "from_status": None,
+                "to_status": "cancelled",
+            },
+            {
+                "action": "edit",
+                "label": ops.ACTION_LABELS["edit"],
+                "from_status": None,
+                "to_status": None,
+            },
         ],
     }
 
@@ -188,14 +199,18 @@ def create_deployment(payload: DeploymentCreate, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Campus not found")
 
     if payload.organizational_unit_id:
-        unit = db.query(OrganizationalUnit).filter(
-            OrganizationalUnit.id == payload.organizational_unit_id
-        ).first()
+        unit = (
+            db.query(OrganizationalUnit)
+            .filter(OrganizationalUnit.id == payload.organizational_unit_id)
+            .first()
+        )
         if not unit:
             raise HTTPException(status_code=404, detail="Organizational unit not found")
     else:
         if not payload.custom_unit_name:
-            raise HTTPException(status_code=400, detail="custom_unit_name is required when no unit is selected")
+            raise HTTPException(
+                status_code=400, detail="custom_unit_name is required when no unit is selected"
+            )
 
         unit = OrganizationalUnit(
             name=payload.custom_unit_name,
@@ -206,12 +221,18 @@ def create_deployment(payload: DeploymentCreate, db: Session = Depends(get_db)):
         db.commit()
         db.refresh(unit)
 
-    building_code = f"B-MANUAL-{unit.id}-{payload.building_name.strip().lower().replace(' ', '-')[:30]}"
+    building_code = (
+        f"B-MANUAL-{unit.id}-{payload.building_name.strip().lower().replace(' ', '-')[:30]}"
+    )
 
-    building = db.query(Building).filter(
-        Building.name == payload.building_name,
-        Building.organizational_unit_id == unit.id,
-    ).first()
+    building = (
+        db.query(Building)
+        .filter(
+            Building.name == payload.building_name,
+            Building.organizational_unit_id == unit.id,
+        )
+        .first()
+    )
 
     if not building:
         building = Building(
@@ -226,10 +247,14 @@ def create_deployment(payload: DeploymentCreate, db: Session = Depends(get_db)):
         db.commit()
         db.refresh(building)
 
-    panel = db.query(ElectricalPanel).filter(
-        ElectricalPanel.name == payload.electrical_panel,
-        ElectricalPanel.building_id == building.id,
-    ).first()
+    panel = (
+        db.query(ElectricalPanel)
+        .filter(
+            ElectricalPanel.name == payload.electrical_panel,
+            ElectricalPanel.building_id == building.id,
+        )
+        .first()
+    )
 
     if not panel:
         panel = ElectricalPanel(
@@ -282,7 +307,6 @@ def create_deployment(payload: DeploymentCreate, db: Session = Depends(get_db)):
     }
 
 
-
 def _get(db: Session, deployment_id: int) -> Deployment:
     deployment = db.query(Deployment).filter(Deployment.id == deployment_id).first()
     if not deployment:
@@ -320,19 +344,23 @@ def edit_plan(deployment_id: int, payload: DeploymentPlanEdit, db: Session = Dep
     deployment = _get(db, deployment_id)
 
     if deployment.activated_at is not None:
-        raise _lifecycle_error(LifecycleError(
-            f"Cannot edit the plan: this deployment started measuring on "
-            f"{deployment.activated_at}. Create a new deployment instead.",
-            code="already_activated",
-        ))
+        raise _lifecycle_error(
+            LifecycleError(
+                f"Cannot edit the plan: this deployment started measuring on "
+                f"{deployment.activated_at}. Create a new deployment instead.",
+                code="already_activated",
+            )
+        )
 
     state = lifecycle.get(db, deployment.status)
     if state and state.is_terminal:
-        raise _lifecycle_error(LifecycleError(
-            f"Cannot edit the plan: this deployment is {state.label.lower()} and is "
-            "part of the historical record.",
-            code="terminal_state",
-        ))
+        raise _lifecycle_error(
+            LifecycleError(
+                f"Cannot edit the plan: this deployment is {state.label.lower()} and is "
+                "part of the historical record.",
+                code="terminal_state",
+            )
+        )
 
     for field in ("start_date", "end_date", "notes"):
         value = getattr(payload, field)
@@ -560,9 +588,7 @@ def get_deployment_ratings(deployment_id: int, db: Session = Depends(get_db)):
     return {
         "deployment_id": deployment.id,
         "node_code": deployment.node.code if deployment.node else None,
-        "ratings": {
-            field: getattr(deployment, field) for field in DeploymentRatings.model_fields
-        },
+        "ratings": {field: getattr(deployment, field) for field in DeploymentRatings.model_fields},
         "applies": describe(deployment.node, deployment),
         "resolved_thresholds": {
             "warning_a": resolved.warning,
@@ -591,9 +617,7 @@ def set_deployment_ratings(
     provided = payload.model_dump(exclude_unset=True)
     for field, value in provided.items():
         if value is not None and value <= 0:
-            raise HTTPException(
-                status_code=422, detail=f"{field} must be positive, got {value}"
-            )
+            raise HTTPException(status_code=422, detail=f"{field} must be positive, got {value}")
         setattr(deployment, field, value)
 
     db.commit()

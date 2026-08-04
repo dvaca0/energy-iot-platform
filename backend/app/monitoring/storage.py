@@ -164,9 +164,7 @@ def prune_old_rows(session: Session, now: datetime | None = None) -> dict[str, i
     # Events must go before their parent alerts, or the delete would orphan
     # rows that the foreign key still references.
     event_cutoff = now - timedelta(days=config.storage.alert_event_retention_days)
-    result = session.execute(
-        delete(AlertEvent).where(AlertEvent.occurred_at < event_cutoff)
-    )
+    result = session.execute(delete(AlertEvent).where(AlertEvent.occurred_at < event_cutoff))
     removed["alert_events"] = result.rowcount or 0
 
     alert_cutoff = now - timedelta(days=config.storage.alert_retention_days)
@@ -180,17 +178,11 @@ def prune_old_rows(session: Session, now: datetime | None = None) -> dict[str, i
         .all()
     ]
     if stale_alert_ids:
+        session.execute(delete(AlertEvent).where(AlertEvent.alert_id.in_(stale_alert_ids)))
         session.execute(
-            delete(AlertEvent).where(AlertEvent.alert_id.in_(stale_alert_ids))
+            delete(NotificationOutbox).where(NotificationOutbox.alert_ref.in_(stale_alert_ids))
         )
-        session.execute(
-            delete(NotificationOutbox).where(
-                NotificationOutbox.alert_ref.in_(stale_alert_ids)
-            )
-        )
-        result = session.execute(
-            delete(MonitorAlert).where(MonitorAlert.id.in_(stale_alert_ids))
-        )
+        result = session.execute(delete(MonitorAlert).where(MonitorAlert.id.in_(stale_alert_ids)))
         removed["alerts"] = result.rowcount or 0
     else:
         removed["alerts"] = 0
@@ -239,10 +231,10 @@ def database_file_sizes() -> dict[str, float]:
 
 __all__ = [
     "MonitoringSession",
-    "session_scope",
-    "with_write_retry",
     "create_tables",
-    "tables_present",
-    "prune_old_rows",
     "database_file_sizes",
+    "prune_old_rows",
+    "session_scope",
+    "tables_present",
+    "with_write_retry",
 ]
