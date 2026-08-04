@@ -1,0 +1,43 @@
+{
+  "started_at": "2026-07-26T22:30:01.236791",
+  "phases": {
+    "create_context_table_s": 0.001,
+    "create_table_s": 0.001,
+    "copy_rows_s": 0.5,
+    "drop_old_indexes_s": 0.261,
+    "rename_s": 0.009,
+    "build_indexes_s": 1.615,
+    "commit_s": 1.335,
+    "checkpoint_s": 1.347
+  },
+  "before": {
+    "db_mb": 82.33,
+    "wal_mb": 4.1,
+    "shm_mb": 0.03
+  },
+  "rows_copied": 225594,
+  "wal_after_copy_mb": 34.14,
+  "index_build_s": {
+    "ix_energy_readings_id": 0.155,
+    "ix_energy_readings_timestamp": 0.203,
+    "idx_readings_timestamp": 0.221,
+    "idx_readings_node_timestamp": 0.284,
+    "idx_readings_building_timestamp": 0.286,
+    "idx_readings_deployment_timestamp": 0.212,
+    "idx_readings_context_timestamp": 0.253
+  },
+  "wal_peak_mb": 86.02,
+  "checkpoint_result": [
+    0,
+    22342,
+    22342
+  ],
+  "wal_after_checkpoint_mb": 87.78,
+  "total_s": 5.099,
+  "after": {
+    "db_mb": 121.16,
+    "wal_mb": 87.78,
+    "shm_mb": 0.19
+  },
+  "shadow_table_mb": 29.93
+}
