@@ -85,21 +85,32 @@ because pytest is not installed on the deployment host and the tests must be
 runnable there.
 
 ```bash
-cd backend
-for t in monitoring deployment_lifecycle collector energy_aggregate smart_plugs synthetic_deployment; do
-  echo "── $t"
-  venv/bin/python3 -m tests.test_$t || echo "FAILED: $t"
-done
+make test              # hermetic suites — 449 checks, no database needed
+make test-integration  # suites that need the live production database
 ```
 
-| Suite | Covers |
+### Hermetic — run anywhere, and in CI
+
+Each builds its own throwaway SQLite database under `/tmp`.
+
+| Suite | Covers | Checks |
+|---|---|--:|
+| `test_monitoring` | Rules, severity, thresholds, alert-noise regression guards | 329 |
+| `test_smart_plugs` | Shelly ingest, ownership, assignment, fleet state | 53 |
+| `test_collector` | The measurement contract and `energy_source` handling | 49 |
+| `test_synthetic_deployment` | The whole pipeline against a synthetic campaign with a real overload | 18 |
+
+### Integration — need the live production database
+
+Neither writes to it, but neither runs on a fresh checkout, so neither is in CI.
+
+| Suite | Why it is not hermetic |
 |---|---|
-| `test_monitoring` | 329 checks — rules, severity, thresholds, alert-noise regression guards |
-| `test_synthetic_deployment` | The whole pipeline against a live synthetic campaign with a real overload |
-| `test_deployment_lifecycle` | Status transitions, exclusivity, attribution windows |
-| `test_collector` | The measurement contract and `energy_source` handling |
-| `test_energy_aggregate` | Rollups and interval-energy arithmetic |
-| `test_smart_plugs` | Shelly ingest, assignment, fleet state |
+| `test_energy_aggregate` | Opens `SessionLocal()` against the production database directly |
+| `test_deployment_lifecycle` | Copies production with the online backup API, then asserts there is exactly one `active` deployment — which depends on the current state of the fleet |
+
+Making both hermetic is on the roadmap. Until then, a green CI run does not
+cover rollup arithmetic or lifecycle transitions.
 
 > [!IMPORTANT]
 > If you touch **anything** in `app/monitoring/`, run `test_monitoring` sections
@@ -123,7 +134,7 @@ Enforced in CI; see [`.github/workflows/`](../.github/workflows/).
 | **ruff** | Lint | `pyproject.toml` |
 | **black** | Format, line length 100 | `pyproject.toml` |
 | **isort** | Import order (black profile) | `pyproject.toml` |
-| **mypy** | Type checking — advisory on legacy modules, enforced on new ones | `pyproject.toml` |
+| **mypy** | Type checking — **advisory**; the codebase is not yet fully annotated. See the rationale in `pyproject.toml`. | `pyproject.toml` |
 
 ```bash
 cd backend

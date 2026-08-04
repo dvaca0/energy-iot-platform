@@ -303,24 +303,30 @@ Six suites, written as plain-python assertions with no test framework, because
 there.
 
 ```bash
-cd backend
-for t in monitoring collector energy_aggregate smart_plugs synthetic_deployment; do
-  venv/bin/python3 -m tests.test_$t
-done
+make test              # hermetic — any checkout, no database needed
+make test-integration  # needs the live production database
 ```
 
-| Suite | Checks | In CI |
-|---|--:|:--:|
-| `test_monitoring` — rules, severity, thresholds, alert-noise guards | 329 | ✅ |
-| `test_smart_plugs` — Shelly ingest, ownership, assignment | 53 | ✅ |
-| `test_collector` — the measurement contract | 49 | ✅ |
-| `test_synthetic_deployment` — the whole pipeline, real overload | 18 | ✅ |
-| `test_energy_aggregate` — rollups and interval arithmetic | — | ✅ |
-| `test_deployment_lifecycle` — transitions, exclusivity | — | ❌ |
+**Hermetic** — each builds its own throwaway SQLite database, so they run
+anywhere and in CI. **449 checks.**
 
-`test_deployment_lifecycle` asserts against a **copy of the live production
-database** and cannot run on a fresh checkout. That is a known gap, listed on the
-roadmap rather than hidden behind a green badge.
+| Suite | Checks |
+|---|--:|
+| `test_monitoring` — rules, severity, thresholds, alert-noise guards | 329 |
+| `test_smart_plugs` — Shelly ingest, ownership, assignment | 53 |
+| `test_collector` — the measurement contract | 49 |
+| `test_synthetic_deployment` — the whole pipeline, real overload | 18 |
+
+**Integration** — these read the live production database and cannot run on a
+fresh checkout, so they are not in CI. Neither writes to it.
+
+| Suite | Note |
+|---|---|
+| `test_energy_aggregate` — rollups and interval arithmetic | Reads production directly |
+| `test_deployment_lifecycle` — transitions, exclusivity | Copies production via the online backup API; currently fails because it expects exactly one `active` deployment and production has none |
+
+Making these two hermetic is on the roadmap rather than hidden behind a green
+badge.
 
 > [!IMPORTANT]
 > Sections 19–25 of `test_monitoring`, and `test_synthetic_deployment`, are
@@ -399,7 +405,7 @@ Ordered by consequence, not by ease.
 - [ ] **Authenticate the ingest path** — per-node shared secret or mTLS. Closes the one gap that can make monitoring lie.
 - [ ] **Bring the base collector under version control.** The one component whose source of truth is a device.
 - [ ] **Move backups off the application server.** The largest gap in durability.
-- [ ] Make `test_deployment_lifecycle` hermetic so it can run in CI.
+- [ ] Make `test_energy_aggregate` and `test_deployment_lifecycle` hermetic so they can run in CI.
 - [ ] Frontend test suite; extract screens out of `App.tsx`.
 - [ ] Annotate `app/monitoring` and make mypy blocking for it.
 - [ ] Weather as an exogenous forecasting feature — HVAC dominates campus load in Colima.

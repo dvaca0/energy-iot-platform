@@ -60,10 +60,11 @@ venv/bin/python3 -m ruff check app/ tests/ migrations/
 venv/bin/python3 -m black --check app/ tests/ migrations/
 venv/bin/python3 -m mypy app/
 
-# Tests — all six suites
-for t in monitoring deployment_lifecycle collector energy_aggregate smart_plugs synthetic_deployment; do
-  venv/bin/python3 -m tests.test_$t || echo "FAILED: $t"
-done
+# Tests — the four hermetic suites, 449 checks
+make test
+
+# The two that need the live production database, if you have one
+make test-integration
 
 # TypeScript
 cd ../frontend && npm run lint && npx tsc --noEmit

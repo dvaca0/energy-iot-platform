@@ -36,7 +36,8 @@ documentation, quality gates and provenance a reader needs to evaluate it.
   generator (`assets/branding/generate_raster.py`).
 - **Screenshot gallery** — 15 application screens with a manifest specifying
   capture settings and the outstanding hardware photographs.
-- **CI** — six workflows: backend lint/type/test, frontend build, documentation
+- **CI** — six workflows: backend lint/type/test (4 hermetic suites, 449
+  checks), frontend build, documentation
   link and diagram validation, security scanning (gitleaks, pip-audit, npm
   audit, CodeQL), commitlint, and a release drafter.
 - **`scripts/check_api_docs.py`** — fails the build when a route exists that

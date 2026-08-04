@@ -182,23 +182,20 @@ test framework, because **pytest is not installed on the deployment host** and
 the tests must be runnable there.
 
 ```bash
-cd backend
-venv/bin/python3 -m tests.test_monitoring
-venv/bin/python3 -m tests.test_deployment_lifecycle
-venv/bin/python3 -m tests.test_collector
-venv/bin/python3 -m tests.test_energy_aggregate
-venv/bin/python3 -m tests.test_smart_plugs
-venv/bin/python3 -m tests.test_synthetic_deployment
+make test              # 4 hermetic suites, 449 checks — no database needed
+make test-integration  # 2 suites that read the live production database
 ```
 
-| Suite | Covers |
-|---|---|
-| `test_monitoring` | 329 checks over rules, severity, thresholds, and the alert-noise regression guards |
-| `test_synthetic_deployment` | Drives the entire pipeline against a live synthetic campaign including a real overload |
-| `test_deployment_lifecycle` | Status transitions, exclusivity, attribution windows |
-| `test_collector` | The measurement contract and `energy_source` handling |
-| `test_energy_aggregate` | Rollup and interval-energy arithmetic |
-| `test_smart_plugs` | Shelly ingest, assignment, fleet state |
+| Suite | Covers | Hermetic |
+|---|---|:--:|
+| `test_monitoring` | 329 checks over rules, severity, thresholds, and the alert-noise regression guards | ✅ |
+| `test_smart_plugs` | Shelly ingest, ownership, assignment, fleet state | ✅ |
+| `test_collector` | The measurement contract and `energy_source` handling | ✅ |
+| `test_synthetic_deployment` | Drives the entire pipeline against a synthetic campaign including a real overload | ✅ |
+| `test_energy_aggregate` | Rollup and interval-energy arithmetic | ❌ reads production |
+| `test_deployment_lifecycle` | Status transitions, exclusivity, attribution windows | ❌ copies production |
+
+Only the hermetic four run in CI. See [Development.md § Testing](Development.md#testing).
 
 The monitoring suite's sections 19–25 are **sensitivity checks**: they assert
 that real faults still fire while known noise stays silent. A monitoring system

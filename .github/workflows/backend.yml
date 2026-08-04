@@ -104,19 +104,16 @@ jobs:
       # pytest and the tests must be runnable there. Each writes to its own
       # throwaway SQLite database.
       #
-      # test_deployment_lifecycle is deliberately absent: it asserts against a
-      # copy of the live production database and cannot run on a fresh
-      # checkout. See docs/Development.md.
+      # test_energy_aggregate and test_deployment_lifecycle are deliberately
+      # absent: both assert against the live production database (the first
+      # reads it, the second copies it) and cannot run on a fresh checkout.
+      # See docs/Development.md § Testing.
       - name: Monitoring (329 checks)
         run: python -m tests.test_monitoring
         working-directory: backend
 
       - name: Collector contract
         run: python -m tests.test_collector
-        working-directory: backend
-
-      - name: Energy aggregation
-        run: python -m tests.test_energy_aggregate
         working-directory: backend
 
       - name: Smart plugs

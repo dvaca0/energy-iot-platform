@@ -9,13 +9,17 @@
 PY  := backend/venv/bin/python3
 NPM := npm --prefix frontend
 
-# The five suites that run anywhere. test_deployment_lifecycle is excluded on
-# purpose: it asserts against a copy of the live production database and cannot
-# run on a fresh checkout. See docs/Development.md.
-SUITES := monitoring collector energy_aggregate smart_plugs synthetic_deployment
+# Hermetic suites: each builds its own throwaway SQLite database, so they run
+# on any checkout and in CI.
+SUITES := monitoring collector smart_plugs synthetic_deployment
+
+# Integration suites: these read the live production database (energy_aggregate
+# reads it, deployment_lifecycle copies it with the online backup API). Neither
+# writes to it, and neither can run on a fresh checkout.
+INTEGRATION := energy_aggregate deployment_lifecycle
 
 .DEFAULT_GOAL := help
-.PHONY: help setup dev build test lint format check docs-check mermaid api-docs deps-check \
+.PHONY: help setup dev build test test-integration lint format check docs-check mermaid api-docs deps-check \
         clean reload backup dev-ui
 
 help:  ## Show this help
@@ -40,12 +44,19 @@ dev-ui:  ## Run the Vite dev server
 build:  ## Build the frontend into frontend/dist (this IS the deploy)
 	$(NPM) run build
 
-test:  ## Run every suite that runs anywhere
+test:  ## Run the hermetic suites (any checkout, no database needed)
 	@fail=0; for t in $(SUITES); do \
 	  printf "\033[36m%-24s\033[0m " "$$t"; \
 	  if (cd backend && venv/bin/python3 -m tests.test_$$t >/tmp/eiq-$$t.log 2>&1); then \
 	    echo "PASS"; else echo "FAIL — /tmp/eiq-$$t.log"; fail=1; fi; \
 	done; exit $$fail
+
+test-integration:  ## Run the suites that need the live production database
+	@for t in $(INTEGRATION); do \
+	  printf "\033[36m%-24s\033[0m " "$$t"; \
+	  if (cd backend && venv/bin/python3 -m tests.test_$$t >/tmp/eiq-$$t.log 2>&1); then \
+	    echo "PASS"; else echo "FAIL — /tmp/eiq-$$t.log"; fi; \
+	done
 
 lint:  ## ruff, black --check, isort --check, eslint
 	$(PY) -m ruff check backend/app backend/tests scripts
