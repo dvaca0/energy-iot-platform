@@ -35,11 +35,12 @@ os.environ["MONITORING_TELEGRAM_BOT_TOKEN"] = ""
 os.environ["MONITORING_TELEGRAM_CHAT_ID"] = ""
 os.environ["MONITORING_TELEGRAM_ENABLED"] = "false"
 
-from app.db import models
-from app.db.database import Base, get_db
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
+
+from app.db import models
+from app.db.database import Base, get_db
 
 os.makedirs("/tmp/energy-platform-tests", exist_ok=True)
 TMP_DB = "/tmp/energy-platform-tests/test_monitoring.db"

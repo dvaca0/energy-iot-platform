@@ -17,12 +17,13 @@ _REPO = os.path.dirname(_BACKEND)
 sys.path.insert(0, _BACKEND)
 os.chdir(_BACKEND)
 
-from app.db import models
-from app.db.database import Base, get_db
-from app.main import app
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
+
+from app.db import models
+from app.db.database import Base, get_db
+from app.main import app
 
 os.makedirs("/tmp/energy-platform-tests", exist_ok=True)
 TMP_DB = "/tmp/energy-platform-tests/test_plugs.db"
