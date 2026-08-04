@@ -1,0 +1,21 @@
+# Smart Plug collection source — configuration template.
+#
+# Installed to /etc/energy-node/smart-plugs.conf by install-smart-plugs.sh,
+# which fills these in from the node's existing collector configuration.
+# A file is used rather than the collector's own env file because nodes do not
+# all pass configuration the same way (EnvironmentFile= vs inline Environment=).
+# The environment overrides anything set here.
+
+# Master switch. Only ONE node per subnet should have this enabled, otherwise
+# two nodes report the same plugs and the backend's node ownership flip-flops.
+SMART_PLUGS_ENABLED=0
+
+# Node code as registered in the platform (N001 / N002 / N003).
+NODE_ID=CHANGE-ME
+
+# Backend base URL — the same one the Energy Node pipeline already uses.
+CENTRAL_API_URL=http://CHANGE-ME:8010
+
+# Plug buffer. Must be a path the hardened systemd unit is allowed to write
+# (inside ReadWritePaths=). Deliberately NOT the Energy Node buffer.
+SMART_PLUG_BUFFER=/opt/energy-node/state/smart_plugs.db

@@ -1,0 +1,38 @@
+[Unit]
+Description=Smart Plug (Shelly Plug US Gen4) collection source
+Documentation=file:/opt/energy-collector/README-smart-plugs.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+
+# Node code exactly as registered in the platform (N001, N002, N003...).
+Environment=NODE_ID=N001
+Environment=BACKEND_URL=http://CHANGE-ME:8010
+Environment=SMART_PLUG_BUFFER=/var/lib/energy-collector/smart_plugs.db
+Environment=LOG_LEVEL=INFO
+
+ExecStart=/usr/bin/python3 /opt/energy-collector/smart_plug_source.py
+
+# Watchdog: the source is expected to run forever. Any exit is a fault and is
+# restarted, with a backoff so a persistent failure cannot spin.
+Restart=always
+RestartSec=10
+
+# The buffer must survive restarts and reboots, so it lives outside /tmp.
+StateDirectory=energy-collector
+WorkingDirectory=/opt/energy-collector
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=smart-plugs
+
+# Hardening: the source only needs outbound HTTP and its own state directory.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target
