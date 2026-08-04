@@ -38,13 +38,14 @@ def check(label, ok, detail=""):
 
 
 def main() -> int:
+    from sqlalchemy import text
+
     from app.db import scope
     from app.db.database import SessionLocal
     from app.db.models import EnergyReading
     from app.services import energy_aggregate as agg
     from app.services.cost_engine import classify_gdmth_period, estimate_reading_cost, to_local_time
     from app.services.energy_delta import safe_energy_delta
-    from sqlalchemy import text
 
     db = SessionLocal()
     WINDOW_DAYS = 7

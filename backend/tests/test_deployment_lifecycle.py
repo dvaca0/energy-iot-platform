@@ -81,11 +81,12 @@ def main() -> int:
     path = build_copy()
     os.environ["ENERGY_DB_PATH"] = path
 
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+
     from app.db import commissioning, lifecycle
     from app.db.models import Deployment, Node
     from app.services import deployment_ops as ops
-    from sqlalchemy import create_engine
-    from sqlalchemy.orm import sessionmaker
 
     engine = create_engine(f"sqlite:///{path}")
     Session = sessionmaker(bind=engine)

@@ -25,12 +25,13 @@ sys.path.insert(0, os.path.join(_REPO, "edge"))
 os.chdir(_BACKEND)
 
 import smart_plug_source as sps
-from app.db import models
-from app.db.database import Base, get_db
-from app.main import app
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
+
+from app.db import models
+from app.db.database import Base, get_db
+from app.main import app
 
 SCRATCH = "/tmp/energy-platform-tests"
 os.makedirs(SCRATCH, exist_ok=True)

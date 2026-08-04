@@ -115,6 +115,11 @@ ignore = [
     "SIM115",
 ]
 
+[tool.ruff.lint.isort]
+# Must agree with [tool.isort]. Without this, ruff treats `app` as third-party
+# and the two tools fight over the same import block forever.
+known-first-party = ["app", "tests", "migrations"]
+
 [tool.ruff.lint.per-file-ignores]
 # The suites are scripts: module-level fixtures run at import, and imports are
 # deliberately placed after sys.path and env setup.

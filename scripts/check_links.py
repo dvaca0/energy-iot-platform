@@ -15,8 +15,8 @@ Exits 0 when everything resolves, 1 otherwise.
 
 from __future__ import annotations
 
+import os
 import re
-import sys
 from pathlib import Path
 from urllib.parse import unquote, urlparse
 
@@ -34,11 +34,7 @@ EXTERNAL = re.compile(r"^(?:[a-z][a-z0-9+.-]*:|//|#)", re.I)
 
 
 def markdown_files() -> list[Path]:
-    return sorted(
-        p
-        for p in ROOT.rglob("*.md")
-        if not (SKIP_DIRS & set(p.relative_to(ROOT).parts))
-    )
+    return sorted(p for p in ROOT.rglob("*.md") if not (SKIP_DIRS & set(p.relative_to(ROOT).parts)))
 
 
 def slugify(heading: str) -> str:
@@ -100,12 +96,12 @@ def main() -> int:
                     anchor_cache[resolved] = anchors_in(resolved)
                 if parsed.fragment.lower() not in anchor_cache[resolved]:
                     problems.append(
-                        f"{rel_md}: anchor not found -> {target} "
-                        f"(#{parsed.fragment})"
+                        f"{rel_md}: anchor not found -> {target} " f"(#{parsed.fragment})"
                     )
 
+    in_actions = "GITHUB_ACTIONS" in os.environ
     for p in problems:
-        print(f"::error::{p}" if "GITHUB_ACTIONS" in __import__("os").environ else p)
+        print(f"::error::{p}" if in_actions else p)
 
     print(f"\n{checked} relative links checked across {len(markdown_files())} files.")
     if problems:
