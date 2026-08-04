@@ -4,13 +4,13 @@ from sqlalchemy.orm import Session
 
 from app.db.database import get_db
 from app.services.gemini_engine import ask_gemini, gemini_enabled
-from app.services.model_confidence import real_forecast_confidence
 from app.services.ml_engine import (
-    random_forest_forecast,
+    group_anomaly_events,
     isolation_forest_anomalies,
     kmeans_building_clusters,
-    group_anomaly_events,
+    random_forest_forecast,
 )
+from app.services.model_confidence import real_forecast_confidence
 
 router = APIRouter()
 
@@ -23,10 +23,10 @@ class AssistantQuestion(BaseModel):
 def ai_center(db: Session = Depends(get_db)):
     forecast = random_forest_forecast(db)
     confidence_info = real_forecast_confidence(db)
-    forecast['confidence'] = confidence_info['confidence']
-    forecast['confidence_method'] = confidence_info['method']
-    forecast['confidence_samples'] = confidence_info['samples']
-    forecast['confidence_mape'] = confidence_info['mape']
+    forecast["confidence"] = confidence_info["confidence"]
+    forecast["confidence_method"] = confidence_info["method"]
+    forecast["confidence_samples"] = confidence_info["samples"]
+    forecast["confidence_mape"] = confidence_info["mape"]
     anomaly_result = isolation_forest_anomalies(db)
     cluster_result = kmeans_building_clusters(db)
 
@@ -69,12 +69,15 @@ def ai_center(db: Session = Depends(get_db)):
                 "priority": "Alta prioridad",
                 "title": "Revisar anomalías detectadas por IA",
                 "building": item.get("building", "Sistema"),
-                "description": item.get("description", "Anomalía agrupada detectada por el modelo."),
+                "description": item.get(
+                    "description", "Anomalía agrupada detectada por el modelo."
+                ),
                 "action": "Revisar tablero, carga conectada y factor de potencia.",
                 "saving_mxn_month": round(forecast["month_mxn"] * 0.05, 2),
             }
             for item in grouped_anomalies[:3]
-        ] + [
+        ]
+        + [
             {
                 "priority": "Prioridad media",
                 "title": "Optimizar consumo en horarios punta",
@@ -92,10 +95,10 @@ def ai_center(db: Session = Depends(get_db)):
 def ai_assistant(payload: AssistantQuestion, db: Session = Depends(get_db)):
     forecast = random_forest_forecast(db)
     confidence_info = real_forecast_confidence(db)
-    forecast['confidence'] = confidence_info['confidence']
-    forecast['confidence_method'] = confidence_info['method']
-    forecast['confidence_samples'] = confidence_info['samples']
-    forecast['confidence_mape'] = confidence_info['mape']
+    forecast["confidence"] = confidence_info["confidence"]
+    forecast["confidence_method"] = confidence_info["method"]
+    forecast["confidence_samples"] = confidence_info["samples"]
+    forecast["confidence_mape"] = confidence_info["mape"]
     anomaly_result = isolation_forest_anomalies(db)
     cluster_result = kmeans_building_clusters(db)
 
@@ -134,7 +137,7 @@ def ai_assistant(payload: AssistantQuestion, db: Session = Depends(get_db)):
                 }
         except Exception as e:
             return {
-                "answer": f"Gemini no respondió correctamente: {str(e)}. El backend ML local sigue funcionando.",
+                "answer": f"Gemini no respondió correctamente: {e!s}. El backend ML local sigue funcionando.",
                 "model": "fallback",
                 "provider": "local",
             }

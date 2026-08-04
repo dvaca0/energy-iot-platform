@@ -45,24 +45,17 @@ log = logging.getLogger("monitoring.metrics")
 # Collection
 # --------------------------------------------------------------------------
 
-def collect_metrics(
-    session: Session, config: MonitoringConfig, now: datetime
-) -> dict[str, Any]:
+
+def collect_metrics(session: Session, config: MonitoringConfig, now: datetime) -> dict[str, Any]:
     """Gather electrical, plug and fleet metrics for one tick."""
     metrics: dict[str, Any] = {}
 
     # --- Newest reading per node -------------------------------------------
-    newest_ids = (
-        session.query(func.max(EnergyReading.id))
-        .group_by(EnergyReading.node_id)
-        .all()
-    )
+    newest_ids = session.query(func.max(EnergyReading.id)).group_by(EnergyReading.node_id).all()
     latest_readings: dict[int, EnergyReading] = {}
     ids = [row[0] for row in newest_ids if row[0] is not None]
     if ids:
-        for reading in (
-            session.query(EnergyReading).filter(EnergyReading.id.in_(ids)).all()
-        ):
+        for reading in session.query(EnergyReading).filter(EnergyReading.id.in_(ids)).all():
             latest_readings[reading.node_id] = reading
     metrics["latest_readings"] = latest_readings
 
@@ -145,10 +138,7 @@ def collect_metrics(
     metrics["campus_count"] = session.query(func.count(Campus.id)).scalar() or 0
     metrics["deployment_count"] = session.query(func.count(Deployment.id)).scalar() or 0
     metrics["active_deployment_count"] = (
-        session.query(func.count(Deployment.id))
-        .filter(Deployment.status == "active")
-        .scalar()
-        or 0
+        session.query(func.count(Deployment.id)).filter(Deployment.status == "active").scalar() or 0
     )
 
     # --- Smart plugs --------------------------------------------------------
@@ -185,9 +175,7 @@ def _current_threshold(ctx: RuleContext, node, deployment):
     """
     from app.monitoring.thresholds import resolve_current_thresholds
 
-    baseline = (ctx.metrics.get("current_baseline") or {}).get(
-        getattr(node, "id", None)
-    )
+    baseline = (ctx.metrics.get("current_baseline") or {}).get(getattr(node, "id", None))
     return resolve_current_thresholds(node, deployment, ctx.config, baseline=baseline)
 
 
@@ -320,8 +308,7 @@ def check_implausible(ctx: RuleContext) -> Iterable[Finding]:
                 target=str(node.code if node else node_id),
                 summary=(
                     "These values are not physically possible, so this is a measurement "
-                    "fault rather than an electrical event. "
-                    + "; ".join(problems)
+                    "fault rather than an electrical event. " + "; ".join(problems)
                 ),
                 metric="plausibility",
                 current_value="; ".join(problems),
@@ -471,9 +458,7 @@ def check_current(ctx: RuleContext) -> Iterable[Finding]:
         if not resolved.known:
             continue
 
-        severity = ctx.threshold_severity(
-            reading.current, resolved.warning, resolved.critical
-        )
+        severity = ctx.threshold_severity(reading.current, resolved.warning, resolved.critical)
         # A configured emergency limit outranks the ladder: past the breaker
         # rating the protective device should already have operated.
         if resolved.emergency is not None and reading.current >= resolved.emergency:
@@ -668,7 +653,10 @@ def check_phases(ctx: RuleContext) -> Iterable[Finding]:
                     metric="voltage_imbalance_pct",
                     current_value=f"{imbalance:.1f}%",
                     expected_value=f"< {limits.voltage_imbalance_warning:.0f}%",
-                    suggested_causes=["Uneven single-phase loading", "Loose or corroded connection"],
+                    suggested_causes=[
+                        "Uneven single-phase loading",
+                        "Loose or corroded connection",
+                    ],
                     suggested_actions=[
                         "Voltage imbalance causes disproportionate current imbalance in "
                         "motors and overheats them.",
@@ -741,8 +729,7 @@ def check_consumption(ctx: RuleContext) -> Iterable[Finding]:
                     title=f"Node {label} shows no power on a previously loaded panel",
                     target=label,
                     summary=(
-                        f"Baseline was {baseline:.2f} kW an hour ago; the panel now reads "
-                        "zero."
+                        f"Baseline was {baseline:.2f} kW an hour ago; the panel now reads " "zero."
                     ),
                     metric="power_kw",
                     current_value=f"{reading.power_kw:.3f} kW",
@@ -919,7 +906,10 @@ def check_no_consumption(ctx: RuleContext) -> Iterable[Finding]:
                     "CT lead unplugged from the ADC",
                     "The circuit really is de-energised downstream of the breaker",
                 ],
-                suggested_commands=["i2cdetect -y 1", "journalctl -u energy-collector -n 50 --no-pager"],
+                suggested_commands=[
+                    "i2cdetect -y 1",
+                    "journalctl -u energy-collector -n 50 --no-pager",
+                ],
                 suggested_actions=[
                     "Verify the clamp is closed around a single conductor, not around "
                     "the whole cable bundle.",
@@ -990,9 +980,7 @@ def check_smart_plugs(ctx: RuleContext) -> Iterable[Finding]:
         name = plug.friendly_name or plug.mac
 
         if not plug.online:
-            age = (
-                (now - plug.last_seen).total_seconds() if plug.last_seen else None
-            )
+            age = (now - plug.last_seen).total_seconds() if plug.last_seen else None
             findings.append(
                 Finding(
                     rule_id="smart_plug.offline",
@@ -1001,9 +989,7 @@ def check_smart_plugs(ctx: RuleContext) -> Iterable[Finding]:
                     title=f"Smart plug {name} is offline",
                     target=plug.mac,
                     metric="online",
-                    current_value=(
-                        f"offline for {int(age)}s" if age is not None else "offline"
-                    ),
+                    current_value=(f"offline for {int(age)}s" if age is not None else "offline"),
                     expected_value="online",
                     building=plug.building_label,
                     deployment=plug.deployment_label,

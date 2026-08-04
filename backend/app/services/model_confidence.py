@@ -1,12 +1,10 @@
-
 from datetime import datetime, timedelta
-from collections import defaultdict
 from statistics import mean
+
 from sqlalchemy.orm import Session
-from app.db import scope
-from app.db.models import EnergyReading
-from app.services.cost_engine import estimate_reading_cost
+
 from app.services import energy_aggregate as agg
+
 
 def _daily_costs(db: Session, days: int = 30):
     """Daily cost series used to score forecast confidence (MAPE).
@@ -30,6 +28,7 @@ def _daily_costs(db: Session, days: int = 30):
 
     return [v for _, v in sorted(grouped.items()) if v > 0]
 
+
 def real_forecast_confidence(db: Session):
     values = _daily_costs(db, 30)
 
@@ -44,7 +43,7 @@ def real_forecast_confidence(db: Session):
 
     errors = []
     for i in range(3, len(values)):
-        predicted = mean(values[max(0, i - 3):i])
+        predicted = mean(values[max(0, i - 3) : i])
         actual = values[i]
         if actual > 0:
             errors.append(abs(actual - predicted) / actual)

@@ -53,9 +53,7 @@ class NodeHeartbeat(Base):
     """
 
     __tablename__ = "monitor_node_heartbeats"
-    __table_args__ = (
-        Index("ix_monitor_hb_node_received", "node_code", "received_at"),
-    )
+    __table_args__ = (Index("ix_monitor_hb_node_received", "node_code", "received_at"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
 
@@ -67,9 +65,7 @@ class NodeHeartbeat(Base):
 
     #: When the server accepted the beat. Authoritative for liveness, because
     #: it cannot be affected by a node with a wrong clock.
-    received_at: Mapped[datetime] = mapped_column(
-        DateTime, index=True, default=datetime.utcnow
-    )
+    received_at: Mapped[datetime] = mapped_column(DateTime, index=True, default=datetime.utcnow)
     #: The node's own view of when it sent the beat. Compared against
     #: received_at to detect clock drift.
     reported_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
@@ -215,9 +211,7 @@ class ServerHeartbeat(Base):
     __tablename__ = "monitor_server_heartbeats"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
-    recorded_at: Mapped[datetime] = mapped_column(
-        DateTime, index=True, default=datetime.utcnow
-    )
+    recorded_at: Mapped[datetime] = mapped_column(DateTime, index=True, default=datetime.utcnow)
 
     cpu_percent: Mapped[float | None] = mapped_column(Float, nullable=True)
     memory_percent: Mapped[float | None] = mapped_column(Float, nullable=True)
@@ -316,9 +310,7 @@ class MonitorAlert(Base):
     expected_value: Mapped[str | None] = mapped_column(String, nullable=True)
 
     # --- When -------------------------------------------------------------
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime, index=True, default=datetime.utcnow
-    )
+    created_at: Mapped[datetime] = mapped_column(DateTime, index=True, default=datetime.utcnow)
     last_seen_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     escalated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     acknowledged_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
@@ -365,9 +357,7 @@ class AlertEvent(Base):
     #: created | escalated | de-escalated | reminded | acknowledged | resolved
     #: | notified | notify_failed
     event_type: Mapped[str] = mapped_column(String, index=True)
-    occurred_at: Mapped[datetime] = mapped_column(
-        DateTime, index=True, default=datetime.utcnow
-    )
+    occurred_at: Mapped[datetime] = mapped_column(DateTime, index=True, default=datetime.utcnow)
 
     from_severity: Mapped[str | None] = mapped_column(String, nullable=True)
     to_severity: Mapped[str | None] = mapped_column(String, nullable=True)
@@ -385,9 +375,7 @@ class NotificationOutbox(Base):
     """
 
     __tablename__ = "monitor_notification_outbox"
-    __table_args__ = (
-        Index("ix_monitor_outbox_pending", "status", "next_attempt_at"),
-    )
+    __table_args__ = (Index("ix_monitor_outbox_pending", "status", "next_attempt_at"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
 
@@ -406,13 +394,9 @@ class NotificationOutbox(Base):
     body: Mapped[str] = mapped_column(Text)
 
     #: Link back to the alert, when the notification is about one.
-    alert_ref: Mapped[int | None] = mapped_column(
-        ForeignKey("monitor_alerts.id"), nullable=True
-    )
+    alert_ref: Mapped[int | None] = mapped_column(ForeignKey("monitor_alerts.id"), nullable=True)
 
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime, index=True, default=datetime.utcnow
-    )
+    created_at: Mapped[datetime] = mapped_column(DateTime, index=True, default=datetime.utcnow)
     attempts: Mapped[int] = mapped_column(Integer, default=0)
     next_attempt_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     delivered_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
@@ -438,11 +422,11 @@ MONITORING_TABLES = [
 
 
 __all__ = [
+    "MONITORING_TABLES",
+    "AlertEvent",
+    "MonitorAlert",
     "NodeHeartbeat",
     "NodeHeartbeatLatest",
-    "ServerHeartbeat",
-    "MonitorAlert",
-    "AlertEvent",
     "NotificationOutbox",
-    "MONITORING_TABLES",
+    "ServerHeartbeat",
 ]

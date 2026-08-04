@@ -48,7 +48,7 @@ def implemented() -> set[tuple[str, str]]:
         import os
 
         os.chdir(backend)
-        from app.main import app  # noqa: E402  (import needs the path set up first)
+        from app.main import app
     except Exception as exc:  # pragma: no cover - environment guard
         sys.exit(f"could not import the application: {exc}")
     finally:

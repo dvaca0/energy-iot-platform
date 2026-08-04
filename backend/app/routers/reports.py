@@ -1,29 +1,29 @@
+import csv
 from datetime import datetime, timedelta
 from io import BytesIO, StringIO
-import csv
-import markdown
-from openpyxl import Workbook
 
+import markdown
 from fastapi import APIRouter, Depends, HTTPException, Query
-from fastapi.responses import StreamingResponse, FileResponse
-from sqlalchemy.orm import Session
-from sqlalchemy import func
+from fastapi.responses import StreamingResponse
 from jinja2 import Template
+from openpyxl import Workbook
+from sqlalchemy import func
+from sqlalchemy.orm import Session
 from weasyprint import HTML
 
 from app.db import scope
 from app.db.database import get_db
-from app.db.models import EnergyReading, Building, Node, Deployment
+from app.db.models import Building, Deployment, EnergyReading, Node
+from app.services import energy_aggregate as agg
 from app.services.cost_engine import estimate_reading_cost
-from app.services.platform_settings import get_platform_settings
+from app.services.gemini_engine import ask_gemini, gemini_enabled
 from app.services.ml_engine import (
-    random_forest_forecast,
+    group_anomaly_events,
     isolation_forest_anomalies,
     kmeans_building_clusters,
-    group_anomaly_events,
+    random_forest_forecast,
 )
-from app.services.gemini_engine import ask_gemini, gemini_enabled
-from app.services import energy_aggregate as agg
+from app.services.platform_settings import get_platform_settings
 
 router = APIRouter()
 
@@ -346,11 +346,14 @@ def num(v, d=2):
 
 def get_tariff():
     settings = get_platform_settings()
-    return settings.get("tariff", {
-        "active": "GDMTH",
-        "source": "Configuración local",
-        "lastUpdate": "Sin fecha",
-    })
+    return settings.get(
+        "tariff",
+        {
+            "active": "GDMTH",
+            "source": "Configuración local",
+            "lastUpdate": "Sin fecha",
+        },
+    )
 
 
 def md(text):
@@ -376,7 +379,7 @@ def ask_report_ai(prompt, context):
             "## Análisis local\n"
             "- No fue posible consultar Gemini.\n"
             "- El reporte conserva datos reales y modelos locales.\n"
-            f"- Detalle: {str(e)}"
+            f"- Detalle: {e!s}"
         )
 
 
@@ -468,7 +471,15 @@ def render_pdf(payload):
     html = Template(REPORT_TEMPLATE).render(**payload)
     pdf = HTML(string=html).write_pdf()
     buffer = BytesIO(pdf)
-    filename = payload["title"].lower().replace(" ", "_").replace("á", "a").replace("í", "i").replace("ó", "o").replace("é", "e")
+    filename = (
+        payload["title"]
+        .lower()
+        .replace(" ", "_")
+        .replace("á", "a")
+        .replace("í", "i")
+        .replace("ó", "o")
+        .replace("é", "e")
+    )
     return StreamingResponse(
         buffer,
         media_type="application/pdf",
@@ -510,7 +521,12 @@ def weekly_cost_pdf(db: Session = Depends(get_db)):
 
     ai = ask_report_ai(
         "Genera un resumen ejecutivo del costo semanal. Incluye hallazgos, riesgos y recomendaciones. Usa Markdown limpio.",
-        {"week_kwh": week_kwh, "week_cost": week_cost, "forecast": forecast, "buildings": buildings},
+        {
+            "week_kwh": week_kwh,
+            "week_cost": week_cost,
+            "forecast": forecast,
+            "buildings": buildings,
+        },
     )
 
     payload = base_payload(
@@ -531,7 +547,8 @@ def weekly_cost_pdf(db: Session = Depends(get_db)):
         {
             "title": "Resumen por edificio",
             "headers": ["Edificio", "kWh semana", "Costo semana"],
-            "rows": [[name, num(v["kwh"]), money(v["cost"])] for name, v in buildings.items()] or [["Sin datos suficientes", "-", "-"]],
+            "rows": [[name, num(v["kwh"]), money(v["cost"])] for name, v in buildings.items()]
+            or [["Sin datos suficientes", "-", "-"]],
         },
         {
             "title": "Lecturas recientes",
@@ -555,14 +572,16 @@ def building_comparison_pdf(db: Session = Depends(get_db)):
         pfs = [float(r.power_factor) for r in readings if r.power_factor is not None]
         avg_kw = sum(powers) / len(powers) if powers else 0
         avg_pf = sum(pfs) / len(pfs) if pfs else 0
-        rows.append([
-            b.name,
-            b.campus.name if b.campus else "-",
-            b.organizational_unit.name if b.organizational_unit else "-",
-            len(readings),
-            num(avg_kw),
-            num(avg_pf),
-        ])
+        rows.append(
+            [
+                b.name,
+                b.campus.name if b.campus else "-",
+                b.organizational_unit.name if b.organizational_unit else "-",
+                len(readings),
+                num(avg_kw),
+                num(avg_pf),
+            ]
+        )
         bars.append({"label": b.name, "value": f"{avg_kw:.2f} kW", "percent": min(avg_kw * 4, 100)})
 
     ai = ask_report_ai(
@@ -570,17 +589,30 @@ def building_comparison_pdf(db: Session = Depends(get_db)):
         {"buildings": rows, "clusters": clusters},
     )
 
-    payload = base_payload("Comparación de Edificios", "Comparativo técnico de eficiencia y cobertura por edificio.", "Técnico · Datos reales")
+    payload = base_payload(
+        "Comparación de Edificios",
+        "Comparativo técnico de eficiencia y cobertura por edificio.",
+        "Técnico · Datos reales",
+    )
     payload["kpis"] = [
         {"label": "Edificios registrados", "value": str(len(buildings))},
         {"label": "Lecturas acumuladas", "value": f"{scope.production_readings(db).count():,}"},
         {"label": "Modelo", "value": "K-Means"},
-        {"label": "Cobertura", "value": f"{len([r for r in rows if int(r[3]) > 0])}/{len(buildings)}"},
+        {
+            "label": "Cobertura",
+            "value": f"{len([r for r in rows if int(r[3]) > 0])}/{len(buildings)}",
+        },
     ]
     payload["ai_html"] = md(ai)
     payload["bars_title"] = "Promedio kW por edificio"
     payload["bars"] = bars
-    payload["tables"] = [{"title": "Tabla comparativa", "headers": ["Edificio", "Campus", "Unidad", "Lecturas", "Prom. kW", "Prom. FP"], "rows": rows or [["Sin edificios", "-", "-", "-", "-", "-"]]}]
+    payload["tables"] = [
+        {
+            "title": "Tabla comparativa",
+            "headers": ["Edificio", "Campus", "Unidad", "Lecturas", "Prom. kW", "Prom. FP"],
+            "rows": rows or [["Sin edificios", "-", "-", "-", "-", "-"]],
+        }
+    ]
     return render_pdf(payload)
 
 
@@ -602,9 +634,16 @@ def anomalies_pdf(db: Session = Depends(get_db)):
         for a in grouped
     ]
 
-    ai = ask_report_ai("Explica las anomalías detectadas, posible causa eléctrica y acciones técnicas.", {"anomalies": grouped})
+    ai = ask_report_ai(
+        "Explica las anomalías detectadas, posible causa eléctrica y acciones técnicas.",
+        {"anomalies": grouped},
+    )
 
-    payload = base_payload("Reporte de Anomalías IA", "Anomalías agrupadas mediante Isolation Forest y reglas eléctricas.", "IA · Isolation Forest")
+    payload = base_payload(
+        "Reporte de Anomalías IA",
+        "Anomalías agrupadas mediante Isolation Forest y reglas eléctricas.",
+        "IA · Isolation Forest",
+    )
     payload["kpis"] = [
         {"label": "Eventos agrupados", "value": str(len(grouped))},
         {"label": "Lecturas anómalas", "value": str(len(raw.get("items", [])))},
@@ -612,7 +651,13 @@ def anomalies_pdf(db: Session = Depends(get_db)):
         {"label": "Estado", "value": "Activo"},
     ]
     payload["ai_html"] = md(ai)
-    payload["tables"] = [{"title": "Eventos agrupados", "headers": ["Tipo", "Edificio", "Hora", "Detectado", "Esperado", "Modelo", "Eventos"], "rows": rows or [["Sin anomalías", "-", "-", "-", "-", "-", "0"]]}]
+    payload["tables"] = [
+        {
+            "title": "Eventos agrupados",
+            "headers": ["Tipo", "Edificio", "Hora", "Detectado", "Esperado", "Modelo", "Eventos"],
+            "rows": rows or [["Sin anomalías", "-", "-", "-", "-", "-", "0"]],
+        }
+    ]
     return render_pdf(payload)
 
 
@@ -628,27 +673,41 @@ def deployments_pdf(db: Session = Depends(get_db)):
         is_online = bool(last_sync and last_sync >= now - timedelta(seconds=120))
         online += 1 if is_online else 0
         samples = db.query(EnergyReading).filter(EnergyReading.node_id == n.id).count()
-        rows.append([
-            getattr(n, "code", None) or n.id,
-            getattr(n, "name", "-"),
-            "online" if is_online else "offline",
-            getattr(n, "ip_address", None) or "-",
-            last_sync.strftime("%d/%m/%Y %H:%M") if last_sync else "Sin sincronía",
-            getattr(n, "buffer_pending", 0) or 0,
-            samples,
-        ])
+        rows.append(
+            [
+                getattr(n, "code", None) or n.id,
+                getattr(n, "name", "-"),
+                "online" if is_online else "offline",
+                getattr(n, "ip_address", None) or "-",
+                last_sync.strftime("%d/%m/%Y %H:%M") if last_sync else "Sin sincronía",
+                getattr(n, "buffer_pending", 0) or 0,
+                samples,
+            ]
+        )
 
-    ai = ask_report_ai("Explica el estado de despliegue de nodos, riesgos y acciones operativas.", {"nodes": rows})
+    ai = ask_report_ai(
+        "Explica el estado de despliegue de nodos, riesgos y acciones operativas.", {"nodes": rows}
+    )
 
-    payload = base_payload("Reporte de Despliegue de Nodos", "Estado operativo de nodos IoT, sincronización y buffer.", "Técnico · Estado actual")
+    payload = base_payload(
+        "Reporte de Despliegue de Nodos",
+        "Estado operativo de nodos IoT, sincronización y buffer.",
+        "Técnico · Estado actual",
+    )
     payload["kpis"] = [
         {"label": "Nodos registrados", "value": str(len(nodes))},
         {"label": "Nodos online", "value": str(online)},
-        {"label": "Nodos offline", "value": str(max(len(nodes)-online, 0))},
+        {"label": "Nodos offline", "value": str(max(len(nodes) - online, 0))},
         {"label": "Lecturas", "value": f"{db.query(EnergyReading).count():,}"},
     ]
     payload["ai_html"] = md(ai)
-    payload["tables"] = [{"title": "Nodos registrados", "headers": ["Nodo", "Nombre", "Estado", "IP", "Última sync", "Buffer", "Muestras"], "rows": rows or [["Sin nodos", "-", "-", "-", "-", "-", "-"]]}]
+    payload["tables"] = [
+        {
+            "title": "Nodos registrados",
+            "headers": ["Nodo", "Nombre", "Estado", "IP", "Última sync", "Buffer", "Muestras"],
+            "rows": rows or [["Sin nodos", "-", "-", "-", "-", "-", "-"]],
+        }
+    ]
     return render_pdf(payload)
 
 
@@ -660,9 +719,16 @@ def sustainability_pdf(db: Session = Depends(get_db)):
     co2 = total_kwh * factor
     trees = co2 / 21.77 if co2 else 0
 
-    ai = ask_report_ai("Genera interpretación ejecutiva de sostenibilidad y recomendaciones de reducción.", {"kwh": total_kwh, "co2": co2, "cost": total_cost})
+    ai = ask_report_ai(
+        "Genera interpretación ejecutiva de sostenibilidad y recomendaciones de reducción.",
+        {"kwh": total_kwh, "co2": co2, "cost": total_cost},
+    )
 
-    payload = base_payload("Reporte de Sostenibilidad", "Consumo energético, emisiones estimadas y oportunidades de reducción.", "Ejecutivo · Datos reales")
+    payload = base_payload(
+        "Reporte de Sostenibilidad",
+        "Consumo energético, emisiones estimadas y oportunidades de reducción.",
+        "Ejecutivo · Datos reales",
+    )
     payload["period"] = "Últimos 30 días"
     payload["kpis"] = [
         {"label": "Energía 30 días", "value": f"{total_kwh:,.2f} kWh"},
@@ -671,25 +737,41 @@ def sustainability_pdf(db: Session = Depends(get_db)):
         {"label": "Árboles equivalentes", "value": f"{trees:,.1f}"},
     ]
     payload["ai_html"] = md(ai)
-    payload["tables"] = [{"title": "Detalle de cálculo", "headers": ["Métrica", "Valor", "Nota"], "rows": [
-        ["Energía", f"{total_kwh:,.2f} kWh", "Lecturas reales"],
-        ["CO₂", f"{co2:,.2f} kg", "Factor 0.438 kg/kWh"],
-        ["Costo", money(total_cost), "Tarifa GDMTH activa"],
-        ["Árboles equivalentes", f"{trees:,.1f}", "Referencia anual aproximada"],
-    ]}]
+    payload["tables"] = [
+        {
+            "title": "Detalle de cálculo",
+            "headers": ["Métrica", "Valor", "Nota"],
+            "rows": [
+                ["Energía", f"{total_kwh:,.2f} kWh", "Lecturas reales"],
+                ["CO₂", f"{co2:,.2f} kg", "Factor 0.438 kg/kWh"],
+                ["Costo", money(total_cost), "Tarifa GDMTH activa"],
+                ["Árboles equivalentes", f"{trees:,.1f}", "Referencia anual aproximada"],
+            ],
+        }
+    ]
     return render_pdf(payload)
 
 
 @router.get("/raw-readings.pdf")
 def raw_readings_pdf(db: Session = Depends(get_db)):
-    payload = base_payload("Dataset Completo", "Vista previa del dataset. Para análisis externo use CSV.", "Datos · Lecturas reales")
+    payload = base_payload(
+        "Dataset Completo",
+        "Vista previa del dataset. Para análisis externo use CSV.",
+        "Datos · Lecturas reales",
+    )
     payload["kpis"] = [
         {"label": "Lecturas", "value": f"{db.query(EnergyReading).count():,}"},
         {"label": "Nodos", "value": str(db.query(Node).count())},
         {"label": "Edificios", "value": str(db.query(Building).count())},
         {"label": "Formato", "value": "CSV"},
     ]
-    payload["tables"] = [{"title": "Vista previa", "headers": ["Fecha", "Nodo", "Edificio", "kW", "kWh", "FP", "Hz"], "rows": recent_rows(db, 12)}]
+    payload["tables"] = [
+        {
+            "title": "Vista previa",
+            "headers": ["Fecha", "Nodo", "Edificio", "kW", "kWh", "FP", "Hz"],
+            "rows": recent_rows(db, 12),
+        }
+    ]
     return render_pdf(payload)
 
 
@@ -702,32 +784,50 @@ def readings_csv_response(db, contexts=None):
     """
     output = StringIO()
     writer = csv.writer(output)
-    writer.writerow(["id", "timestamp", "node_id", "node_code", "building", "deployment_id", "context", "voltage", "current", "power_kw", "energy_kwh", "power_factor", "frequency_hz"])
-
-    rows = (
-        scope.production_readings(db, contexts)
-        .order_by(EnergyReading.timestamp.asc())
-        .all()
+    writer.writerow(
+        [
+            "id",
+            "timestamp",
+            "node_id",
+            "node_code",
+            "building",
+            "deployment_id",
+            "context",
+            "voltage",
+            "current",
+            "power_kw",
+            "energy_kwh",
+            "power_factor",
+            "frequency_hz",
+        ]
     )
+
+    rows = scope.production_readings(db, contexts).order_by(EnergyReading.timestamp.asc()).all()
     for r in rows:
-        writer.writerow([
-            r.id,
-            r.timestamp.isoformat() if r.timestamp else "",
-            r.node_id,
-            r.node.code if r.node else "",
-            reading_building(r),
-            r.deployment_id,
-            r.context,
-            r.voltage,
-            r.current,
-            r.power_kw,
-            r.energy_kwh,
-            r.power_factor,
-            r.frequency_hz,
-        ])
+        writer.writerow(
+            [
+                r.id,
+                r.timestamp.isoformat() if r.timestamp else "",
+                r.node_id,
+                r.node.code if r.node else "",
+                reading_building(r),
+                r.deployment_id,
+                r.context,
+                r.voltage,
+                r.current,
+                r.power_kw,
+                r.energy_kwh,
+                r.power_factor,
+                r.frequency_hz,
+            ]
+        )
 
     buffer = BytesIO(output.getvalue().encode("utf-8-sig"))
-    return StreamingResponse(buffer, media_type="text/csv; charset=utf-8", headers={"Content-Disposition": 'attachment; filename="dataset_completo_lecturas.csv"'})
+    return StreamingResponse(
+        buffer,
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": 'attachment; filename="dataset_completo_lecturas.csv"'},
+    )
 
 
 CONTEXT_QUERY = Query(
@@ -749,7 +849,6 @@ def dataset_csv(context: str | None = CONTEXT_QUERY, db: Session = Depends(get_d
     return readings_csv_response(db, context)
 
 
-
 def deployment_readings_csv(db, deployment_id: int):
     deployment = db.query(Deployment).filter(Deployment.id == deployment_id).first()
     if not deployment:
@@ -764,12 +863,23 @@ def deployment_readings_csv(db, deployment_id: int):
 
     output = StringIO()
     writer = csv.writer(output)
-    writer.writerow([
-        "deployment_id", "node", "building", "timestamp",
-        "voltage", "current", "power_kw", "energy_delta_kwh",
-        "meter_energy_kwh", "power_factor", "frequency_hz",
-        "tariff_period", "cost_mxn"
-    ])
+    writer.writerow(
+        [
+            "deployment_id",
+            "node",
+            "building",
+            "timestamp",
+            "voltage",
+            "current",
+            "power_kw",
+            "energy_delta_kwh",
+            "meter_energy_kwh",
+            "power_factor",
+            "frequency_hz",
+            "tariff_period",
+            "cost_mxn",
+        ]
+    )
 
     energy_by_id = _deployment_energy(db, rows)
     total_kwh = 0
@@ -782,22 +892,23 @@ def deployment_readings_csv(db, deployment_id: int):
         total_kwh += delta
         total_cost += cost_info["cost_mxn"]
 
-        writer.writerow([
-            deployment.id,
-            deployment.node.code,
-            deployment.building.name,
-            r.timestamp.isoformat() if r.timestamp else "",
-            r.voltage,
-            r.current,
-            r.power_kw,
-            delta,
-            r.meter_energy_kwh,
-            r.power_factor,
-            r.frequency_hz,
-            cost_info["period_name"],
-            cost_info["cost_mxn"],
-        ])
-
+        writer.writerow(
+            [
+                deployment.id,
+                deployment.node.code,
+                deployment.building.name,
+                r.timestamp.isoformat() if r.timestamp else "",
+                r.voltage,
+                r.current,
+                r.power_kw,
+                delta,
+                r.meter_energy_kwh,
+                r.power_factor,
+                r.frequency_hz,
+                cost_info["period_name"],
+                cost_info["cost_mxn"],
+            ]
+        )
 
     buffer = BytesIO(output.getvalue().encode("utf-8-sig"))
     filename = f"deployment_{deployment.id}_{deployment.node.code}_{deployment.building.name.replace(' ', '_')}.csv"
@@ -839,21 +950,27 @@ def deployment_pdf_payload(db, deployment_id: int):
         total_kwh += delta
         total_cost += cost_info["cost_mxn"]
 
-        if r.power_kw is not None: powers.append(float(r.power_kw))
-        if r.current is not None: currents.append(float(r.current))
-        if r.voltage is not None: voltages.append(float(r.voltage))
-        if r.power_factor is not None: pfs.append(float(r.power_factor))
+        if r.power_kw is not None:
+            powers.append(float(r.power_kw))
+        if r.current is not None:
+            currents.append(float(r.current))
+        if r.voltage is not None:
+            voltages.append(float(r.voltage))
+        if r.power_factor is not None:
+            pfs.append(float(r.power_factor))
 
     for r in rows[-12:]:
-        preview_rows.append([
-            r.timestamp.strftime("%d/%m/%Y %H:%M") if r.timestamp else "-",
-            deployment.node.code,
-            num(r.power_kw),
-            num(r.current),
-            num(r.voltage),
-            num(r.power_factor),
-            num(r.frequency_hz),
-        ])
+        preview_rows.append(
+            [
+                r.timestamp.strftime("%d/%m/%Y %H:%M") if r.timestamp else "-",
+                deployment.node.code,
+                num(r.power_kw),
+                num(r.current),
+                num(r.voltage),
+                num(r.power_factor),
+                num(r.frequency_hz),
+            ]
+        )
 
     avg_pf = sum(pfs) / len(pfs) if pfs else 0
     avg_kw = sum(powers) / len(powers) if powers else 0
@@ -901,7 +1018,14 @@ def deployment_pdf_payload(db, deployment_id: int):
                 ["Nodo", deployment.node.code],
                 ["Edificio", deployment.building.name],
                 ["Campus", deployment.building.campus.name if deployment.building.campus else "-"],
-                ["Unidad", deployment.building.organizational_unit.name if deployment.building.organizational_unit else "-"],
+                [
+                    "Unidad",
+                    (
+                        deployment.building.organizational_unit.name
+                        if deployment.building.organizational_unit
+                        else "-"
+                    ),
+                ],
                 ["Tablero", deployment.electrical_panel.name],
                 ["Estado", deployment.status],
                 ["Inicio", deployment.start_date],
@@ -927,7 +1051,6 @@ def deployment_pdf_payload(db, deployment_id: int):
     ]
 
     return payload
-
 
 
 def deployment_real_period(db, deployment_id: int):
@@ -964,12 +1087,23 @@ def deployment_xlsx_response(db, deployment_id: int):
     ws = wb.active
     ws.title = "Readings"
 
-    ws.append([
-        "deployment_id", "node", "building", "timestamp",
-        "voltage", "current", "power_kw", "energy_delta_kwh",
-        "meter_energy_kwh", "power_factor", "frequency_hz",
-        "tariff_period", "cost_mxn"
-    ])
+    ws.append(
+        [
+            "deployment_id",
+            "node",
+            "building",
+            "timestamp",
+            "voltage",
+            "current",
+            "power_kw",
+            "energy_delta_kwh",
+            "meter_energy_kwh",
+            "power_factor",
+            "frequency_hz",
+            "tariff_period",
+            "cost_mxn",
+        ]
+    )
 
     energy_by_id = _deployment_energy(db, rows)
 
@@ -978,22 +1112,23 @@ def deployment_xlsx_response(db, deployment_id: int):
 
         cost_info = estimate_reading_cost(db, r.timestamp, delta)
 
-        ws.append([
-            deployment.id,
-            deployment.node.code,
-            deployment.building.name,
-            r.timestamp.isoformat() if r.timestamp else "",
-            r.voltage,
-            r.current,
-            r.power_kw,
-            delta,
-            r.meter_energy_kwh,
-            r.power_factor,
-            r.frequency_hz,
-            cost_info["period_name"],
-            cost_info["cost_mxn"],
-        ])
-
+        ws.append(
+            [
+                deployment.id,
+                deployment.node.code,
+                deployment.building.name,
+                r.timestamp.isoformat() if r.timestamp else "",
+                r.voltage,
+                r.current,
+                r.power_kw,
+                delta,
+                r.meter_energy_kwh,
+                r.power_factor,
+                r.frequency_hz,
+                cost_info["period_name"],
+                cost_info["cost_mxn"],
+            ]
+        )
 
     buffer = BytesIO()
     wb.save(buffer)
@@ -1015,23 +1150,27 @@ def list_deployment_reports(db: Session = Depends(get_db)):
     result = []
     for d in deployments:
         real_start, real_end, count = deployment_real_period(db, d.id)
-        result.append({
-            "id": d.id,
-            "node_id": d.node.code,
-            "building_name": d.building.name,
-            "campus": d.building.campus.name if d.building.campus else None,
-            "organizational_unit": d.building.organizational_unit.name if d.building.organizational_unit else None,
-            "electrical_panel": d.electrical_panel.name,
-            "status": d.status,
-            "start_date": d.start_date,
-            "end_date": d.end_date,
-            "real_start": fmt_dt(real_start),
-            "real_end": fmt_dt(real_end),
-            "reading_count": count,
-            "pdf": f"/deployment/{d.id}.pdf",
-            "csv": f"/deployment/{d.id}.csv",
-            "xlsx": f"/deployment/{d.id}.xlsx",
-        })
+        result.append(
+            {
+                "id": d.id,
+                "node_id": d.node.code,
+                "building_name": d.building.name,
+                "campus": d.building.campus.name if d.building.campus else None,
+                "organizational_unit": (
+                    d.building.organizational_unit.name if d.building.organizational_unit else None
+                ),
+                "electrical_panel": d.electrical_panel.name,
+                "status": d.status,
+                "start_date": d.start_date,
+                "end_date": d.end_date,
+                "real_start": fmt_dt(real_start),
+                "real_end": fmt_dt(real_end),
+                "reading_count": count,
+                "pdf": f"/deployment/{d.id}.pdf",
+                "csv": f"/deployment/{d.id}.csv",
+                "xlsx": f"/deployment/{d.id}.xlsx",
+            }
+        )
 
     return result
 
@@ -1060,6 +1199,7 @@ def generate_deployment_report_files(deployment_id: int, db: Session = Depends(g
 
     out_dir = "generated_reports"
     import os
+
     os.makedirs(out_dir, exist_ok=True)
 
     payload = deployment_pdf_payload(db, deployment_id)
@@ -1080,9 +1220,56 @@ def generate_deployment_report_files(deployment_id: int, db: Session = Depends(g
 
     with open(csv_path, "w", newline="", encoding="utf-8-sig") as f:
         writer = csv.writer(f)
-        writer.writerow(["id", "timestamp", "node", "building", "voltage", "current", "power_kw", "energy_kwh", "power_factor", "frequency_hz"])
+        writer.writerow(
+            [
+                "id",
+                "timestamp",
+                "node",
+                "building",
+                "voltage",
+                "current",
+                "power_kw",
+                "energy_kwh",
+                "power_factor",
+                "frequency_hz",
+            ]
+        )
         for r in rows:
-            writer.writerow([
+            writer.writerow(
+                [
+                    r.id,
+                    r.timestamp.isoformat() if r.timestamp else "",
+                    deployment.node.code,
+                    deployment.building.name,
+                    r.voltage,
+                    r.current,
+                    r.power_kw,
+                    r.energy_kwh,
+                    r.power_factor,
+                    r.frequency_hz,
+                ]
+            )
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Readings"
+    ws.append(
+        [
+            "id",
+            "timestamp",
+            "node",
+            "building",
+            "voltage",
+            "current",
+            "power_kw",
+            "energy_kwh",
+            "power_factor",
+            "frequency_hz",
+        ]
+    )
+    for r in rows:
+        ws.append(
+            [
                 r.id,
                 r.timestamp.isoformat() if r.timestamp else "",
                 deployment.node.code,
@@ -1093,25 +1280,8 @@ def generate_deployment_report_files(deployment_id: int, db: Session = Depends(g
                 r.energy_kwh,
                 r.power_factor,
                 r.frequency_hz,
-            ])
-
-    wb = Workbook()
-    ws = wb.active
-    ws.title = "Readings"
-    ws.append(["id", "timestamp", "node", "building", "voltage", "current", "power_kw", "energy_kwh", "power_factor", "frequency_hz"])
-    for r in rows:
-        ws.append([
-            r.id,
-            r.timestamp.isoformat() if r.timestamp else "",
-            deployment.node.code,
-            deployment.building.name,
-            r.voltage,
-            r.current,
-            r.power_kw,
-            r.energy_kwh,
-            r.power_factor,
-            r.frequency_hz,
-        ])
+            ]
+        )
     wb.save(xlsx_path)
 
     return {

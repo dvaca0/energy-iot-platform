@@ -1,11 +1,12 @@
 from datetime import datetime
+
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.db import lifecycle
 from app.db.database import get_db
-from app.db.models import Node, Deployment, EnergyReading
+from app.db.models import Deployment, EnergyReading, Node
 from app.services.cost_engine import estimate_reading_cost
 
 router = APIRouter()
@@ -118,12 +119,7 @@ def create_reading(payload: ReadingCreate, db: Session = Depends(get_db)):
 
 @router.get("/latest")
 def latest_readings(db: Session = Depends(get_db)):
-    readings = (
-        db.query(EnergyReading)
-        .order_by(EnergyReading.timestamp.desc())
-        .limit(20)
-        .all()
-    )
+    readings = db.query(EnergyReading).order_by(EnergyReading.timestamp.desc()).limit(20).all()
 
     return [
         {

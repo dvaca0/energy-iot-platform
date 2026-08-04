@@ -19,6 +19,7 @@ Alerting follows nodes, not campaigns. The legacy alert endpoint iterated active
 deployments; with every deployment completed it emitted nothing at all, silently.
 Monitoring now follows `is_monitored`, which no deployment transition can change.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -69,9 +70,13 @@ def _load(db: Session) -> dict[str, CommissionState]:
         ).fetchall()
         _states = {
             r[0]: CommissionState(
-                code=r[0], label=r[1], sort_order=r[2],
-                may_upload=bool(r[3]), is_monitored=bool(r[4]),
-                is_terminal=bool(r[5]), description=r[6],
+                code=r[0],
+                label=r[1],
+                sort_order=r[2],
+                may_upload=bool(r[3]),
+                is_monitored=bool(r[4]),
+                is_terminal=bool(r[5]),
+                description=r[6],
             )
             for r in rows
         }
@@ -141,9 +146,7 @@ def can_transition(db: Session, from_code: str, to_code: str) -> bool:
 
 def legal_transitions_from(db: Session, from_code: str) -> tuple[str, ...]:
     """Every state reachable from ``from_code``, for an API or a UI menu."""
-    return tuple(
-        sorted(to for (frm, to) in _load_transitions(db) if frm == from_code)
-    )
+    return tuple(sorted(to for (frm, to) in _load_transitions(db) if frm == from_code))
 
 
 def transition(

@@ -78,9 +78,7 @@ def _new_alert_id(now: datetime) -> str:
     return f"ALT-{now:%Y%m%d}-{secrets.token_hex(2).upper()}"
 
 
-def _duration_severity(
-    opened_at: datetime, now: datetime, config: MonitoringConfig
-) -> Severity:
+def _duration_severity(opened_at: datetime, now: datetime, config: MonitoringConfig) -> Severity:
     """Severity implied purely by how long an alert has been open."""
     minutes = (now - opened_at).total_seconds() / 60.0
     escalation = config.escalation
@@ -133,11 +131,7 @@ def _finding_context(finding: Finding) -> dict[str, Any]:
 
 def _open_alerts(session: Session) -> dict[str, MonitorAlert]:
     """Every unresolved alert, keyed by fingerprint."""
-    rows = (
-        session.query(MonitorAlert)
-        .filter(MonitorAlert.resolved_at.is_(None))
-        .all()
-    )
+    rows = session.query(MonitorAlert).filter(MonitorAlert.resolved_at.is_(None)).all()
     return {row.fingerprint: row for row in rows}
 
 
@@ -219,9 +213,7 @@ def process_findings(
             if finding.notify and sustain <= 0:
                 mark_notified(alert, now)
                 notifications.append(
-                    AlertNotification(
-                        alert=alert, status=STATUS_NEW, severity=finding.severity
-                    )
+                    AlertNotification(alert=alert, status=STATUS_NEW, severity=finding.severity)
                 )
             continue
 
@@ -251,9 +243,7 @@ def process_findings(
                 )
                 mark_notified(alert, now)
                 notifications.append(
-                    AlertNotification(
-                        alert=alert, status=STATUS_NEW, severity=previous
-                    )
+                    AlertNotification(alert=alert, status=STATUS_NEW, severity=previous)
                 )
             continue
 
@@ -346,9 +336,7 @@ def process_findings(
                         alert=alert,
                         status=STATUS_REMINDER,
                         severity=previous,
-                        extra={
-                            "open_for_seconds": (now - alert.created_at).total_seconds()
-                        },
+                        extra={"open_for_seconds": (now - alert.created_at).total_seconds()},
                     )
                 )
 
@@ -397,10 +385,7 @@ def process_findings(
             alert,
             "resolved",
             from_severity=severity,
-            detail=(
-                lifecycle_reason
-                or f"resolved after {alert.duration_seconds:.0f}s"
-            ),
+            detail=(lifecycle_reason or f"resolved after {alert.duration_seconds:.0f}s"),
             now=now,
         )
 
@@ -419,7 +404,6 @@ def process_findings(
             )
 
     return notifications
-
 
 
 def _lifecycle_closure_reason(session: Session, alert: MonitorAlert) -> str | None:
@@ -451,7 +435,7 @@ def _lifecycle_closure_reason(session: Session, alert: MonitorAlert) -> str | No
             f"({state.label}); heartbeat no longer expected, "
             "so this condition is no longer monitored"
         )
-    except Exception:  # noqa: BLE001 - never block a resolution on this
+    except Exception:
         log.exception("Could not determine lifecycle closure reason for %s", alert.node_code)
         return None
 
@@ -476,16 +460,12 @@ def _node_recovery_extra(
         if latest is None:
             return {}
 
-        beat = (
-            session.get(NodeHeartbeat, latest.heartbeat_id)
-            if latest.heartbeat_id
-            else None
-        )
+        beat = session.get(NodeHeartbeat, latest.heartbeat_id) if latest.heartbeat_id else None
         return recovery_details(
             {"latest": latest, "heartbeat": beat, "offline_since": latest.offline_since},
             config,
         )
-    except Exception:  # noqa: BLE001
+    except Exception:
         log.exception("Could not build recovery details for %s", node_code)
         return {}
 
@@ -514,9 +494,7 @@ def acknowledge(
     handled".
     """
     now = now or datetime.utcnow()
-    alert = (
-        session.query(MonitorAlert).filter(MonitorAlert.alert_id == alert_id).first()
-    )
+    alert = session.query(MonitorAlert).filter(MonitorAlert.alert_id == alert_id).first()
     if alert is None or alert.resolved_at is not None:
         return None
 
@@ -532,9 +510,7 @@ def acknowledge(
 def open_alert_summary(session: Session) -> dict[str, int]:
     """Count of open alerts by severity, for the status report."""
     counts = {level.label: 0 for level in Severity if level is not Severity.OK}
-    for alert in (
-        session.query(MonitorAlert).filter(MonitorAlert.resolved_at.is_(None)).all()
-    ):
+    for alert in session.query(MonitorAlert).filter(MonitorAlert.resolved_at.is_(None)).all():
         label = Severity.parse(alert.severity).label
         counts[label] = counts.get(label, 0) + 1
     return counts
@@ -542,8 +518,8 @@ def open_alert_summary(session: Session) -> dict[str, int]:
 
 __all__ = [
     "AlertNotification",
-    "process_findings",
-    "mark_notified",
     "acknowledge",
+    "mark_notified",
     "open_alert_summary",
+    "process_findings",
 ]

@@ -1,6 +1,5 @@
-from app.services.platform_settings import get_thresholds
-from datetime import datetime, time, timedelta, timezone
 from collections import defaultdict
+from datetime import UTC, datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends
@@ -8,9 +7,10 @@ from sqlalchemy.orm import Session
 
 from app.db import scope
 from app.db.database import get_db
-from app.db.models import EnergyReading, Node, TariffPeriod, Campus, Building
-from app.services.cost_engine import estimate_reading_cost
+from app.db.models import Building, Campus, EnergyReading, Node, TariffPeriod
 from app.services import energy_aggregate as agg
+from app.services.cost_engine import estimate_reading_cost
+from app.services.platform_settings import get_thresholds
 
 router = APIRouter()
 
@@ -19,14 +19,14 @@ LOCAL_TZ = ZoneInfo("America/Mexico_City")
 
 def to_local_time(timestamp):
     if timestamp.tzinfo is None:
-        timestamp = timestamp.replace(tzinfo=timezone.utc)
+        timestamp = timestamp.replace(tzinfo=UTC)
     return timestamp.astimezone(LOCAL_TZ)
 
 
 def today_start():
     local_now = datetime.now(LOCAL_TZ)
     local_start = datetime.combine(local_now.date(), time.min, tzinfo=LOCAL_TZ)
-    return local_start.astimezone(timezone.utc).replace(tzinfo=None)
+    return local_start.astimezone(UTC).replace(tzinfo=None)
 
 
 def get_period_for_hour(db: Session, hour: int):
@@ -66,38 +66,42 @@ def live_metrics(db: Session = Depends(get_db)):
         # Today's energy for this node, from the canonical service. This used to
         # be `latest.energy_kwh - first_today.energy_kwh`, which is the counter
         # rule applied to whatever the column happened to hold (ADR-0007).
-        energy_today = agg.totals(
-            [b for b in today_buckets if b.node_id == node.id]
-        )[0]
+        energy_today = agg.totals([b for b in today_buckets if b.node_id == node.id])[0]
 
         current_cost = estimate_reading_cost(db, latest.timestamp, energy_today) if latest else None
 
-        result.append({
-            "node_id": node.code,
-            "status": "online" if rpi_recent else "offline",
-            "rpi_status": "ok" if rpi_recent else "offline",
-            "shelly_status": "ok" if shelly_recent else "offline",
-            "last_sync": node.last_sync.isoformat() if node.last_sync else None,
-            "latest_reading": latest.timestamp.isoformat() if latest else None,
-            "buffer_pending": node.buffer_pending,
-            "samples": node.samples,
-            # The building that produced the most recent reading — a property
-            # of the reading, not of the node (ADR-0001). Named accordingly so
-            # no consumer can read it as "the node's building".
-            "last_reading_building": latest.building.name if latest and latest.building else None,
-            "voltage": latest.voltage if latest else None,
-            "current": latest.current if latest else None,
-            "power_kw": latest.power_kw if latest else None,
-            "power_factor": latest.power_factor if latest else None,
-            "frequency_hz": latest.frequency_hz if latest else None,
-            "energy_today_kwh": round(energy_today, 4),
-            # The device's own cumulative register, the canonical field for it
-            # (ADR-0007). Null until a collector reports one; it is deliberately
-            # not energy_kwh, which no longer holds a lifetime count.
-            "lifetime_energy_kwh": latest.meter_energy_kwh if latest else None,
-            "estimated_cost_today_mxn": round(current_cost["cost_mxn"], 4) if current_cost else 0,
-            "tariff_period": current_cost["period_name"] if current_cost else None,
-        })
+        result.append(
+            {
+                "node_id": node.code,
+                "status": "online" if rpi_recent else "offline",
+                "rpi_status": "ok" if rpi_recent else "offline",
+                "shelly_status": "ok" if shelly_recent else "offline",
+                "last_sync": node.last_sync.isoformat() if node.last_sync else None,
+                "latest_reading": latest.timestamp.isoformat() if latest else None,
+                "buffer_pending": node.buffer_pending,
+                "samples": node.samples,
+                # The building that produced the most recent reading — a property
+                # of the reading, not of the node (ADR-0001). Named accordingly so
+                # no consumer can read it as "the node's building".
+                "last_reading_building": (
+                    latest.building.name if latest and latest.building else None
+                ),
+                "voltage": latest.voltage if latest else None,
+                "current": latest.current if latest else None,
+                "power_kw": latest.power_kw if latest else None,
+                "power_factor": latest.power_factor if latest else None,
+                "frequency_hz": latest.frequency_hz if latest else None,
+                "energy_today_kwh": round(energy_today, 4),
+                # The device's own cumulative register, the canonical field for it
+                # (ADR-0007). Null until a collector reports one; it is deliberately
+                # not energy_kwh, which no longer holds a lifetime count.
+                "lifetime_energy_kwh": latest.meter_energy_kwh if latest else None,
+                "estimated_cost_today_mxn": (
+                    round(current_cost["cost_mxn"], 4) if current_cost else 0
+                ),
+                "tariff_period": current_cost["period_name"] if current_cost else None,
+            }
+        )
 
     return result
 
@@ -120,12 +124,14 @@ def hourly_metrics(db: Session = Depends(get_db), deployment_id: int | None = No
     for hour in range(24):
         rows = grouped.get(hour, [])
         kwh, cost = agg.totals(rows)
-        result.append({
-            "hour": f"{hour:02d}:00",
-            "kwh": round(kwh, 4),
-            "cost_mxn": round(cost, 4),
-            "tariff_period": rows[0].period if rows else "base",
-        })
+        result.append(
+            {
+                "hour": f"{hour:02d}:00",
+                "kwh": round(kwh, 4),
+                "cost_mxn": round(cost, 4),
+                "tariff_period": rows[0].period if rows else "base",
+            }
+        )
     return result
 
 
@@ -168,11 +174,13 @@ def daily_metrics(db: Session = Depends(get_db), deployment_id: int | None = Non
     result = []
     for day, rows in sorted(agg.by_local_date(buckets).items()):
         kwh, cost = agg.totals(rows)
-        result.append({
-            "day": day,
-            "kwh": round(kwh, 4),
-            "cost_mxn": round(cost, 4),
-        })
+        result.append(
+            {
+                "day": day,
+                "kwh": round(kwh, 4),
+                "cost_mxn": round(cost, 4),
+            }
+        )
     return result
 
 
@@ -185,14 +193,16 @@ def building_metrics(db: Session = Depends(get_db), deployment_id: int | None = 
     result = []
     for building_id, rows in agg.by_building(buckets).items():
         kwh, cost = agg.totals(rows)
-        result.append({
-            "building_id": building_id,
-            # Unattributed readings have no building; name them explicitly
-            # rather than dropping the energy.
-            "building_name": names.get(building_id, "Sin edificio"),
-            "kwh": round(kwh, 4),
-            "cost_mxn": round(cost, 4),
-        })
+        result.append(
+            {
+                "building_id": building_id,
+                # Unattributed readings have no building; name them explicitly
+                # rather than dropping the energy.
+                "building_name": names.get(building_id, "Sin edificio"),
+                "kwh": round(kwh, 4),
+                "cost_mxn": round(cost, 4),
+            }
+        )
 
     result.sort(key=lambda r: r["kwh"], reverse=True)
     return result
@@ -207,13 +217,15 @@ def campus_metrics(db: Session = Depends(get_db)):
     today_by_building = agg.by_building(agg.hourly_energy(db, start=start))
 
     building_data = []
-    campus_totals = defaultdict(lambda: {
-        "power_kw": 0,
-        "energy_today_kwh": 0,
-        "cost_today_mxn": 0,
-        "monitored_buildings": 0,
-        "total_buildings": 0,
-    })
+    campus_totals = defaultdict(
+        lambda: {
+            "power_kw": 0,
+            "energy_today_kwh": 0,
+            "cost_today_mxn": 0,
+            "monitored_buildings": 0,
+            "total_buildings": 0,
+        }
+    )
 
     for building in buildings:
         latest = (
@@ -241,39 +253,46 @@ def campus_metrics(db: Session = Depends(get_db)):
         anomaly = False
         if latest:
             anomaly = (
-                (latest.power_factor is not None and latest.power_factor < float(get_thresholds().get('minPowerFactor', 0.90)))
-                or (latest.current is not None and latest.current > float(get_thresholds().get('maxCurrent', 200)))
+                latest.power_factor is not None
+                and latest.power_factor < float(get_thresholds().get("minPowerFactor", 0.90))
+            ) or (
+                latest.current is not None
+                and latest.current > float(get_thresholds().get("maxCurrent", 200))
             )
 
-        building_data.append({
-            "id": building.id,
-            "name": building.name,
-            "campus_id": building.campus_id,
-            "campus": building.campus.name,
-            "delegation": building.campus.delegation.name,
-            "organizational_unit": building.organizational_unit.name,
-            "status": "monitored" if latest else "no_data",
-            "power_kw": round(latest.power_kw or 0, 3) if latest else 0,
-            "energy_today_kwh": round(energy_today, 4),
-            "cost_today_mxn": round(cost_today, 4),
-            "anomaly": anomaly,
-            "last_reading": latest.timestamp.isoformat() if latest else None,
-        })
+        building_data.append(
+            {
+                "id": building.id,
+                "name": building.name,
+                "campus_id": building.campus_id,
+                "campus": building.campus.name,
+                "delegation": building.campus.delegation.name,
+                "organizational_unit": building.organizational_unit.name,
+                "status": "monitored" if latest else "no_data",
+                "power_kw": round(latest.power_kw or 0, 3) if latest else 0,
+                "energy_today_kwh": round(energy_today, 4),
+                "cost_today_mxn": round(cost_today, 4),
+                "anomaly": anomaly,
+                "last_reading": latest.timestamp.isoformat() if latest else None,
+            }
+        )
 
     campuses = []
     for campus in db.query(Campus).all():
         totals = campus_totals[campus.id]
-        campuses.append({
-            "id": campus.id,
-            "name": campus.name,
-            "delegation": campus.delegation.name,
-            "status": "active" if totals["monitored_buildings"] > 0 else "inactive",
-            "monitored_buildings": totals["monitored_buildings"],
-            "total_buildings": totals["total_buildings"],
-            "power_kw": round(totals["power_kw"], 3),
-            "energy_today_kwh": round(totals["energy_today_kwh"], 4),
-            "cost_today_mxn": round(totals["cost_today_mxn"], 4),
-        })
+        campuses.append(
+            {
+                "id": campus.id,
+                "name": campus.name,
+                "delegation": campus.delegation.name,
+                "status": "active" if totals["monitored_buildings"] > 0 else "inactive",
+                "monitored_buildings": totals["monitored_buildings"],
+                "total_buildings": totals["total_buildings"],
+                "power_kw": round(totals["power_kw"], 3),
+                "energy_today_kwh": round(totals["energy_today_kwh"], 4),
+                "cost_today_mxn": round(totals["cost_today_mxn"], 4),
+            }
+        )
 
     return {
         "campuses": campuses,

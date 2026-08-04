@@ -16,6 +16,7 @@ that failed. The triggers in M12 remain the last line of defence, but a
 constraint message should never reach an operator — if one does, a rule is
 missing here.
 """
+
 from __future__ import annotations
 
 from datetime import datetime, timedelta
@@ -54,11 +55,7 @@ ACTION_LABELS = {
 
 
 def attributed_reading_count(db: Session, deployment_id: int) -> int:
-    return (
-        db.query(EnergyReading)
-        .filter(EnergyReading.deployment_id == deployment_id)
-        .count()
-    )
+    return db.query(EnergyReading).filter(EnergyReading.deployment_id == deployment_id).count()
 
 
 def available_actions(db: Session, deployment: Deployment) -> list[str]:
@@ -238,9 +235,7 @@ def supersede_and_activate(
             code="node_mismatch",
         )
     if previous.id == incoming.id:
-        raise LifecycleError(
-            "Cannot supersede a deployment with itself.", code="node_mismatch"
-        )
+        raise LifecycleError("Cannot supersede a deployment with itself.", code="node_mismatch")
 
     # Close first, so the exclusivity check inside activate() sees a free node.
     complete(db, previous, at=moment)
@@ -305,8 +300,7 @@ def last_completed_deployment(db: Session, node_id: int) -> Deployment | None:
     never surfaced through a generic "building" property.
     """
     terminal = [
-        s.code for s in lifecycle.all_statuses(db)
-        if s.is_terminal and s.allows_attribution
+        s.code for s in lifecycle.all_statuses(db) if s.is_terminal and s.allows_attribution
     ]
     if not terminal:
         return None

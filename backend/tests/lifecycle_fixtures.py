@@ -15,32 +15,77 @@ from sqlalchemy import text
 
 #: (code, label, sort_order, may_upload, is_monitored, is_terminal, description)
 NODE_COMMISSION_STATES = [
-    ("registered", "Registered", 10, 0, 0, 0,
-     "Known to the platform but not yet verified in the field. "
-     "Uploads refused; silence is expected, so no alarm."),
-    ("commissioned", "Commissioned", 20, 1, 1, 0,
-     "Verified and in service. The only state that may upload. "
-     "Silence is an alarm."),
-    ("suspended", "Suspended", 30, 0, 1, 0,
-     "Uploads deliberately revoked (fault, security, theft). "
-     "Still physically installed, so still monitored."),
-    ("decommissioned", "Decommissioned", 40, 0, 0, 1,
-     "Retired from the fleet. Historical readings are retained; "
-     "silence is expected."),
+    (
+        "registered",
+        "Registered",
+        10,
+        0,
+        0,
+        0,
+        "Known to the platform but not yet verified in the field. "
+        "Uploads refused; silence is expected, so no alarm.",
+    ),
+    (
+        "commissioned",
+        "Commissioned",
+        20,
+        1,
+        1,
+        0,
+        "Verified and in service. The only state that may upload. " "Silence is an alarm.",
+    ),
+    (
+        "suspended",
+        "Suspended",
+        30,
+        0,
+        1,
+        0,
+        "Uploads deliberately revoked (fault, security, theft). "
+        "Still physically installed, so still monitored.",
+    ),
+    (
+        "decommissioned",
+        "Decommissioned",
+        40,
+        0,
+        0,
+        1,
+        "Retired from the fleet. Historical readings are retained; " "silence is expected.",
+    ),
 ]
 
 #: (code, label, sort_order, is_terminal, allows_attribution, is_operational, description)
 DEPLOYMENT_STATUSES = [
-    ("planned", "Planned", 10, 0, 0, 0,
-     "Campaign scheduled; no hardware in the field yet."),
-    ("installing", "Installing", 20, 0, 0, 1,
-     "Technician on site; verification readings may be taken."),
-    ("active", "Active", 30, 0, 1, 1,
-     "Verified and measuring. Readings in range are attributed here."),
-    ("completed", "Completed", 40, 1, 1, 0,
-     "Campaign ended. Still attributes its own historical readings."),
-    ("cancelled", "Cancelled", 50, 1, 0, 0,
-     "Called off or aborted. Attributes nothing."),
+    ("planned", "Planned", 10, 0, 0, 0, "Campaign scheduled; no hardware in the field yet."),
+    (
+        "installing",
+        "Installing",
+        20,
+        0,
+        0,
+        1,
+        "Technician on site; verification readings may be taken.",
+    ),
+    (
+        "active",
+        "Active",
+        30,
+        0,
+        1,
+        1,
+        "Verified and measuring. Readings in range are attributed here.",
+    ),
+    (
+        "completed",
+        "Completed",
+        40,
+        1,
+        1,
+        0,
+        "Campaign ended. Still attributes its own historical readings.",
+    ),
+    ("cancelled", "Cancelled", 50, 1, 0, 0, "Called off or aborted. Attributes nothing."),
 ]
 
 #: (from_code, to_code) for node commission state (M8)
@@ -57,18 +102,47 @@ NODE_COMMISSION_TRANSITIONS = [
 
 #: (code, label, sort_order, counts_in_analytics, may_attribute, description)
 MEASUREMENT_CONTEXTS = [
-    ("production", "Production", 10, 1, 1,
-     "Real load on a real panel during a real campaign."),
-    ("commissioning", "Commissioning", 20, 0, 1,
-     "On-site verification before a campaign goes active."),
-    ("bench", "Bench", 30, 0, 0,
-     "Hardware bring-up on a desk; the instrument is under test, not a load."),
-    ("laboratory", "Laboratory", 40, 0, 0,
-     "Controlled acquisition on a real load, outside any campaign."),
-    ("calibration", "Calibration", 50, 0, 0,
-     "Measured against a reference instrument or a known source."),
-    ("simulation", "Simulation", 60, 0, 0,
-     "Synthetic or replayed data; no physical sensor involved."),
+    ("production", "Production", 10, 1, 1, "Real load on a real panel during a real campaign."),
+    (
+        "commissioning",
+        "Commissioning",
+        20,
+        0,
+        1,
+        "On-site verification before a campaign goes active.",
+    ),
+    (
+        "bench",
+        "Bench",
+        30,
+        0,
+        0,
+        "Hardware bring-up on a desk; the instrument is under test, not a load.",
+    ),
+    (
+        "laboratory",
+        "Laboratory",
+        40,
+        0,
+        0,
+        "Controlled acquisition on a real load, outside any campaign.",
+    ),
+    (
+        "calibration",
+        "Calibration",
+        50,
+        0,
+        0,
+        "Measured against a reference instrument or a known source.",
+    ),
+    (
+        "simulation",
+        "Simulation",
+        60,
+        0,
+        0,
+        "Synthetic or replayed data; no physical sensor involved.",
+    ),
 ]
 
 DEPLOYMENT_TRANSITIONS = [
@@ -116,24 +190,21 @@ def seed_lifecycle_tables(engine) -> None:
                 description TEXT)"""))
         for row in MEASUREMENT_CONTEXTS:
             conn.execute(
-                text("INSERT OR REPLACE INTO measurement_contexts "
-                     "VALUES (:c,:l,:s,:a,:m,:d)"),
+                text("INSERT OR REPLACE INTO measurement_contexts " "VALUES (:c,:l,:s,:a,:m,:d)"),
                 dict(c=row[0], l=row[1], s=row[2], a=row[3], m=row[4], d=row[5]),
             )
 
         for row in NODE_COMMISSION_STATES:
             conn.execute(
-                text("INSERT OR REPLACE INTO node_commission_states "
-                     "VALUES (:c,:l,:s,:u,:m,:t,:d)"),
-                dict(c=row[0], l=row[1], s=row[2], u=row[3],
-                     m=row[4], t=row[5], d=row[6]),
+                text(
+                    "INSERT OR REPLACE INTO node_commission_states " "VALUES (:c,:l,:s,:u,:m,:t,:d)"
+                ),
+                dict(c=row[0], l=row[1], s=row[2], u=row[3], m=row[4], t=row[5], d=row[6]),
             )
         for row in DEPLOYMENT_STATUSES:
             conn.execute(
-                text("INSERT OR REPLACE INTO deployment_statuses "
-                     "VALUES (:c,:l,:s,:t,:a,:o,:d)"),
-                dict(c=row[0], l=row[1], s=row[2], t=row[3],
-                     a=row[4], o=row[5], d=row[6]),
+                text("INSERT OR REPLACE INTO deployment_statuses " "VALUES (:c,:l,:s,:t,:a,:o,:d)"),
+                dict(c=row[0], l=row[1], s=row[2], t=row[3], a=row[4], o=row[5], d=row[6]),
             )
         conn.execute(text("DELETE FROM node_commission_transitions"))
         for from_code, to_code in NODE_COMMISSION_TRANSITIONS:
@@ -154,19 +225,19 @@ def seed_lifecycle_tables(engine) -> None:
         from app.db import lifecycle as db_lifecycle
 
         db_lifecycle.refresh()
-    except Exception:  # noqa: BLE001
+    except Exception:
         pass
     try:
         from app.monitoring import lifecycle as monitoring_lifecycle
 
         monitoring_lifecycle.refresh()
-    except Exception:  # noqa: BLE001
+    except Exception:
         pass
     try:
         from app.db import commissioning
 
         commissioning.refresh()
-    except Exception:  # noqa: BLE001
+    except Exception:
         pass
 
 

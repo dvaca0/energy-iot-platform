@@ -1,4 +1,5 @@
 from datetime import datetime
+
 from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -101,7 +102,6 @@ class Node(Base):
     measurement_context: Mapped[str] = mapped_column(String, nullable=False, default="production")
     auth_token_hash: Mapped[str | None] = mapped_column(String, nullable=True)
     commissioned_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-
 
     # ------------------------------------------------------------ ratings
     # Physical limits of the measurement hardware that travels with this node

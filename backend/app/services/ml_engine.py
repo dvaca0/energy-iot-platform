@@ -1,19 +1,17 @@
-from app.services.platform_settings import get_thresholds
-from datetime import datetime, timedelta
 from collections import defaultdict
-import numpy as np
+from datetime import datetime, timedelta
 
+import numpy as np
 from sklearn.cluster import KMeans
 from sklearn.ensemble import IsolationForest, RandomForestRegressor
 from sklearn.preprocessing import StandardScaler
-
 from sqlalchemy import text as sa_text
 
 from app.db import scope
-from app.db.models import EnergyReading, Building
-from app.services.cost_engine import estimate_reading_cost, to_local_time
+from app.db.models import Building, EnergyReading
 from app.services import energy_aggregate as agg
-
+from app.services.cost_engine import estimate_reading_cost, to_local_time
+from app.services.platform_settings import get_thresholds
 
 #: Representative window for building clustering. Thirty days spans a full
 #: billing cycle and several weekday/weekend cycles, so a building's profile is
@@ -77,28 +75,40 @@ def build_hourly_dataset(db, hours_back=168):
 
     rows = []
 
-    for (reading_id, node_id, building_id, ts, energy_kwh, power_kw,
-         current, voltage, power_factor, frequency_hz) in readings:
+    for (
+        reading_id,
+        node_id,
+        building_id,
+        ts,
+        energy_kwh,
+        power_kw,
+        current,
+        voltage,
+        power_factor,
+        frequency_hz,
+    ) in readings:
         delta_kwh = energy_by_id.get(reading_id, 0.0)
 
         if delta_kwh:
             local = to_local_time(ts)
             cost = estimate_reading_cost(db, ts, delta_kwh)["cost_mxn"]
 
-            rows.append({
-                "building_id": building_id,
-                "node_id": node_id,
-                "timestamp": ts,
-                "hour": local.hour,
-                "weekday": local.weekday(),
-                "power_kw": float(power_kw or 0),
-                "current": float(current or 0),
-                "voltage": float(voltage or 0),
-                "power_factor": float(power_factor or 0),
-                "frequency_hz": float(frequency_hz or 0),
-                "delta_kwh": float(delta_kwh),
-                "cost_mxn": float(cost),
-            })
+            rows.append(
+                {
+                    "building_id": building_id,
+                    "node_id": node_id,
+                    "timestamp": ts,
+                    "hour": local.hour,
+                    "weekday": local.weekday(),
+                    "power_kw": float(power_kw or 0),
+                    "current": float(current or 0),
+                    "voltage": float(voltage or 0),
+                    "power_factor": float(power_factor or 0),
+                    "frequency_hz": float(frequency_hz or 0),
+                    "delta_kwh": float(delta_kwh),
+                    "cost_mxn": float(cost),
+                }
+            )
 
     cache[key] = rows
     return rows
@@ -131,13 +141,19 @@ def random_forest_forecast(db):
         hourly[key] += r["cost_mxn"]
 
     hourly_costs = list(hourly.values())
-    today_cost = sum(r["cost_mxn"] for r in rows if to_local_time(r["timestamp"]).date() == to_local_time(datetime.utcnow()).date())
-
-    observed_hours_today = len(set(
-        to_local_time(r["timestamp"]).strftime("%Y-%m-%d %H")
+    today_cost = sum(
+        r["cost_mxn"]
         for r in rows
         if to_local_time(r["timestamp"]).date() == to_local_time(datetime.utcnow()).date()
-    ))
+    )
+
+    observed_hours_today = len(
+        set(
+            to_local_time(r["timestamp"]).strftime("%Y-%m-%d %H")
+            for r in rows
+            if to_local_time(r["timestamp"]).date() == to_local_time(datetime.utcnow()).date()
+        )
+    )
 
     avg_hourly_cost = sum(hourly_costs[-24:]) / max(len(hourly_costs[-24:]), 1)
     fallback_tomorrow = avg_hourly_cost * 24
@@ -219,18 +235,20 @@ def isolation_forest_anomalies(db):
             "reason": "Se requieren al menos 20 muestras para detección ML.",
         }
 
-    X = np.array([
+    X = np.array(
         [
-            r["power_kw"],
-            r["current"],
-            r["voltage"],
-            r["power_factor"],
-            r["delta_kwh"],
-            r["hour"],
-            r["weekday"],
+            [
+                r["power_kw"],
+                r["current"],
+                r["voltage"],
+                r["power_factor"],
+                r["delta_kwh"],
+                r["hour"],
+                r["weekday"],
+            ]
+            for r in rows
         ]
-        for r in rows
-    ])
+    )
 
     scaler = StandardScaler()
     Xs = scaler.fit_transform(X)
@@ -253,13 +271,15 @@ def isolation_forest_anomalies(db):
         building = db.query(Building).filter(Building.id == r["building_id"]).first()
         building_name = building.name if building else "Sin edificio"
 
-        if r["power_factor"] and r["power_factor"] < float(get_thresholds().get('minPowerFactor', 0.90)):
+        if r["power_factor"] and r["power_factor"] < float(
+            get_thresholds().get("minPowerFactor", 0.90)
+        ):
             title = "Factor de potencia bajo"
             detected = f"{r['power_factor']:.2f} FP"
             expected = ">0.90 FP"
             severity = "Info"
             color = "#818cf8"
-        elif r["current"] > float(get_thresholds().get('maxCurrent', 200)):
+        elif r["current"] > float(get_thresholds().get("maxCurrent", 200)):
             title = "Corriente elevada"
             detected = f"{r['current']:.2f} A"
             expected = "<200 A"
@@ -278,17 +298,19 @@ def isolation_forest_anomalies(db):
             severity = "Info"
             color = "#a78bfa"
 
-        anomalies.append({
-            "title": title,
-            "building": building_name,
-            "time": to_local_time(r["timestamp"]).strftime("%H:%M"),
-            "detected": detected,
-            "expected": expected,
-            "severity": severity,
-            "color": color,
-            "model": "IsolationForest",
-            "score": round(float(score), 4),
-        })
+        anomalies.append(
+            {
+                "title": title,
+                "building": building_name,
+                "time": to_local_time(r["timestamp"]).strftime("%H:%M"),
+                "detected": detected,
+                "expected": expected,
+                "severity": severity,
+                "color": color,
+                "model": "IsolationForest",
+                "score": round(float(score), 4),
+            }
+        )
 
     return {
         "model": "IsolationForest",
@@ -322,7 +344,8 @@ def kmeans_building_clusters(db):
 
     stats = {
         row[0]: row
-        for row in db.execute(sa_text(f"""
+        for row in db.execute(
+            sa_text(f"""
             SELECT building_id,
                    COUNT(*)                AS n_rows,
                    COUNT(power_kw)         AS n_power,
@@ -336,7 +359,9 @@ def kmeans_building_clusters(db):
                AND timestamp >= :start
                AND building_id IS NOT NULL
              GROUP BY building_id
-        """), binds).fetchall()
+        """),
+            binds,
+        ).fetchall()
     }
 
     for b in buildings:
@@ -348,23 +373,24 @@ def kmeans_building_clusters(db):
         avg_power = float(avg_power or 0)
         peak_power = float(peak_power or 0)
         variance = max(float(avg_power_sq or 0) - avg_power * avg_power, 0.0)
-        std_power = variance ** 0.5
+        std_power = variance**0.5
         cv = std_power / avg_power if avg_power > 0 else 0
 
-        features.append([avg_power, peak_power,
-                         float(avg_current or 0), float(avg_pf or 0), cv])
+        features.append([avg_power, peak_power, float(avg_current or 0), float(avg_pf or 0), cv])
         metadata.append({"id": b.id, "name": b.name})
 
     if len(features) < 2:
         return {
             "model": "KMeans",
             "trained": False,
-            "clusters": [{
-                "name": "Sin datos suficientes",
-                "description": "Se requieren al menos 2 edificios con lecturas reales.",
-                "buildings": [],
-                "count": 0,
-            }],
+            "clusters": [
+                {
+                    "name": "Sin datos suficientes",
+                    "description": "Se requieren al menos 2 edificios con lecturas reales.",
+                    "buildings": [],
+                    "count": 0,
+                }
+            ],
         }
 
     X = np.array(features)
@@ -380,7 +406,7 @@ def kmeans_building_clusters(db):
     for label, meta, row in zip(labels, metadata, features):
         avg_power, peak_power, avg_current, avg_pf, cv = row
 
-        if avg_pf < float(get_thresholds().get('minPowerFactor', 0.90)):
+        if avg_pf < float(get_thresholds().get("minPowerFactor", 0.90)):
             cluster_name = "Bajo Factor de Potencia"
         elif cv < 0.15:
             cluster_name = "Carga Constante"
@@ -447,18 +473,24 @@ def group_anomaly_events(items, max_gap_minutes=10):
         first = events[0]
         last = events[-1]
 
-        result.append({
-            "title": title,
-            "building": building,
-            "time": f"{first.get('time')}–{last.get('time')}" if first.get("time") != last.get("time") else first.get("time"),
-            "detected": detected_summary,
-            "expected": first.get("expected"),
-            "severity": first.get("severity"),
-            "color": first.get("color"),
-            "model": first.get("model"),
-            "score": first.get("score"),
-            "count": len(events),
-            "description": f"{len(events)} lecturas consecutivas o similares agrupadas como un solo evento.",
-        })
+        result.append(
+            {
+                "title": title,
+                "building": building,
+                "time": (
+                    f"{first.get('time')}–{last.get('time')}"
+                    if first.get("time") != last.get("time")
+                    else first.get("time")
+                ),
+                "detected": detected_summary,
+                "expected": first.get("expected"),
+                "severity": first.get("severity"),
+                "color": first.get("color"),
+                "model": first.get("model"),
+                "score": first.get("score"),
+                "count": len(events),
+                "description": f"{len(events)} lecturas consecutivas o similares agrupadas como un solo evento.",
+            }
+        )
 
     return result

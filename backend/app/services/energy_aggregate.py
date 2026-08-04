@@ -36,10 +36,11 @@ reading of one day and the first of the next was dropped entirely — 0.15% of a
 midnight and is assigned to the local hour of the *later* reading, so daily,
 weekly and monthly figures reconcile from one calculation.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import text
@@ -61,11 +62,11 @@ class HourBucket:
 
     node_id: int
     building_id: int | None
-    hour_utc: datetime          # start of the UTC hour
-    local_hour: datetime        # same instant, in platform-local time
+    hour_utc: datetime  # start of the UTC hour
+    local_hour: datetime  # same instant, in platform-local time
     kwh: float
     samples: int
-    period: str                 # base | intermediate | peak
+    period: str  # base | intermediate | peak
     price_per_kwh: float
     cost_mxn: float
 
@@ -173,7 +174,7 @@ def _assert_whole_hour_offset(moment: datetime) -> None:
     half-hour zone would silently split buckets across two local hours and
     misclassify the tariff period.
     """
-    offset = moment.replace(tzinfo=timezone.utc).astimezone(LOCAL_TZ).utcoffset()
+    offset = moment.replace(tzinfo=UTC).astimezone(LOCAL_TZ).utcoffset()
     if offset is None or offset % timedelta(hours=1) != timedelta(0):
         raise RuntimeError(
             f"local timezone offset {offset} is not a whole number of hours; "
@@ -271,8 +272,7 @@ def reading_energy(
             reading_id=row[0],
             node_id=row[1],
             building_id=row[2],
-            timestamp=(row[3] if isinstance(row[3], datetime)
-                       else datetime.fromisoformat(row[3])),
+            timestamp=(row[3] if isinstance(row[3], datetime) else datetime.fromisoformat(row[3])),
             kwh=float(row[5] or 0.0),
             semantics=row[4],
         )
@@ -357,7 +357,7 @@ def hourly_energy(
             _assert_whole_hour_offset(hour_utc)
             checked_offset = True
 
-        local_hour = hour_utc.replace(tzinfo=timezone.utc).astimezone(LOCAL_TZ)
+        local_hour = hour_utc.replace(tzinfo=UTC).astimezone(LOCAL_TZ)
 
         cached = tariff_cache.get(local_hour)
         if cached is None:
@@ -394,7 +394,9 @@ def totals(buckets: list[HourBucket]) -> tuple[float, float]:
     )
 
 
-def between(buckets: list[HourBucket], start: datetime, end: datetime | None = None) -> list[HourBucket]:
+def between(
+    buckets: list[HourBucket], start: datetime, end: datetime | None = None
+) -> list[HourBucket]:
     """Buckets whose UTC hour falls in [start, end).
 
     Bucketing is hourly, so a window boundary that falls mid-hour includes the
@@ -402,10 +404,7 @@ def between(buckets: list[HourBucket], start: datetime, end: datetime | None = N
     a narrower window from ``hourly_energy`` instead.
     """
     lo = start.replace(minute=0, second=0, microsecond=0)
-    return [
-        b for b in buckets
-        if b.hour_utc >= lo and (end is None or b.hour_utc < end)
-    ]
+    return [b for b in buckets if b.hour_utc >= lo and (end is None or b.hour_utc < end)]
 
 
 def by_local_date(buckets: list[HourBucket]) -> dict[str, list[HourBucket]]:

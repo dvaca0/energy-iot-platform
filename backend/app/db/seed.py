@@ -1,14 +1,14 @@
-from datetime import datetime, UTC
+from datetime import UTC, datetime
 
-from app.db.database import SessionLocal, Base, engine
+from app.db.database import Base, SessionLocal, engine
 from app.db.models import (
-    Delegation,
-    Campus,
-    OrganizationalUnit,
     Building,
+    Campus,
+    Delegation,
+    Deployment,
     ElectricalPanel,
     Node,
-    Deployment,
+    OrganizationalUnit,
     TariffPeriod,
 )
 
@@ -79,28 +79,23 @@ def seed():
         ("Facultad de Letras y Comunicación", "faculty", "Campus Central"),
         ("Facultad de Medicina", "faculty", "Campus Central"),
         ("Instituto Universitario de Bellas Artes", "institute", "Campus Central"),
-
         ("Facultad de Arquitectura y Diseño", "faculty", "Campus Coquimatlán"),
         ("Facultad de Ciencias Químicas", "faculty", "Campus Coquimatlán"),
         ("Facultad de Ingeniería Civil", "faculty", "Campus Coquimatlán"),
         ("Facultad de Ingeniería Mecánica y Eléctrica", "faculty", "Campus Coquimatlán"),
-
         ("Escuela de Filosofía", "school", "Campus Villa de Álvarez"),
         ("Facultad de Pedagogía", "faculty", "Campus Villa de Álvarez"),
         ("Facultad de Economía", "faculty", "Campus Villa de Álvarez"),
         ("Facultad de Turismo", "faculty", "Campus Villa de Álvarez"),
         ("Facultad de Lenguas Extranjeras", "faculty", "Campus Villa de Álvarez"),
-
         ("Facultad de Contabilidad y Administración Tecomán", "faculty", "Campus Tecomán"),
         ("Facultad de Ciencias Biológicas y Agropecuarias", "faculty", "Campus Tecomán"),
         ("Facultad de Medicina Veterinaria y Zootecnia", "faculty", "Campus Tecomán"),
-
         ("Facultad de Turismo y Gastronomía", "faculty", "Valle de las Garzas"),
         ("Facultad de Ciencias Marinas", "faculty", "El Naranjo"),
         ("Facultad de Contabilidad y Administración Manzanillo", "faculty", "Valle de las Garzas"),
         ("Facultad de Ingeniería Electromecánica", "faculty", "El Naranjo"),
         ("Facultad de Comercio Exterior", "faculty", "Valle de las Garzas"),
-
         ("Rectoría", "administrative", "Campus Central"),
         ("Biblioteca Central", "library", "Campus Central"),
         ("Centro de Cómputo", "technical", "Campus Central"),
@@ -113,19 +108,30 @@ def seed():
         ("Servicios Universitarios Manzanillo", "services", "Valle de las Garzas"),
     ]
 
-
     extra_dependencies = [
         ("Centro de Periodismo Universitario", "center", "Campus Central"),
         ("Centro de Tecnología Educativa", "center", "Campus Central"),
-        ("Centro Universitario de Análisis Estadísticos y de Opinión Pública", "center", "Campus Central"),
-        ("Centro Universitario de Estudios e Investigaciones sobre la Cuenca del Pacífico-Centro de Estudios APEC", "center", "Campus Central"),
+        (
+            "Centro Universitario de Análisis Estadísticos y de Opinión Pública",
+            "center",
+            "Campus Central",
+        ),
+        (
+            "Centro Universitario de Estudios e Investigaciones sobre la Cuenca del Pacífico-Centro de Estudios APEC",
+            "center",
+            "Campus Central",
+        ),
         ("Centro Universitario de Estudios Vulcanológicos", "center", "Campus Central"),
         ("Centro Universitario de Gestión Ambiental", "center", "Campus Central"),
         ("Centro Universitario de Investigaciones Biomédicas", "center", "Campus Central"),
         ("Centro Universitario de Investigaciones Jurídicas", "center", "Campus Central"),
         ("Centro Universitario de Investigaciones Oceanológicas", "center", "El Naranjo"),
         ("Centro Universitario de Investigaciones Sociales", "center", "Campus Central"),
-        ("Centro Universitario para la Igualdad y los Estudios de Género", "center", "Campus Central"),
+        (
+            "Centro Universitario para la Igualdad y los Estudios de Género",
+            "center",
+            "Campus Central",
+        ),
         ("Centros Especializados de Idiomas", "center", "Campus Central"),
         ("Contraloría General", "administrative", "Campus Central"),
         ("Secretaría General", "administrative", "Campus Central"),
@@ -137,7 +143,11 @@ def seed():
         ("Dirección General de Servicios Telemáticos", "technical", "Campus Central"),
         ("Dirección General de Recursos Humanos", "administrative", "Campus Central"),
         ("Dirección General de Obras Materiales", "administrative", "Campus Central"),
-        ("Dirección General de Planeación y Desarrollo Institucional", "administrative", "Campus Central"),
+        (
+            "Dirección General de Planeación y Desarrollo Institucional",
+            "administrative",
+            "Campus Central",
+        ),
         ("Dirección General de Prensa", "administrative", "Campus Central"),
         ("Coordinación General Administrativa y Financiera", "administrative", "Campus Central"),
         ("Coordinación General de Docencia", "administrative", "Campus Central"),
@@ -151,7 +161,6 @@ def seed():
     for item in extra_dependencies:
         if item not in units:
             units.append(item)
-
 
     org_units = {}
 
@@ -169,9 +178,24 @@ def seed():
         org_units[name] = unit
 
     starter_buildings = [
-        ("B-FIME-001", "Edificio Principal FIME", "Facultad de Ingeniería Mecánica y Eléctrica", "Campus Coquimatlán"),
-        ("B-FIME-002", "Laboratorio de Redes", "Facultad de Ingeniería Mecánica y Eléctrica", "Campus Coquimatlán"),
-        ("B-SERV-COQ-001", "Servicios Universitarios Coquimatlán", "Servicios Universitarios Coquimatlán", "Campus Coquimatlán"),
+        (
+            "B-FIME-001",
+            "Edificio Principal FIME",
+            "Facultad de Ingeniería Mecánica y Eléctrica",
+            "Campus Coquimatlán",
+        ),
+        (
+            "B-FIME-002",
+            "Laboratorio de Redes",
+            "Facultad de Ingeniería Mecánica y Eléctrica",
+            "Campus Coquimatlán",
+        ),
+        (
+            "B-SERV-COQ-001",
+            "Servicios Universitarios Coquimatlán",
+            "Servicios Universitarios Coquimatlán",
+            "Campus Coquimatlán",
+        ),
         ("B-DC-001", "Data Center", "Data Center", "Campus Central"),
         ("B-RECT-001", "Rectoría", "Rectoría", "Campus Central"),
         ("B-BIB-001", "Biblioteca Central", "Biblioteca Central", "Campus Central"),
@@ -234,29 +258,39 @@ def seed():
     fime_building = buildings["B-FIME-001"]
     lab_building = buildings["B-FIME-002"]
 
-    fime_panel = db.query(ElectricalPanel).filter_by(building_id=fime_building.id, name="Tablero Principal").first()
-    lab_panel = db.query(ElectricalPanel).filter_by(building_id=lab_building.id, name="Tablero Principal").first()
+    fime_panel = (
+        db.query(ElectricalPanel)
+        .filter_by(building_id=fime_building.id, name="Tablero Principal")
+        .first()
+    )
+    lab_panel = (
+        db.query(ElectricalPanel)
+        .filter_by(building_id=lab_building.id, name="Tablero Principal")
+        .first()
+    )
 
-    db.add_all([
-        Deployment(
-            node_id=node_1.id,
-            building_id=fime_building.id,
-            electrical_panel_id=fime_panel.id,
-            start_date="2025-01-06",
-            end_date="2025-01-13",
-            status="active",
-            notes="Despliegue inicial de prueba.",
-        ),
-        Deployment(
-            node_id=node_2.id,
-            building_id=lab_building.id,
-            electrical_panel_id=lab_panel.id,
-            start_date="2025-01-06",
-            end_date="2025-01-13",
-            status="active",
-            notes="Monitoreo de laboratorio.",
-        ),
-    ])
+    db.add_all(
+        [
+            Deployment(
+                node_id=node_1.id,
+                building_id=fime_building.id,
+                electrical_panel_id=fime_panel.id,
+                start_date="2025-01-06",
+                end_date="2025-01-13",
+                status="active",
+                notes="Despliegue inicial de prueba.",
+            ),
+            Deployment(
+                node_id=node_2.id,
+                building_id=lab_building.id,
+                electrical_panel_id=lab_panel.id,
+                start_date="2025-01-06",
+                end_date="2025-01-13",
+                status="active",
+                notes="Monitoreo de laboratorio.",
+            ),
+        ]
+    )
     db.commit()
 
     tariff_periods = [

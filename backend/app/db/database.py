@@ -11,6 +11,7 @@ engine = create_engine(
     },
 )
 
+
 @event.listens_for(engine, "connect")
 def set_sqlite_pragmas(dbapi_connection, connection_record):
     cursor = dbapi_connection.cursor()
@@ -18,6 +19,7 @@ def set_sqlite_pragmas(dbapi_connection, connection_record):
     cursor.execute("PRAGMA busy_timeout=30000")
     cursor.execute("PRAGMA synchronous=NORMAL")
     cursor.close()
+
 
 SessionLocal = sessionmaker(
     autocommit=False,

@@ -59,16 +59,16 @@ class DeliveryResult:
     detail: str | None = None
 
     @classmethod
-    def success(cls, detail: str | None = None) -> "DeliveryResult":
+    def success(cls, detail: str | None = None) -> DeliveryResult:
         return cls(ok=True, retryable=False, detail=detail)
 
     @classmethod
-    def retry(cls, detail: str) -> "DeliveryResult":
+    def retry(cls, detail: str) -> DeliveryResult:
         """A transient failure: network, timeout, rate limit, 5xx."""
         return cls(ok=False, retryable=True, detail=detail)
 
     @classmethod
-    def permanent(cls, detail: str) -> "DeliveryResult":
+    def permanent(cls, detail: str) -> DeliveryResult:
         """A failure that will recur identically: bad credentials, bad target."""
         return cls(ok=False, retryable=False, detail=detail)
 
@@ -143,4 +143,4 @@ class NotificationChannel(ABC):
         return parts
 
 
-__all__ = ["NotificationChannel", "OutboundMessage", "DeliveryResult"]
+__all__ = ["DeliveryResult", "NotificationChannel", "OutboundMessage"]

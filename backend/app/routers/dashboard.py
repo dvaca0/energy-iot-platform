@@ -1,26 +1,25 @@
+from collections import defaultdict
+from datetime import UTC, datetime, time, timedelta
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends
 from sqlalchemy import func
-from datetime import datetime, time, timedelta, timezone
-from zoneinfo import ZoneInfo
-from collections import defaultdict
 from sqlalchemy.orm import Session
 
 from app.db import lifecycle, scope
-from app.services import deployment_scope
 from app.db.database import get_db
-from app.db.models import Node, EnergyReading, Deployment
+from app.db.models import Building, Deployment, EnergyReading, Node
+from app.services import deployment_scope
+from app.services import energy_aggregate as agg
 from app.services.cost_engine import estimate_reading_cost
 from app.services.platform_settings import get_thresholds
-from app.services import energy_aggregate as agg
-from app.db.models import Building
 
 router = APIRouter()
 LOCAL_TZ = ZoneInfo("America/Mexico_City")
 
 
 def _utc_naive(dt):
-    return dt.astimezone(timezone.utc).replace(tzinfo=None)
+    return dt.astimezone(UTC).replace(tzinfo=None)
 
 
 def _local_now():
@@ -42,9 +41,8 @@ def _period_label():
     now = _local_now()
     monday = now.date() - timedelta(days=now.weekday())
     sunday = monday + timedelta(days=6)
-    months = ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"]
+    months = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"]
     return f"Universidad de Colima · GDMTH · Semana del {monday.day}–{sunday.day} {months[sunday.month-1]} {sunday.year}"
-
 
 
 def _scoped_nodes(db, deployment_id=None):
@@ -88,8 +86,15 @@ def _cost_between(db, start, end=None):
     return total_kwh, total_cost, building_costs
 
 
-def _cost_windows(db, oldest_start, today_start, yesterday_start, week_start, previous_week_start,
-                  deployment_id=None):
+def _cost_windows(
+    db,
+    oldest_start,
+    today_start,
+    yesterday_start,
+    week_start,
+    previous_week_start,
+    deployment_id=None,
+):
     """Four overlapping windows from ONE aggregate.
 
     Previously this loaded every reading since the previous week start — tens of
@@ -103,8 +108,11 @@ def _cost_windows(db, oldest_start, today_start, yesterday_start, week_start, pr
     names = _building_names(db)
 
     result = {
-        key: {"kwh": 0.0, "cost": 0.0,
-              "buildings": defaultdict(lambda: {"kwh": 0.0, "cost_mxn": 0.0})}
+        key: {
+            "kwh": 0.0,
+            "cost": 0.0,
+            "buildings": defaultdict(lambda: {"kwh": 0.0, "cost_mxn": 0.0}),
+        }
         for key in ("today", "yesterday", "week", "prev_week")
     }
 
@@ -148,8 +156,7 @@ def _estimate_potential_savings(db, today_cost, projected_month, latest_by_node)
     # 1) Low power factor opportunity.
     # Conservative assumption: improving PF avoids roughly 2–6% operational/capacity losses.
     low_pf_nodes = [
-        r for r in latest_by_node.values()
-        if r.power_factor is not None and r.power_factor < min_pf
+        r for r in latest_by_node.values() if r.power_factor is not None and r.power_factor < min_pf
     ]
 
     if projected_month > 0 and low_pf_nodes:
@@ -157,12 +164,14 @@ def _estimate_potential_savings(db, today_cost, projected_month, latest_by_node)
         severity = min(max((min_pf - worst_pf) / max(min_pf, 0.01), 0), 0.25)
         pf_savings = projected_month * min(0.06, max(0.02, severity * 0.25))
         monthly_savings += pf_savings
-        active_recommendations.append({
-            "category": "Power Factor",
-            "title": "Corrección de factor de potencia",
-            "estimated_savings_mxn_month": round(pf_savings, 2),
-            "reason": f"Factor de potencia mínimo detectado {worst_pf:.2f}, debajo del umbral {min_pf:.2f}.",
-        })
+        active_recommendations.append(
+            {
+                "category": "Power Factor",
+                "title": "Corrección de factor de potencia",
+                "estimated_savings_mxn_month": round(pf_savings, 2),
+                "reason": f"Factor de potencia mínimo detectado {worst_pf:.2f}, debajo del umbral {min_pf:.2f}.",
+            }
+        )
 
     # 2) Night consumption opportunity.
     # Estimate cost of excess kWh between 00:00 and 06:00 today, then project monthly.
@@ -196,17 +205,21 @@ def _estimate_potential_savings(db, today_cost, projected_month, latest_by_node)
         if delta_kwh > 0:
             excess_ratio = min((power_kw - night_kw_threshold) / max(power_kw, 0.01), 1)
             excess_kwh = delta_kwh * excess_ratio
-            excess_night_cost_today += estimate_reading_cost(db, r.timestamp, excess_kwh)["cost_mxn"]
+            excess_night_cost_today += estimate_reading_cost(db, r.timestamp, excess_kwh)[
+                "cost_mxn"
+            ]
 
     if excess_night_cost_today > 0:
         night_savings = excess_night_cost_today * 30
         monthly_savings += night_savings
-        active_recommendations.append({
-            "category": "Night Consumption",
-            "title": "Reducir carga nocturna no esencial",
-            "estimated_savings_mxn_month": round(night_savings, 2),
-            "reason": f"Consumo nocturno por encima de {night_kw_threshold:.1f} kW detectado hoy.",
-        })
+        active_recommendations.append(
+            {
+                "category": "Night Consumption",
+                "title": "Reducir carga nocturna no esencial",
+                "estimated_savings_mxn_month": round(night_savings, 2),
+                "reason": f"Consumo nocturno por encima de {night_kw_threshold:.1f} kW detectado hoy.",
+            }
+        )
 
     # 3) Demand spike opportunity.
     # If current load is above recent average by configured threshold, estimate small demand-control opportunity.
@@ -233,12 +246,14 @@ def _estimate_potential_savings(db, today_cost, projected_month, latest_by_node)
             if avg_power > 0 and float(latest.power_kw) > limit and projected_month > 0:
                 spike_savings = projected_month * 0.015
                 monthly_savings += spike_savings
-                active_recommendations.append({
-                    "category": "Demand Spike",
-                    "title": "Control de picos de demanda",
-                    "estimated_savings_mxn_month": round(spike_savings, 2),
-                    "reason": f"Potencia actual {latest.power_kw:.2f} kW sobre promedio reciente {avg_power:.2f} kW.",
-                })
+                active_recommendations.append(
+                    {
+                        "category": "Demand Spike",
+                        "title": "Control de picos de demanda",
+                        "estimated_savings_mxn_month": round(spike_savings, 2),
+                        "reason": f"Potencia actual {latest.power_kw:.2f} kW sobre promedio reciente {avg_power:.2f} kW.",
+                    }
+                )
                 break
 
     return round(monthly_savings, 2), active_recommendations
@@ -260,8 +275,7 @@ def dashboard_summary(db: Session = Depends(get_db), deployment_id: int | None =
     previous_week_start = week_start - timedelta(days=7)
 
     online_nodes = sum(
-        1 for node in nodes
-        if node.last_sync and node.last_sync >= now - timedelta(seconds=120)
+        1 for node in nodes if node.last_sync and node.last_sync >= now - timedelta(seconds=120)
     )
 
     # Deployment lifecycle, counted from the Deployment table — not inferred
@@ -273,9 +287,7 @@ def dashboard_summary(db: Session = Depends(get_db), deployment_id: int | None =
     # deployment_statuses.is_operational rather than compared against a literal,
     # so a lifecycle state added later is classified without touching this code.
     status_counts = dict(
-        db.query(Deployment.status, func.count(Deployment.id))
-        .group_by(Deployment.status)
-        .all()
+        db.query(Deployment.status, func.count(Deployment.id)).group_by(Deployment.status).all()
     )
     operational = set(lifecycle.operational_statuses(db))
     active_deployments = sum(n for code, n in status_counts.items() if code in operational)
@@ -284,9 +296,7 @@ def dashboard_summary(db: Session = Depends(get_db), deployment_id: int | None =
     latest_by_node = {}
     for node in nodes:
         latest = (
-            deployment_scope.scope_readings(
-                scope.production_readings(db), deployment_id
-            )
+            deployment_scope.scope_readings(scope.production_readings(db), deployment_id)
             .filter(EnergyReading.node_id == node.id)
             .order_by(EnergyReading.timestamp.desc())
             .first()
@@ -316,8 +326,14 @@ def dashboard_summary(db: Session = Depends(get_db), deployment_id: int | None =
     prev_week_kwh = windows["prev_week"]["kwh"]
     prev_week_cost = windows["prev_week"]["cost"]
 
-    days_elapsed = max(1, (_local_now().date() - (_local_now().date() - timedelta(days=_local_now().weekday()))).days + 1)
-    projected_month = (today_cost / max(1, (_local_now().hour + 1))) * 24 * 30 if today_cost > 0 else 0
+    days_elapsed = max(
+        1,
+        (_local_now().date() - (_local_now().date() - timedelta(days=_local_now().weekday()))).days
+        + 1,
+    )
+    projected_month = (
+        (today_cost / max(1, (_local_now().hour + 1))) * 24 * 30 if today_cost > 0 else 0
+    )
 
     daily_comparison_pct = None
     if yesterday_cost > 0:
@@ -367,8 +383,16 @@ def dashboard_summary(db: Session = Depends(get_db), deployment_id: int | None =
         "yesterday_cost_mxn": round(yesterday_cost, 2),
         "has_previous_day_data": has_daily_comparison,
         "daily_comparison_pct": daily_comparison_pct if has_daily_comparison else None,
-        "daily_comparison_label": "Histórico insuficiente" if not has_daily_comparison else f"{daily_comparison_pct:+.2f}% vs día anterior",
+        "daily_comparison_label": (
+            "Histórico insuficiente"
+            if not has_daily_comparison
+            else f"{daily_comparison_pct:+.2f}% vs día anterior"
+        ),
         "has_previous_week_data": has_week_comparison,
         "week_comparison_pct": week_comparison_pct if has_week_comparison else None,
-        "comparison_label": "Histórico insuficiente" if not has_week_comparison else f"{week_comparison_pct:+.2f}% vs semana anterior",
+        "comparison_label": (
+            "Histórico insuficiente"
+            if not has_week_comparison
+            else f"{week_comparison_pct:+.2f}% vs semana anterior"
+        ),
     }

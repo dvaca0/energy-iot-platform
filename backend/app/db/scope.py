@@ -21,6 +21,7 @@ file — the same property the deployment lifecycle has in `lifecycle.py`.
 Nothing is deleted or hidden: excluded data stays queryable through the explicit
 ``contexts=`` argument, which is what the ``?context=`` API parameter passes.
 """
+
 from __future__ import annotations
 
 from threading import Lock
@@ -94,9 +95,7 @@ def resolve_contexts(db: Session, requested: str | list[str] | None) -> tuple[st
 # ------------------------------------------------------------------ queries
 def production_readings(db: Session, contexts: str | list[str] | None = None) -> Query:
     """Base query for analytics. Production contexts only unless told otherwise."""
-    return db.query(EnergyReading).filter(
-        EnergyReading.context.in_(resolve_contexts(db, contexts))
-    )
+    return db.query(EnergyReading).filter(EnergyReading.context.in_(resolve_contexts(db, contexts)))
 
 
 def scope_readings(query: Query, db: Session, contexts: str | list[str] | None = None) -> Query:
@@ -125,6 +124,5 @@ def exclude_placeholder_buildings(query: Query, db: Session) -> Query:
     if not placeholders:
         return query
     return query.filter(
-        (EnergyReading.building_id.is_(None))
-        | (~EnergyReading.building_id.in_(placeholders))
+        (EnergyReading.building_id.is_(None)) | (~EnergyReading.building_id.in_(placeholders))
     )

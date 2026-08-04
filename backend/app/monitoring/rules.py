@@ -50,6 +50,7 @@ log = logging.getLogger("monitoring.rules")
 # Subsystems
 # --------------------------------------------------------------------------
 
+
 class Subsystem:
     """Subsystem names, used for grouping in reports and filtering in the API.
 
@@ -72,6 +73,7 @@ class Subsystem:
 # --------------------------------------------------------------------------
 # Findings
 # --------------------------------------------------------------------------
+
 
 @dataclass
 class Finding:
@@ -152,9 +154,7 @@ class Finding:
         string is, and prefixed with the readable rule id so a human scanning
         the database can still tell what a row is about.
         """
-        digest = hashlib.sha1(
-            f"{self.rule_id}|{self.target}".encode("utf-8")
-        ).hexdigest()[:12]
+        digest = hashlib.sha1(f"{self.rule_id}|{self.target}".encode()).hexdigest()[:12]
         return f"{self.rule_id}:{digest}"
 
     @property
@@ -194,6 +194,7 @@ def unavailable(
 # --------------------------------------------------------------------------
 # Rule context
 # --------------------------------------------------------------------------
+
 
 @dataclass
 class RuleContext:
@@ -365,7 +366,7 @@ def evaluate_all(context: RuleContext) -> list[Finding]:
             produced = rule_obj.evaluator(context)
             if produced:
                 findings.extend(produced)
-        except Exception as exc:  # noqa: BLE001 - deliberate catch-all
+        except Exception as exc:
             log.exception("Rule %s failed", rule_obj.rule_id)
             findings.append(
                 Finding(
@@ -412,15 +413,15 @@ def iter_unavailable(findings: Iterable[Finding]) -> Iterator[Finding]:
 
 
 __all__ = [
-    "Subsystem",
     "Finding",
     "Rule",
     "RuleContext",
-    "rule",
-    "unavailable",
-    "registered_rules",
+    "Subsystem",
     "active_rules",
     "evaluate_all",
     "iter_problems",
     "iter_unavailable",
+    "registered_rules",
+    "rule",
+    "unavailable",
 ]

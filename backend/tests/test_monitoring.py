@@ -7,7 +7,7 @@ installed in this venv), a ``check()`` helper, and a non-zero exit on failure.
 
 Run with::
 
-    cd /home/manager/energy-platform/backend
+    cd <repo>/backend
     venv/bin/python3 tests/test_monitoring.py
 
 Coverage is organised around the behaviours that would be expensive to get
@@ -15,12 +15,19 @@ wrong in production: deduplication (an alert storm), escalation (a missed
 outage), the outbox (a silently discarded alert), and the false-positive guards
 (a system nobody trusts because it cries wolf).
 """
+
 import os
 import sys
 from datetime import datetime, timedelta
 
-sys.path.insert(0, "/home/manager/energy-platform/backend")
-os.chdir("/home/manager/energy-platform/backend")
+# Paths are derived from this file's location so the suites run from any
+# checkout — CI, a contributor's machine, the server — not only from the
+# directory they were written in.
+_BACKEND = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_REPO = os.path.dirname(_BACKEND)
+
+sys.path.insert(0, _BACKEND)
+os.chdir(_BACKEND)
 
 # Neutralise any ambient credentials so the suite can never send a real
 # Telegram message, regardless of what is in .env.
@@ -28,12 +35,11 @@ os.environ["MONITORING_TELEGRAM_BOT_TOKEN"] = ""
 os.environ["MONITORING_TELEGRAM_CHAT_ID"] = ""
 os.environ["MONITORING_TELEGRAM_ENABLED"] = "false"
 
+from app.db import models
+from app.db.database import Base, get_db
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-
-from app.db.database import Base, get_db
-from app.db import models
 
 os.makedirs("/tmp/energy-platform-tests", exist_ok=True)
 TMP_DB = "/tmp/energy-platform-tests/test_monitoring.db"
@@ -41,9 +47,7 @@ for suffix in ("", "-wal", "-shm"):
     if os.path.exists(TMP_DB + suffix):
         os.remove(TMP_DB + suffix)
 
-test_engine = create_engine(
-    f"sqlite:///{TMP_DB}", connect_args={"check_same_thread": False}
-)
+test_engine = create_engine(f"sqlite:///{TMP_DB}", connect_args={"check_same_thread": False})
 TestSession = sessionmaker(bind=test_engine, autocommit=False, autoflush=False)
 
 # Point the monitoring package's own session factory at the test database
@@ -52,21 +56,26 @@ import app.monitoring.storage as storage_module
 
 storage_module.MonitoringSession = TestSession
 
-from app.monitoring import metrics as metrics_module  # noqa: E402
-from app.monitoring.alerts import process_findings  # noqa: E402
-from app.monitoring.channels.base import (  # noqa: E402
+from app.monitoring import metrics as metrics_module
+from app.monitoring.alerts import process_findings
+from app.monitoring.channels.base import (
     DeliveryResult,
     NotificationChannel,
     OutboundMessage,
 )
-from app.monitoring.config import MonitoringConfig, get_config  # noqa: E402
-from app.monitoring.heartbeat import (  # noqa: E402
+from app.monitoring.config import MonitoringConfig, get_config
+from app.monitoring.heartbeat import (
     HeartbeatPayload,
     collect_node_state,
     record_heartbeat,
 )
-from app.monitoring.history import list_alerts, recurrence, statistics  # noqa: E402
-from app.monitoring.models import (  # noqa: E402
+from app.monitoring.history import list_alerts, recurrence, statistics
+from app.monitoring.lifecycle import (
+    MonitoringPolicy,
+    classify,
+    commission_states,
+)
+from app.monitoring.models import (
     MONITORING_TABLES,
     AlertEvent,
     MonitorAlert,
@@ -74,7 +83,7 @@ from app.monitoring.models import (  # noqa: E402
     NodeHeartbeatLatest,
     NotificationOutbox,
 )
-from app.monitoring.notifications import (  # noqa: E402
+from app.monitoring.notifications import (
     dispatch_pending,
     enqueue,
     humanize_duration,
@@ -82,28 +91,22 @@ from app.monitoring.notifications import (  # noqa: E402
     notify_alerts,
     render_alert,
 )
-from app.monitoring.rules import (  # noqa: E402
+from app.monitoring.rules import (
     Finding,
     RuleContext,
     Subsystem,
     evaluate_all,
     registered_rules,
 )
-from app.monitoring.lifecycle import (  # noqa: E402
-    MonitoringPolicy,
-    classify,
-    commission_states,
-)
 
 # Policy fixtures matching the platform's reference tables.
-FULL = MonitoringPolicy(True, True, True, True, True, "test: full monitoring",
-                        heartbeat_pages=True)
-HARDWARE_ONLY = MonitoringPolicy(False, False, False, True, True,
-                                 "test: no operational deployment",
-                                 heartbeat_pages=False)
+FULL = MonitoringPolicy(True, True, True, True, True, "test: full monitoring", heartbeat_pages=True)
+HARDWARE_ONLY = MonitoringPolicy(
+    False, False, False, True, True, "test: no operational deployment", heartbeat_pages=False
+)
 MUTED = MonitoringPolicy(False, False, False, False, False, "test: not monitored")
-from app.monitoring.severity import Severity  # noqa: E402
-from app.monitoring.status import build_status, render_report  # noqa: E402
+from app.monitoring.severity import Severity
+from app.monitoring.status import build_status, render_report
 
 Base.metadata.create_all(bind=test_engine)
 for table in MONITORING_TABLES:
@@ -113,12 +116,12 @@ for table in MONITORING_TABLES:
 # not by the ORM metadata, so the throwaway database needs them seeded.
 # Monitoring policy is derived entirely from these flags, so testing against
 # a database without them would test nothing real.
-from tests.lifecycle_fixtures import seed_lifecycle_tables  # noqa: E402
+from tests.lifecycle_fixtures import seed_lifecycle_tables
 
 seed_lifecycle_tables(test_engine)
 
 
-from app.main import app  # noqa: E402
+from app.main import app
 
 
 def override_get_db():
@@ -204,7 +207,7 @@ check("operational fixtures created", node_a_id and node_b_id and deployment_id)
 # ==========================================================================
 print("\n=== 2. Monitoring tables are additive ===")
 # ==========================================================================
-from sqlalchemy import inspect as sa_inspect  # noqa: E402
+from sqlalchemy import inspect as sa_inspect
 
 tables = set(sa_inspect(test_engine).get_table_names())
 for name in (
@@ -319,7 +322,7 @@ check("but flagged unregistered", r.json().get("registered") is False, r.text)
 # ==========================================================================
 print("\n=== 4. Missed-beat accounting and escalation ladder ===")
 # ==========================================================================
-from app.monitoring.heartbeat import _missed_beats, _severity_for_misses  # noqa: E402
+from app.monitoring.heartbeat import _missed_beats, _severity_for_misses
 
 check("on time -> 0 missed", _missed_beats(30, CONFIG) == 0)
 check("within grace -> 0 missed", _missed_beats(85, CONFIG) == 0)
@@ -342,8 +345,11 @@ row.received_at = now - timedelta(seconds=400)
 db.commit()
 state = collect_node_state(db, CONFIG, now)
 db.commit()
-check("missed derived from elapsed time", state["N001"]["missed_beats"] == 6,
-      str(state["N001"]["missed_beats"]))
+check(
+    "missed derived from elapsed time",
+    state["N001"]["missed_beats"] == 6,
+    str(state["N001"]["missed_beats"]),
+)
 check("offline_since recorded", state["N001"]["offline_since"] is not None)
 # Recomputing from scratch must give the same answer.
 state2 = collect_node_state(db, CONFIG, now)
@@ -355,7 +361,10 @@ db.close()
 # ==========================================================================
 print("\n=== 5. Severity ordering and presentation ===")
 # ==========================================================================
-check("ordering", Severity.INFO < Severity.WARNING < Severity.ERROR < Severity.CRITICAL < Severity.EMERGENCY)
+check(
+    "ordering",
+    Severity.INFO < Severity.WARNING < Severity.ERROR < Severity.CRITICAL < Severity.EMERGENCY,
+)
 check("parse from string", Severity.parse("critical") is Severity.CRITICAL)
 check("parse garbage falls back", Severity.parse("nonsense") is Severity.INFO)
 check("parse None falls back", Severity.parse(None) is Severity.INFO)
@@ -367,6 +376,8 @@ check("INFO is not actionable", not Severity.INFO.is_actionable)
 
 # ==========================================================================
 print("\n=== 6. Alert lifecycle: create, dedupe, escalate, resolve ===")
+
+
 # ==========================================================================
 def make_finding(severity=Severity.WARNING, target="N001", value="1"):
     return Finding(
@@ -401,17 +412,24 @@ check("alert id generated", alert_id.startswith("ALT-"))
 check("one alert row", db.query(MonitorAlert).filter_by(rule_id="test.rule").count() == 1)
 
 print("\n--- 6b. Repeat occurrence must NOT notify (anti-flood) ---")
-transitions = process_findings(db, [make_finding(value="2")], now=t0 + timedelta(seconds=30), config=CONFIG)
+transitions = process_findings(
+    db, [make_finding(value="2")], now=t0 + timedelta(seconds=30), config=CONFIG
+)
 db.commit()
 check("ongoing produces no transition", len(transitions) == 0)
 alert = db.query(MonitorAlert).filter_by(alert_id=alert_id).first()
 check("occurrence counter advanced", alert.occurrence_count == 2)
 check("current value refreshed", alert.current_value == "2")
-check("still exactly one alert row", db.query(MonitorAlert).filter_by(rule_id="test.rule").count() == 1)
+check(
+    "still exactly one alert row",
+    db.query(MonitorAlert).filter_by(rule_id="test.rule").count() == 1,
+)
 
 print("\n--- 6c. Many repeats still produce no notifications ---")
 for i in range(20):
-    extra = process_findings(db, [make_finding()], now=t0 + timedelta(seconds=31 + i), config=CONFIG)
+    extra = process_findings(
+        db, [make_finding()], now=t0 + timedelta(seconds=31 + i), config=CONFIG
+    )
     db.commit()
     if extra:
         break
@@ -482,18 +500,25 @@ db.query(MonitorAlert).delete()
 db.commit()
 
 t1 = datetime.utcnow()
-process_findings(db, [make_finding(severity=Severity.CRITICAL, target="DEESC")], now=t1, config=CONFIG)
+process_findings(
+    db, [make_finding(severity=Severity.CRITICAL, target="DEESC")], now=t1, config=CONFIG
+)
 db.commit()
 # WARNING, not INFO: an INFO finding is not actionable, so it is not a problem
 # at all and correctly *resolves* the alert rather than de-escalating it.
 transitions = process_findings(
-    db, [make_finding(severity=Severity.WARNING, target="DEESC")], now=t1 + timedelta(seconds=20), config=CONFIG
+    db,
+    [make_finding(severity=Severity.WARNING, target="DEESC")],
+    now=t1 + timedelta(seconds=20),
+    config=CONFIG,
 )
 db.commit()
 check("improvement produces no notification", len(transitions) == 0, str(len(transitions)))
 row = db.query(MonitorAlert).filter_by(fingerprint=make_finding(target="DEESC").fingerprint).first()
-check("de-escalation event recorded",
-      db.query(AlertEvent).filter_by(alert_id=row.id, event_type="de-escalated").count() == 1)
+check(
+    "de-escalation event recorded",
+    db.query(AlertEvent).filter_by(alert_id=row.id, event_type="de-escalated").count() == 1,
+)
 check("peak severity preserved", row.peak_severity == "CRITICAL")
 db.close()
 
@@ -515,28 +540,39 @@ db.commit()
 # the reminder timer would have fired twice.
 transitions = process_findings(db, [capped], now=t2 + timedelta(minutes=120), config=CONFIG)
 db.commit()
-check("capped alert does not escalate", len(transitions) == 0,
-      str([(t.status, t.severity) for t in transitions]))
+check(
+    "capped alert does not escalate",
+    len(transitions) == 0,
+    str([(t.status, t.severity) for t in transitions]),
+)
 row = db.query(MonitorAlert).filter_by(fingerprint=capped.fingerprint).first()
 check("capped alert stays at WARNING", row.severity == "WARNING", row.severity)
-check("capped alert does not spam reminders", row.notification_count <= 1, str(row.notification_count))
+check(
+    "capped alert does not spam reminders", row.notification_count <= 1, str(row.notification_count)
+)
 
 # An uncapped finding with the same age must still escalate, proving the cap is
 # what suppressed it rather than something else.
 uncapped = make_finding(target="UNCAPPED")
 process_findings(db, [uncapped, capped], now=t2, config=CONFIG)
 db.commit()
-transitions = process_findings(db, [uncapped, capped], now=t2 + timedelta(minutes=120), config=CONFIG)
+transitions = process_findings(
+    db, [uncapped, capped], now=t2 + timedelta(minutes=120), config=CONFIG
+)
 db.commit()
 escalations = [t for t in transitions if t.status == "ESCALATED"]
-check("uncapped finding still escalates to EMERGENCY",
-      len(escalations) == 1 and escalations[0].severity is Severity.EMERGENCY,
-      str([(t.status, t.severity) for t in transitions]))
+check(
+    "uncapped finding still escalates to EMERGENCY",
+    len(escalations) == 1 and escalations[0].severity is Severity.EMERGENCY,
+    str([(t.status, t.severity) for t in transitions]),
+)
 db.close()
 
 
 # ==========================================================================
 print("\n=== 8. Notification outbox durability and retry ===")
+
+
 # ==========================================================================
 class FlakyChannel(NotificationChannel):
     """Fails a set number of times, then succeeds."""
@@ -648,6 +684,8 @@ check("exception treated as retryable", row.status == "pending", row.status)
 check("exception detail captured", "exploded" in (row.last_error or ""))
 
 print("\n--- 8e. Unconfigured channel does not burn attempts ---")
+
+
 class Unconfigured(NotificationChannel):
     name = "telegram"
 
@@ -723,13 +761,29 @@ quiet.quiet_hours.enabled = True
 db.query(NotificationOutbox).delete()
 db.commit()
 night = datetime(2026, 7, 26, 23, 30)
-enqueue(db, OutboundMessage(body="w", severity=Severity.WARNING), channels=[ok_channel], now=night, config=quiet)
-enqueue(db, OutboundMessage(body="c", severity=Severity.CRITICAL), channels=[ok_channel], now=night, config=quiet)
+enqueue(
+    db,
+    OutboundMessage(body="w", severity=Severity.WARNING),
+    channels=[ok_channel],
+    now=night,
+    config=quiet,
+)
+enqueue(
+    db,
+    OutboundMessage(body="c", severity=Severity.CRITICAL),
+    channels=[ok_channel],
+    now=night,
+    config=quiet,
+)
 db.commit()
-check("warning suppressed at night",
-      db.query(NotificationOutbox).filter_by(status="failed").count() == 1)
-check("critical delivered at night",
-      db.query(NotificationOutbox).filter_by(status="pending").count() == 1)
+check(
+    "warning suppressed at night",
+    db.query(NotificationOutbox).filter_by(status="failed").count() == 1,
+)
+check(
+    "critical delivered at night",
+    db.query(NotificationOutbox).filter_by(status="pending").count() == 1,
+)
 db.close()
 
 
@@ -739,7 +793,12 @@ print("\n=== 10. Rendering ===")
 db = TestSession()
 db.query(MonitorAlert).delete()
 db.commit()
-transitions = process_findings(db, [make_finding(severity=Severity.CRITICAL, target="RENDER")], now=datetime.utcnow(), config=CONFIG)
+transitions = process_findings(
+    db,
+    [make_finding(severity=Severity.CRITICAL, target="RENDER")],
+    now=datetime.utcnow(),
+    config=CONFIG,
+)
 db.commit()
 message = render_alert(transitions[0], CONFIG)
 body = message.body
@@ -755,7 +814,7 @@ check("alert id in footer", transitions[0].alert.alert_id in body)
 check("html rendering provided", message.html_body is not None)
 
 print("\n--- 10b. HTML escaping ---")
-from app.monitoring.channels.telegram import escape  # noqa: E402
+from app.monitoring.channels.telegram import escape
 
 check("ampersand escaped", escape("a & b") == "a &amp; b")
 check("angle brackets escaped", escape("<script>") == "&lt;script&gt;")
@@ -789,7 +848,7 @@ print("\n=== 11. Rule engine ===")
 check("rules registered", len(registered_rules()) >= 35, str(len(registered_rules())))
 
 print("\n--- 11b. A failing rule is isolated and reported ---")
-from app.monitoring.rules import rule as rule_decorator  # noqa: E402
+from app.monitoring.rules import rule as rule_decorator
 
 
 @rule_decorator("test.explodes", Subsystem.MONITORING, "Deliberately broken rule")
@@ -810,7 +869,7 @@ check("other rules still ran", len(findings) > 1)
 
 # Remove the deliberately broken rule so it cannot leak into other assertions.
 registered_rules().pop("test.explodes", None)
-from app.monitoring import rules as rules_module  # noqa: E402
+from app.monitoring import rules as rules_module
 
 rules_module._REGISTRY.pop("test.explodes", None)
 
@@ -821,7 +880,7 @@ check("same target is stable", make_finding(target="A").fingerprint == f1.finger
 check("fingerprint carries the rule id", f1.fingerprint.startswith("test.rule:"))
 
 print("\n--- 11d. Unavailable findings are not alerts ---")
-from app.monitoring.rules import unavailable  # noqa: E402
+from app.monitoring.rules import unavailable
 
 gap = unavailable("x.y", Subsystem.SERVER, "Thing", "no source")
 check("unavailable is not a problem", not gap.is_problem)
@@ -833,13 +892,23 @@ check("below thresholds -> OK", ctx.threshold_severity(10, 80, 90) is Severity.O
 check("above warning -> WARNING", ctx.threshold_severity(85, 80, 90) is Severity.WARNING)
 check("above critical -> CRITICAL", ctx.threshold_severity(95, 80, 90) is Severity.CRITICAL)
 check("None -> OK", ctx.threshold_severity(None, 80, 90) is Severity.OK)
-check("inverted below critical -> CRITICAL", ctx.threshold_severity(0.5, 0.9, 0.7, inverted=True) is Severity.CRITICAL)
-check("inverted below warning -> WARNING", ctx.threshold_severity(0.85, 0.9, 0.7, inverted=True) is Severity.WARNING)
-check("inverted healthy -> OK", ctx.threshold_severity(0.98, 0.9, 0.7, inverted=True) is Severity.OK)
+check(
+    "inverted below critical -> CRITICAL",
+    ctx.threshold_severity(0.5, 0.9, 0.7, inverted=True) is Severity.CRITICAL,
+)
+check(
+    "inverted below warning -> WARNING",
+    ctx.threshold_severity(0.85, 0.9, 0.7, inverted=True) is Severity.WARNING,
+)
+check(
+    "inverted healthy -> OK", ctx.threshold_severity(0.98, 0.9, 0.7, inverted=True) is Severity.OK
+)
 
 
 # ==========================================================================
 print("\n=== 12. Electrical rules and their false-positive guards ===")
+
+
 # ==========================================================================
 def electrical_ctx(db, reading, policy=None, baseline=None, stddev=None):
     """Context for an electrical rule, with the node lifecycle annotated.
@@ -890,20 +959,33 @@ def add_reading(**kwargs):
 
 print("\n--- 12a. Noise-floor currents must NOT report imbalance ---")
 noise = add_reading(
-    voltage=127.7, current=0.00006,
-    phase_a_voltage=127.7, phase_b_voltage=129.8, phase_c_voltage=128.8,
-    phase_a_current=1.94e-05, phase_b_current=2.38e-05, phase_c_current=1.09e-05,
+    voltage=127.7,
+    current=0.00006,
+    phase_a_voltage=127.7,
+    phase_b_voltage=129.8,
+    phase_c_voltage=128.8,
+    phase_a_current=1.94e-05,
+    phase_b_current=2.38e-05,
+    phase_c_current=1.09e-05,
 )
 findings = metrics_module.check_phases(electrical_ctx(db, noise))
 imbalance = [f for f in findings if "imbalance" in f.rule_id]
-check("no imbalance alert at the noise floor", len(imbalance) == 0,
-      str([f.rule_id for f in imbalance]))
+check(
+    "no imbalance alert at the noise floor",
+    len(imbalance) == 0,
+    str([f.rule_id for f in imbalance]),
+)
 
 print("\n--- 12b. Genuine imbalance under load IS reported ---")
 loaded = add_reading(
-    voltage=128.3, current=93.1,
-    phase_a_voltage=127.4, phase_b_voltage=128.8, phase_c_voltage=128.7,
-    phase_a_current=36.59, phase_b_current=28.82, phase_c_current=27.70,
+    voltage=128.3,
+    current=93.1,
+    phase_a_voltage=127.4,
+    phase_b_voltage=128.8,
+    phase_c_voltage=128.7,
+    phase_a_current=36.59,
+    phase_b_current=28.82,
+    phase_c_current=27.70,
 )
 findings = metrics_module.check_phases(electrical_ctx(db, loaded))
 imbalance = [f for f in findings if f.rule_id == "electrical.current_imbalance"]
@@ -913,8 +995,12 @@ check("imbalance severity is WARNING", imbalance[0].severity is Severity.WARNING
 print("\n--- 12c. Missing phase ---")
 missing = add_reading(
     voltage=85.0,
-    phase_a_voltage=127.4, phase_b_voltage=128.8, phase_c_voltage=2.0,
-    phase_a_current=10.0, phase_b_current=10.0, phase_c_current=0.0,
+    phase_a_voltage=127.4,
+    phase_b_voltage=128.8,
+    phase_c_voltage=2.0,
+    phase_a_current=10.0,
+    phase_b_current=10.0,
+    phase_c_current=0.0,
 )
 findings = metrics_module.check_phases(electrical_ctx(db, missing))
 phase_loss = [f for f in findings if f.rule_id == "electrical.missing_phase"]
@@ -941,16 +1027,25 @@ print("\n--- 12f. Reverse power flow ---")
 reverse = add_reading(voltage=127.0, current=10.0, power_kw=-2.5)
 findings = list(metrics_module.check_reverse_energy(electrical_ctx(db, reverse)))
 check("reverse flow detected", len(findings) == 1)
-check("CT reversal suggested", any("backwards" in c or "arrow" in c for c in findings[0].suggested_causes))
+check(
+    "CT reversal suggested",
+    any("backwards" in c or "arrow" in c for c in findings[0].suggested_causes),
+)
 
 # Regression: an idle meter reports values like -1e-9 kW. A bare sign test
 # reported that as "reverse power flow: -0.00 kW" on a healthy idle panel.
 noise_negative = add_reading(voltage=127.0, current=0.0, power_kw=-1e-9)
 findings = list(metrics_module.check_reverse_energy(electrical_ctx(db, noise_negative)))
-check("negative noise is not reverse flow", len(findings) == 0, str([f.current_value for f in findings]))
+check(
+    "negative noise is not reverse flow",
+    len(findings) == 0,
+    str([f.current_value for f in findings]),
+)
 just_under = add_reading(voltage=127.0, current=0.0, power_kw=-0.01)
-check("small negative within deadband ignored",
-      len(list(metrics_module.check_reverse_energy(electrical_ctx(db, just_under)))) == 0)
+check(
+    "small negative within deadband ignored",
+    len(list(metrics_module.check_reverse_energy(electrical_ctx(db, just_under)))) == 0,
+)
 
 print("\n--- 12g. Power factor ignored at negligible load ---")
 idle_pf = add_reading(voltage=127.0, current=0.01, power_kw=0.001, power_factor=0.10)
@@ -973,31 +1068,51 @@ check("real frequency excursion detected", len(findings) == 1)
 
 print("\n--- 12h2. Current uses a learned envelope, not a flat constant ---")
 normal_high = add_reading(voltage=127.0, current=224.0)
-check("224 A is normal for this panel and stays silent",
-      len(list(metrics_module.check_current(electrical_ctx(db, normal_high)))) == 0)
+check(
+    "224 A is normal for this panel and stays silent",
+    len(list(metrics_module.check_current(electrical_ctx(db, normal_high)))) == 0,
+)
 real_overload = add_reading(voltage=127.0, current=320.0)
-check("320 A exceeds the learned envelope and fires",
-      len(list(metrics_module.check_current(electrical_ctx(db, real_overload)))) == 1)
+check(
+    "320 A exceeds the learned envelope and fires",
+    len(list(metrics_module.check_current(electrical_ctx(db, real_overload)))) == 1,
+)
 
 print("\n--- 12i. Voltage band ---")
 low = add_reading(voltage=100.0, current=10.0)
 findings = list(metrics_module.check_voltage(electrical_ctx(db, low)))
-check("low voltage detected", len(findings) == 1 and findings[0].rule_id == "electrical.voltage_low")
+check(
+    "low voltage detected", len(findings) == 1 and findings[0].rule_id == "electrical.voltage_low"
+)
 high = add_reading(voltage=155.0, current=10.0)
 findings = list(metrics_module.check_voltage(electrical_ctx(db, high)))
-check("high voltage detected", len(findings) == 1 and findings[0].rule_id == "electrical.voltage_high")
+check(
+    "high voltage detected", len(findings) == 1 and findings[0].rule_id == "electrical.voltage_high"
+)
 nominal = add_reading(voltage=127.0, current=10.0)
-check("nominal voltage is quiet", len(list(metrics_module.check_voltage(electrical_ctx(db, nominal)))) == 0)
+check(
+    "nominal voltage is quiet",
+    len(list(metrics_module.check_voltage(electrical_ctx(db, nominal)))) == 0,
+)
 
 print("\n--- 12j. No consumption while deployed ---")
 detached = add_reading(
-    voltage=127.5, current=0.00004,
-    phase_a_current=0.00002, phase_b_current=0.00001, phase_c_current=0.00001,
+    voltage=127.5,
+    current=0.00004,
+    phase_a_current=0.00002,
+    phase_b_current=0.00001,
+    phase_c_current=0.00001,
 )
 findings = list(metrics_module.check_no_consumption(electrical_ctx(db, detached)))
-check("detached CT detected on an active deployment", len(findings) == 1, str([f.rule_id for f in findings]))
-check("CT clamp suggested as the cause",
-      any("clamp" in cause.lower() for cause in findings[0].suggested_causes))
+check(
+    "detached CT detected on an active deployment",
+    len(findings) == 1,
+    str([f.rule_id for f in findings]),
+)
+check(
+    "CT clamp suggested as the cause",
+    any("clamp" in cause.lower() for cause in findings[0].suggested_causes),
+)
 db.close()
 
 
@@ -1029,46 +1144,127 @@ def node_ctx(policy=None, **beat_kwargs):
     return RuleContext(session=db, config=CONFIG, now=now, server={}, nodes=state, metrics={})
 
 
-from app.monitoring import heartbeat as hb_module  # noqa: E402
+from app.monitoring import heartbeat as hb_module
 
-check("undervoltage detected",
-      len([f for f in hb_module.check_node_power(node_ctx(undervoltage=True)) if f.rule_id == "node.undervoltage"]) == 1)
-check("healthy power is quiet",
-      len(list(hb_module.check_node_power(node_ctx(undervoltage=False, throttled=False)))) == 0)
-check("read-only filesystem is CRITICAL",
-      [f.severity for f in hb_module.check_node_power(node_ctx(filesystem_readonly=True))
-       if f.rule_id == "node.filesystem_readonly"] == [Severity.CRITICAL])
-check("hot node detected",
-      len([f for f in hb_module.check_node_resources(node_ctx(cpu_temperature_c=84.0))
-           if f.rule_id == "node.cpu_temperature_c"]) == 1)
-check("cool node is quiet",
-      len(list(hb_module.check_node_resources(node_ctx(cpu_temperature_c=45.0)))) == 0)
-check("large buffer detected",
-      len([f for f in hb_module.check_node_storage(node_ctx(buffered_readings=9000))
-           if f.rule_id == "node.buffer"]) == 1)
-check("dead collector is CRITICAL",
-      [f.severity for f in hb_module.check_node_collector(node_ctx(collector_status="inactive"))
-       if f.rule_id == "node.collector_down"] == [Severity.CRITICAL])
-check("active collector is quiet",
-      len(list(hb_module.check_node_collector(node_ctx(collector_status="active")))) == 0)
-check("ADS failure detected",
-      len([f for f in hb_module.check_node_collector(node_ctx(collector_status="active", ads_ok=False))
-           if f.rule_id == "node.ads"]) == 1)
-check("unreachable plugs detected",
-      len([f for f in hb_module.check_node_collector(node_ctx(collector_status="active", shelly_reachable=1, shelly_total=4))
-           if f.rule_id == "node.shelly_unreachable"]) == 1)
-check("access point fallback detected",
-      len([f for f in hb_module.check_node_connectivity(node_ctx(access_point_active=True))
-           if f.rule_id == "node.access_point"]) == 1)
-check("clock drift detected",
-      len([f for f in hb_module.check_node_connectivity(node_ctx(clock_drift_seconds=-400.0))
-           if f.rule_id == "node.clock_drift"]) == 1)
+check(
+    "undervoltage detected",
+    len(
+        [
+            f
+            for f in hb_module.check_node_power(node_ctx(undervoltage=True))
+            if f.rule_id == "node.undervoltage"
+        ]
+    )
+    == 1,
+)
+check(
+    "healthy power is quiet",
+    len(list(hb_module.check_node_power(node_ctx(undervoltage=False, throttled=False)))) == 0,
+)
+check(
+    "read-only filesystem is CRITICAL",
+    [
+        f.severity
+        for f in hb_module.check_node_power(node_ctx(filesystem_readonly=True))
+        if f.rule_id == "node.filesystem_readonly"
+    ]
+    == [Severity.CRITICAL],
+)
+check(
+    "hot node detected",
+    len(
+        [
+            f
+            for f in hb_module.check_node_resources(node_ctx(cpu_temperature_c=84.0))
+            if f.rule_id == "node.cpu_temperature_c"
+        ]
+    )
+    == 1,
+)
+check(
+    "cool node is quiet",
+    len(list(hb_module.check_node_resources(node_ctx(cpu_temperature_c=45.0)))) == 0,
+)
+check(
+    "large buffer detected",
+    len(
+        [
+            f
+            for f in hb_module.check_node_storage(node_ctx(buffered_readings=9000))
+            if f.rule_id == "node.buffer"
+        ]
+    )
+    == 1,
+)
+check(
+    "dead collector is CRITICAL",
+    [
+        f.severity
+        for f in hb_module.check_node_collector(node_ctx(collector_status="inactive"))
+        if f.rule_id == "node.collector_down"
+    ]
+    == [Severity.CRITICAL],
+)
+check(
+    "active collector is quiet",
+    len(list(hb_module.check_node_collector(node_ctx(collector_status="active")))) == 0,
+)
+check(
+    "ADS failure detected",
+    len(
+        [
+            f
+            for f in hb_module.check_node_collector(
+                node_ctx(collector_status="active", ads_ok=False)
+            )
+            if f.rule_id == "node.ads"
+        ]
+    )
+    == 1,
+)
+check(
+    "unreachable plugs detected",
+    len(
+        [
+            f
+            for f in hb_module.check_node_collector(
+                node_ctx(collector_status="active", shelly_reachable=1, shelly_total=4)
+            )
+            if f.rule_id == "node.shelly_unreachable"
+        ]
+    )
+    == 1,
+)
+check(
+    "access point fallback detected",
+    len(
+        [
+            f
+            for f in hb_module.check_node_connectivity(node_ctx(access_point_active=True))
+            if f.rule_id == "node.access_point"
+        ]
+    )
+    == 1,
+)
+check(
+    "clock drift detected",
+    len(
+        [
+            f
+            for f in hb_module.check_node_connectivity(node_ctx(clock_drift_seconds=-400.0))
+            if f.rule_id == "node.clock_drift"
+        ]
+    )
+    == 1,
+)
 
 print("\n--- 13b. Stale telemetry is not evaluated ---")
 stale = node_ctx(cpu_temperature_c=95.0)
 stale.nodes["N001"]["missed_beats"] = 5
-check("no resource alerts from a node that is not reporting",
-      len(list(hb_module.check_node_resources(stale))) == 0)
+check(
+    "no resource alerts from a node that is not reporting",
+    len(list(hb_module.check_node_resources(stale))) == 0,
+)
 db.close()
 
 
@@ -1078,11 +1274,18 @@ print("\n=== 14. Alive-but-not-measuring detection ===")
 db = TestSession()
 state = {
     "N001": {
-        "code": "N001", "node_id": node_a_id, "heartbeat": None,
-        "missed_beats": 0, "ever_seen": True, "latest": None,
-        "reading_age_seconds": 1200, "deployment": True,
-        "deployment_status": "active", "building": "Engineering",
-        "campus": "Campus", "deployment_label": "active",
+        "code": "N001",
+        "node_id": node_a_id,
+        "heartbeat": None,
+        "missed_beats": 0,
+        "ever_seen": True,
+        "latest": None,
+        "reading_age_seconds": 1200,
+        "deployment": True,
+        "deployment_status": "active",
+        "building": "Engineering",
+        "campus": "Campus",
+        "deployment_label": "active",
         "policy": FULL,
     }
 }
@@ -1090,16 +1293,25 @@ ctx = RuleContext(session=db, config=CONFIG, now=now, server={}, nodes=state, me
 findings = list(hb_module.check_measurement_freshness(ctx))
 check("stale measurements detected while node is alive", len(findings) == 1)
 check("severity is CRITICAL past 900s", findings[0].severity is Severity.CRITICAL)
-check("summary distinguishes it from a connectivity fault",
-      "network" in (findings[0].summary or "").lower())
+check(
+    "summary distinguishes it from a connectivity fault",
+    "network" in (findings[0].summary or "").lower(),
+)
 
 print("\n--- 14b. Deployed node that has never recorded anything ---")
 state = {
     "N002": {
-        "code": "N002", "node_id": node_b_id, "heartbeat": None,
-        "missed_beats": 0, "ever_seen": True, "latest": None,
-        "reading_age_seconds": None, "deployment": None,
-        "deployment_status": None, "building": None, "campus": None,
+        "code": "N002",
+        "node_id": node_b_id,
+        "heartbeat": None,
+        "missed_beats": 0,
+        "ever_seen": True,
+        "latest": None,
+        "reading_age_seconds": None,
+        "deployment": None,
+        "deployment_status": None,
+        "building": None,
+        "campus": None,
         "deployment_label": None,
         # Full policy: a deployment is running, so "never recorded anything"
         # is a real fault rather than an expected silence.
@@ -1109,12 +1321,16 @@ state = {
 ctx = RuleContext(session=db, config=CONFIG, now=now, server={}, nodes=state, metrics={})
 findings = list(hb_module.check_measurement_freshness(ctx))
 check("commissioning node with no data detected", len(findings) == 1)
-check("reported as WARNING, with a grace period",
-      findings[0].rule_id == "node.no_measurements"
-      and findings[0].severity is Severity.WARNING
-      and findings[0].sustain_seconds == 1800)
-check("suggests creating a deployment",
-      any("deployment" in a.lower() for a in findings[0].suggested_actions))
+check(
+    "reported as WARNING, with a grace period",
+    findings[0].rule_id == "node.no_measurements"
+    and findings[0].severity is Severity.WARNING
+    and findings[0].sustain_seconds == 1800,
+)
+check(
+    "suggests creating a deployment",
+    any("deployment" in a.lower() for a in findings[0].suggested_actions),
+)
 db.close()
 
 
@@ -1122,8 +1338,15 @@ db.close()
 print("\n=== 15. Status report ===")
 # ==========================================================================
 db = TestSession()
-status = build_status(db, server={"hostname": "test", "disks": {}, "database": {}, "api": {}},
-                      nodes={}, metrics={}, findings=[], config=CONFIG, now=now)
+status = build_status(
+    db,
+    server={"hostname": "test", "disks": {}, "database": {}, "api": {}},
+    nodes={},
+    metrics={},
+    findings=[],
+    config=CONFIG,
+    now=now,
+)
 check("status has an overall verdict", "overall" in status)
 check("status has a server block", "server" in status)
 check("status has an alerts block", "alerts" in status)
@@ -1178,9 +1401,12 @@ check("unknown alert -> 404", r.status_code == 404)
 
 r = client.get("/api/monitoring/config")
 check("config endpoint responds", r.status_code == 200)
-check("bot token never exposed",
-      "8978688082" not in r.text and r.json()["telegram"].get("bot_token") in (None, "", "***redacted***"),
-      r.json().get("telegram"))
+check(
+    "bot token never exposed",
+    "8978688082" not in r.text
+    and r.json()["telegram"].get("bot_token") in (None, "", "***redacted***"),
+    r.json().get("telegram"),
+)
 
 r = client.get("/api/monitoring/channels")
 check("channels endpoint responds", r.status_code == 200)
@@ -1199,12 +1425,26 @@ print("\n=== 18. Existing platform endpoints still work ===")
 r = client.post("/api/edge/heartbeat", json={"node_id": "N001"})
 check("legacy heartbeat endpoint unchanged", r.status_code == 200, r.text)
 
-r = client.post("/api/v1/measurements/batch", json={
-    "device_id": "N001",
-    "measurements": [{"captured_at": iso(datetime.utcnow()), "voltage_a": 127.0,
-                      "current_a": 5.0, "total_active_power": 1800.0, "total_current": 15.0}],
-})
-check("energy node batch ingest unchanged", r.status_code == 200 and r.json().get("inserted") == 1, r.text)
+r = client.post(
+    "/api/v1/measurements/batch",
+    json={
+        "device_id": "N001",
+        "measurements": [
+            {
+                "captured_at": iso(datetime.utcnow()),
+                "voltage_a": 127.0,
+                "current_a": 5.0,
+                "total_active_power": 1800.0,
+                "total_current": 15.0,
+            }
+        ],
+    },
+)
+check(
+    "energy node batch ingest unchanged",
+    r.status_code == 200 and r.json().get("inserted") == 1,
+    r.text,
+)
 
 r = client.get("/health")
 check("backend health endpoint unchanged", r.status_code == 200)
@@ -1213,8 +1453,10 @@ r = client.get("/api/alerts/status")
 check("pre-existing alerts router still mounted", r.status_code == 200, r.text[:200])
 
 db = TestSession()
-check("monitoring wrote nothing to energy_readings beyond the test ingests",
-      db.query(models.EnergyReading).count() > 0)
+check(
+    "monitoring wrote nothing to energy_readings beyond the test ingests",
+    db.query(models.EnergyReading).count() > 0,
+)
 check("nodes table row count unchanged", db.query(models.Node).count() == 2)
 db.close()
 
@@ -1225,13 +1467,16 @@ print("\n=== 19. Lifecycle policy is derived from the platform's own tables ==="
 db = TestSession()
 states = commission_states(db)
 check("commission states loaded from the platform table", len(states) == 4, str(list(states)))
-check("commissioned is monitored and may upload",
-      states["commissioned"].is_monitored and states["commissioned"].may_upload)
-check("registered is not monitored (silence is expected)",
-      not states["registered"].is_monitored)
+check(
+    "commissioned is monitored and may upload",
+    states["commissioned"].is_monitored and states["commissioned"].may_upload,
+)
+check("registered is not monitored (silence is expected)", not states["registered"].is_monitored)
 check("decommissioned is not monitored", not states["decommissioned"].is_monitored)
-check("suspended is monitored but may not upload",
-      states["suspended"].is_monitored and not states["suspended"].may_upload)
+check(
+    "suspended is monitored but may not upload",
+    states["suspended"].is_monitored and not states["suspended"].may_upload,
+)
 
 
 def policy_for_node(commission, dep_status, start="2026-01-01", end=None):
@@ -1239,16 +1484,24 @@ def policy_for_node(commission, dep_status, start="2026-01-01", end=None):
     node.commission_state = commission
     dep = None
     if dep_status:
-        dep = models.Deployment(node_id=1, building_id=building_id,
-                                electrical_panel_id=1, start_date=start,
-                                end_date=end, status=dep_status)
-    return classify(db, {"code": "NX", "node": node, "deployment": dep},
-                    CONFIG, datetime(2026, 7, 29))
+        dep = models.Deployment(
+            node_id=1,
+            building_id=building_id,
+            electrical_panel_id=1,
+            start_date=start,
+            end_date=end,
+            status=dep_status,
+        )
+    return classify(
+        db, {"code": "NX", "node": node, "deployment": dep}, CONFIG, datetime(2026, 7, 29)
+    )
 
 
 pol = policy_for_node("commissioned", "active")
-check("commissioned + active -> full monitoring",
-      pol.electrical and pol.heartbeat and pol.measurement_freshness and pol.node_hardware)
+check(
+    "commissioned + active -> full monitoring",
+    pol.electrical and pol.heartbeat and pol.measurement_freshness and pol.node_hardware,
+)
 
 pol = policy_for_node("commissioned", "active")
 check("operational deployment -> heartbeat loss pages", pol.heartbeat_pages)
@@ -1256,8 +1509,7 @@ check("operational deployment -> heartbeat loss pages", pol.heartbeat_pages)
 pol = policy_for_node("commissioned", "completed")
 check("commissioned + completed -> NO electrical alerts", not pol.electrical)
 check("commissioned + completed -> still watches liveness", pol.heartbeat)
-check("commissioned + completed -> but liveness does NOT page",
-      not pol.heartbeat_pages)
+check("commissioned + completed -> but liveness does NOT page", not pol.heartbeat_pages)
 check("commissioned + completed -> no 'not measuring' alerts", not pol.measurement_freshness)
 
 pol = policy_for_node("commissioned", None)
@@ -1270,17 +1522,24 @@ pol = policy_for_node("commissioned", "installing")
 check("installing IS operational -> electrical enabled", pol.electrical)
 
 pol = policy_for_node("registered", "active")
-check("registered node alerts on nothing",
-      not any([pol.electrical, pol.heartbeat, pol.sensors,
-               pol.measurement_freshness, pol.node_hardware]))
+check(
+    "registered node alerts on nothing",
+    not any(
+        [pol.electrical, pol.heartbeat, pol.sensors, pol.measurement_freshness, pol.node_hardware]
+    ),
+)
 
 pol = policy_for_node("decommissioned", "active")
-check("decommissioned node alerts on nothing",
-      not any([pol.electrical, pol.heartbeat, pol.node_hardware]))
+check(
+    "decommissioned node alerts on nothing",
+    not any([pol.electrical, pol.heartbeat, pol.node_hardware]),
+)
 
 pol = policy_for_node("suspended", "active")
-check("suspended: hardware watched, silence not alarmed",
-      pol.node_hardware and not pol.heartbeat and not pol.electrical)
+check(
+    "suspended: hardware watched, silence not alarmed",
+    pol.node_hardware and not pol.heartbeat and not pol.electrical,
+)
 
 pol = policy_for_node("commissioned", "active", start="2026-01-01", end="2026-02-01")
 check("expired date window -> not operational", not pol.electrical)
@@ -1292,11 +1551,19 @@ cfg = MonitoringConfig()
 cfg.node_lifecycle = {"NX": "maintenance"}
 node = models.Node(code="NX", name="NX", status="online", buffer_pending=0, samples=0)
 node.commission_state = "commissioned"
-dep = models.Deployment(node_id=1, building_id=building_id, electrical_panel_id=1,
-                        start_date="2026-01-01", end_date=None, status="active")
+dep = models.Deployment(
+    node_id=1,
+    building_id=building_id,
+    electrical_panel_id=1,
+    start_date="2026-01-01",
+    end_date=None,
+    status="active",
+)
 pol = classify(db, {"code": "NX", "node": node, "deployment": dep}, cfg, datetime(2026, 7, 29))
-check("maintenance override silences everything",
-      not any([pol.electrical, pol.heartbeat, pol.node_hardware]))
+check(
+    "maintenance override silences everything",
+    not any([pol.electrical, pol.heartbeat, pol.node_hardware]),
+)
 db.close()
 
 
@@ -1364,11 +1631,15 @@ row = db.query(MonitorAlert).filter_by(fingerprint=make_finding(target="HYST").f
 check("alert stays open during the hysteresis window", row.resolved_at is None)
 
 # Re-crossing inside the window must NOT produce a second alert.
-tr = process_findings(db, [make_finding(target="HYST")], now=t5 + timedelta(minutes=4), config=CONFIG)
+tr = process_findings(
+    db, [make_finding(target="HYST")], now=t5 + timedelta(minutes=4), config=CONFIG
+)
 db.commit()
 check("re-crossing inside the window sends nothing", len(tr) == 0)
-check("and does not open a second alert",
-      db.query(MonitorAlert).filter_by(rule_id="test.rule").count() == 1)
+check(
+    "and does not open a second alert",
+    db.query(MonitorAlert).filter_by(rule_id="test.rule").count() == 1,
+)
 
 tr = process_findings(db, [], now=t5 + timedelta(minutes=30), config=CONFIG)
 db.commit()
@@ -1390,41 +1661,72 @@ for i in range(40):
 # New behaviour: one NEW, plus duration escalations because the condition
 # genuinely persists for 40 minutes. Escalations are intentional and few; the
 # flap itself is gone entirely.
-check("20 threshold crossings no longer produce 40 messages",
-      len(statuses) <= 4, f"{len(statuses)}: {statuses}")
-check("exactly one NEW alert, not twenty",
-      statuses.count("NEW") == 1, str(statuses))
-check("zero flap-resolve messages",
-      statuses.count("RESOLVED") == 0, str(statuses))
-check("the rest are genuine duration escalations",
-      all(st in ("NEW", "ESCALATED") for st in statuses), str(statuses))
+check(
+    "20 threshold crossings no longer produce 40 messages",
+    len(statuses) <= 4,
+    f"{len(statuses)}: {statuses}",
+)
+check("exactly one NEW alert, not twenty", statuses.count("NEW") == 1, str(statuses))
+check("zero flap-resolve messages", statuses.count("RESOLVED") == 0, str(statuses))
+check(
+    "the rest are genuine duration escalations",
+    all(st in ("NEW", "ESCALATED") for st in statuses),
+    str(statuses),
+)
 db.close()
 
 
 # ==========================================================================
 print("\n=== 22. Report-only routing, with a severity breakout ===")
 # ==========================================================================
-from app.monitoring.rules import apply_routing  # noqa: E402
+from app.monitoring.rules import apply_routing
 
-quiet = Finding(rule_id="electrical.power_factor", subsystem=Subsystem.ELECTRICAL,
-                severity=Severity.WARNING, title="PF low", target="N001")
-loud = Finding(rule_id="electrical.power_factor", subsystem=Subsystem.ELECTRICAL,
-               severity=Severity.CRITICAL, title="PF collapsed", target="N001")
-paging = Finding(rule_id="database.corruption", subsystem=Subsystem.DATABASE,
-                 severity=Severity.WARNING, title="DB", target="")
+quiet = Finding(
+    rule_id="electrical.power_factor",
+    subsystem=Subsystem.ELECTRICAL,
+    severity=Severity.WARNING,
+    title="PF low",
+    target="N001",
+)
+loud = Finding(
+    rule_id="electrical.power_factor",
+    subsystem=Subsystem.ELECTRICAL,
+    severity=Severity.CRITICAL,
+    title="PF collapsed",
+    target="N001",
+)
+paging = Finding(
+    rule_id="database.corruption",
+    subsystem=Subsystem.DATABASE,
+    severity=Severity.WARNING,
+    title="DB",
+    target="",
+)
 apply_routing([quiet, loud, paging], CONFIG)
 check("report-only rule is muted at WARNING", not quiet.notify)
 check("same rule breaks out at CRITICAL", loud.notify)
 check("non-report-only rule always notifies", paging.notify)
 
-muted = {"electrical.consumption_spike", "electrical.current_imbalance",
-         "smart_plug.offline", "server.cpu", "node.heartbeat_never"}
-check("the known-noisy rules are all report-only",
-      muted.issubset(set(CONFIG.report_only_rules)),
-      str(muted - set(CONFIG.report_only_rules)))
-for critical_rule in ("database.corruption", "server.filesystem_readonly",
-                      "backend.api", "electrical.missing_phase",
-                      "node.collector_down", "node.heartbeat_lost"):
+muted = {
+    "electrical.consumption_spike",
+    "electrical.current_imbalance",
+    "smart_plug.offline",
+    "server.cpu",
+    "node.heartbeat_never",
+}
+check(
+    "the known-noisy rules are all report-only",
+    muted.issubset(set(CONFIG.report_only_rules)),
+    str(muted - set(CONFIG.report_only_rules)),
+)
+for critical_rule in (
+    "database.corruption",
+    "server.filesystem_readonly",
+    "backend.api",
+    "electrical.missing_phase",
+    "node.collector_down",
+    "node.heartbeat_lost",
+):
     check(f"{critical_rule} still pages", critical_rule not in CONFIG.report_only_rules)
 
 
@@ -1436,48 +1738,79 @@ db.query(models.EnergyReading).delete()
 db.commit()
 
 noisy = add_reading(voltage=127.0, current=236.7)
-check("236.7 A (471 alerts / 962 messages) is now silent",
-      len(list(metrics_module.check_current(electrical_ctx(db, noisy)))) == 0)
+check(
+    "236.7 A (471 alerts / 962 messages) is now silent",
+    len(list(metrics_module.check_current(electrical_ctx(db, noisy)))) == 0,
+)
 
 pf089 = add_reading(voltage=127.0, current=50.0, power_kw=15.0, power_factor=0.89)
-check("PF 0.89 (66 alerts) is now silent",
-      len(list(metrics_module.check_power_factor(electrical_ctx(db, pf089)))) == 0)
+check(
+    "PF 0.89 (66 alerts) is now silent",
+    len(list(metrics_module.check_power_factor(electrical_ctx(db, pf089)))) == 0,
+)
 
 spike = add_reading(voltage=127.0, current=50.0, power_kw=27.8)
-check("+31%% consumption spike is now silent",
-      len(list(metrics_module.check_consumption(
-          electrical_ctx(db, spike, baseline=21.3, stddev=3.0)))) == 0)
+check(
+    "+31%% consumption spike is now silent",
+    len(
+        list(metrics_module.check_consumption(electrical_ctx(db, spike, baseline=21.3, stddev=3.0)))
+    )
+    == 0,
+)
 
 # ...and the genuine faults still fire.
 overload = add_reading(voltage=127.0, current=320.0)
-check("320 A genuine overload still fires",
-      len(list(metrics_module.check_current(electrical_ctx(db, overload)))) == 1)
+check(
+    "320 A genuine overload still fires",
+    len(list(metrics_module.check_current(electrical_ctx(db, overload)))) == 1,
+)
 
 pf055 = add_reading(voltage=127.0, current=50.0, power_kw=15.0, power_factor=0.55)
 found = list(metrics_module.check_power_factor(electrical_ctx(db, pf055)))
 apply_routing(found, CONFIG)
-check("PF 0.55 collapse still pages (severity breakout)",
-      len(found) == 1 and found[0].notify and found[0].severity is Severity.CRITICAL)
+check(
+    "PF 0.55 collapse still pages (severity breakout)",
+    len(found) == 1 and found[0].notify and found[0].severity is Severity.CRITICAL,
+)
 
-phase = add_reading(voltage=85.0, phase_a_voltage=127.0, phase_b_voltage=128.0,
-                    phase_c_voltage=2.0, phase_a_current=40.0,
-                    phase_b_current=40.0, phase_c_current=0.0)
-check("missing phase still CRITICAL",
-      [f.severity for f in metrics_module.check_phases(electrical_ctx(db, phase))
-       if f.rule_id == "electrical.missing_phase"] == [Severity.CRITICAL])
+phase = add_reading(
+    voltage=85.0,
+    phase_a_voltage=127.0,
+    phase_b_voltage=128.0,
+    phase_c_voltage=2.0,
+    phase_a_current=40.0,
+    phase_b_current=40.0,
+    phase_c_current=0.0,
+)
+check(
+    "missing phase still CRITICAL",
+    [
+        f.severity
+        for f in metrics_module.check_phases(electrical_ctx(db, phase))
+        if f.rule_id == "electrical.missing_phase"
+    ]
+    == [Severity.CRITICAL],
+)
 
 # Deployment gate beats severity: the same fault on an undeployed node is silent.
-check("severe overload on a non-operational deployment is silent",
-      len(list(metrics_module.check_current(
-          electrical_ctx(db, add_reading(voltage=127.0, current=480.0),
-                         policy=HARDWARE_ONLY)))) == 0)
+check(
+    "severe overload on a non-operational deployment is silent",
+    len(
+        list(
+            metrics_module.check_current(
+                electrical_ctx(db, add_reading(voltage=127.0, current=480.0), policy=HARDWARE_ONLY)
+            )
+        )
+    )
+    == 0,
+)
 db.close()
 
 
 # ==========================================================================
 print("\n=== 24. Threshold resolution from physical ratings ===")
 # ==========================================================================
-from app.monitoring.thresholds import (  # noqa: E402
+from app.monitoring.thresholds import (
     physical_ceiling,
     resolve_current_thresholds,
 )
@@ -1486,16 +1819,28 @@ db = TestSession()
 
 
 def rated_node(**kw):
-    n = models.Node(code="NR", name="NR", status="online",
-                    buffer_pending=0, samples=0, commission_state="commissioned")
+    n = models.Node(
+        code="NR",
+        name="NR",
+        status="online",
+        buffer_pending=0,
+        samples=0,
+        commission_state="commissioned",
+    )
     for k, v in kw.items():
         setattr(n, k, v)
     return n
 
 
 def rated_deployment(**kw):
-    d = models.Deployment(node_id=1, building_id=building_id, electrical_panel_id=1,
-                          start_date="2026-01-01", end_date=None, status="active")
+    d = models.Deployment(
+        node_id=1,
+        building_id=building_id,
+        electrical_panel_id=1,
+        start_date="2026-01-01",
+        end_date=None,
+        status="active",
+    )
     for k, v in kw.items():
         setattr(d, k, v)
     return d
@@ -1506,106 +1851,143 @@ LEARNED = {"threshold": 296.0, "source": "learned p99.5"}
 # --- order 1: deployment explicit limits win over everything -------------
 r = resolve_current_thresholds(
     rated_node(ct_max_current_a=100.0, warning_current_a=90.0),
-    rated_deployment(warning_current_a=180.0, critical_current_a=200.0,
-                     emergency_current_a=240.0),
-    CONFIG, baseline=LEARNED)
+    rated_deployment(warning_current_a=180.0, critical_current_a=200.0, emergency_current_a=240.0),
+    CONFIG,
+    baseline=LEARNED,
+)
 check("deployment explicit limits win", r.warning == 180.0 and r.critical == 200.0, r.source)
 check("emergency limit carried", r.emergency == 240.0)
 check("provenance names the deployment", "deployment" in r.source, r.source)
 
 # --- order 2: deployment panel rating -------------------------------------
 r = resolve_current_thresholds(
-    rated_node(), rated_deployment(panel_main_breaker_a=400.0),
-    CONFIG, baseline=LEARNED)
+    rated_node(), rated_deployment(panel_main_breaker_a=400.0), CONFIG, baseline=LEARNED
+)
 check("panel breaker derives the threshold", r.warning == 360.0, str(r.warning))
 check("critical is the rating itself", r.critical == 400.0)
 check("provenance names the breaker", "breaker" in r.source, r.source)
 
 # --- order 3: node explicit limits ----------------------------------------
 r = resolve_current_thresholds(
-    rated_node(warning_current_a=150.0, critical_current_a=170.0),
-    None, CONFIG, baseline=LEARNED)
-check("node explicit limits used when no deployment values",
-      r.warning == 150.0 and "node" in r.source, r.source)
+    rated_node(warning_current_a=150.0, critical_current_a=170.0), None, CONFIG, baseline=LEARNED
+)
+check(
+    "node explicit limits used when no deployment values",
+    r.warning == 150.0 and "node" in r.source,
+    r.source,
+)
 
 # --- order 4: node CT rating ----------------------------------------------
-r = resolve_current_thresholds(rated_node(ct_max_current_a=120.0), None,
-                               CONFIG, baseline=LEARNED)
+r = resolve_current_thresholds(rated_node(ct_max_current_a=120.0), None, CONFIG, baseline=LEARNED)
 check("node CT rating derives the threshold", r.warning == 108.0, str(r.warning))
 check("provenance names the CT", "CT" in r.source, r.source)
 
 # --- order 5: learned baseline, only with no rating -----------------------
 r = resolve_current_thresholds(rated_node(), None, CONFIG, baseline=LEARNED)
-check("learned baseline used as a last resort before the fallback",
-      r.warning == 296.0 and "learned" in r.source, r.source)
+check(
+    "learned baseline used as a last resort before the fallback",
+    r.warning == 296.0 and "learned" in r.source,
+    r.source,
+)
 
 # --- order 6: conservative fallback ---------------------------------------
 r = resolve_current_thresholds(rated_node(), None, CONFIG, baseline=None)
-check("conservative fallback when nothing is known",
-      r.warning == CONFIG.electrical.current_warning, str(r.warning))
+check(
+    "conservative fallback when nothing is known",
+    r.warning == CONFIG.electrical.current_warning,
+    str(r.warning),
+)
 check("fallback says so", "conservative" in r.source, r.source)
 
 # --- THE CAP: a learned baseline may never exceed physical reality --------
 r = resolve_current_thresholds(
-    rated_node(ct_max_current_a=150.0), None, CONFIG,
-    baseline={"threshold": 900.0, "source": "learned p99.5"})
-check("learned baseline cannot exceed the CT rating",
-      r.warning <= 150.0, f"warning={r.warning} ceiling=150")
+    rated_node(ct_max_current_a=150.0),
+    None,
+    CONFIG,
+    baseline={"threshold": 900.0, "source": "learned p99.5"},
+)
+check(
+    "learned baseline cannot exceed the CT rating",
+    r.warning <= 150.0,
+    f"warning={r.warning} ceiling=150",
+)
 
 ceiling, label = physical_ceiling(
-    rated_node(ct_max_current_a=150.0),
-    rated_deployment(panel_main_breaker_a=400.0))
+    rated_node(ct_max_current_a=150.0), rated_deployment(panel_main_breaker_a=400.0)
+)
 check("physical ceiling takes the LOWEST limit", ceiling == 150.0, str(ceiling))
 check("and names which one binds", "CT" in (label or ""), str(label))
 
-ceiling, _ = physical_ceiling(rated_node(ct_max_current_a=600.0),
-                              rated_deployment(panel_main_breaker_a=200.0))
+ceiling, _ = physical_ceiling(
+    rated_node(ct_max_current_a=600.0), rated_deployment(panel_main_breaker_a=200.0)
+)
 check("breaker binds when it is the lower limit", ceiling == 200.0, str(ceiling))
 check("no ratings -> no ceiling", physical_ceiling(rated_node(), None)[0] is None)
 
 # --- sustained duration is configurable per node/deployment ---------------
-r = resolve_current_thresholds(rated_node(sustained_seconds=60),
-                               rated_deployment(sustained_seconds=120),
-                               CONFIG, baseline=LEARNED)
+r = resolve_current_thresholds(
+    rated_node(sustained_seconds=60),
+    rated_deployment(sustained_seconds=120),
+    CONFIG,
+    baseline=LEARNED,
+)
 check("deployment sustained duration wins", r.sustained_seconds == 120, str(r.sustained_seconds))
-r = resolve_current_thresholds(rated_node(sustained_seconds=60), None,
-                               CONFIG, baseline=LEARNED)
+r = resolve_current_thresholds(rated_node(sustained_seconds=60), None, CONFIG, baseline=LEARNED)
 check("node sustained duration used otherwise", r.sustained_seconds == 60)
 
 # --- all ratings nullable by default --------------------------------------
 plain = rated_node()
-check("every rating is NULL until entered",
-      all(getattr(plain, f) is None for f in
-          ("ct_max_current_a", "nominal_voltage_v", "phase_count",
-           "warning_current_a", "critical_current_a", "emergency_current_a",
-           "sustained_seconds")))
+check(
+    "every rating is NULL until entered",
+    all(
+        getattr(plain, f) is None
+        for f in (
+            "ct_max_current_a",
+            "nominal_voltage_v",
+            "phase_count",
+            "warning_current_a",
+            "critical_current_a",
+            "emergency_current_a",
+            "sustained_seconds",
+        )
+    ),
+)
 db.close()
 
 
 # ==========================================================================
 print("\n=== 25. Node commission transitions go through the lifecycle ===")
 # ==========================================================================
-from app.db import commissioning as commissioning_svc  # noqa: E402
+from app.db import commissioning as commissioning_svc
 
 db = TestSession()
 node = db.query(models.Node).filter_by(code="N002").first()
 
-check("legal moves from commissioned",
-      set(commissioning_svc.legal_transitions_from(db, "commissioned"))
-      == {"registered", "suspended", "decommissioned"},
-      str(commissioning_svc.legal_transitions_from(db, "commissioned")))
-check("decommissioned is terminal — no way out",
-      commissioning_svc.legal_transitions_from(db, "decommissioned") == (),
-      str(commissioning_svc.legal_transitions_from(db, "decommissioned")))
-check("registered is NOT terminal (reversible storage state)",
-      "commissioned" in commissioning_svc.legal_transitions_from(db, "registered"))
+check(
+    "legal moves from commissioned",
+    set(commissioning_svc.legal_transitions_from(db, "commissioned"))
+    == {"registered", "suspended", "decommissioned"},
+    str(commissioning_svc.legal_transitions_from(db, "commissioned")),
+)
+check(
+    "decommissioned is terminal — no way out",
+    commissioning_svc.legal_transitions_from(db, "decommissioned") == (),
+    str(commissioning_svc.legal_transitions_from(db, "decommissioned")),
+)
+check(
+    "registered is NOT terminal (reversible storage state)",
+    "commissioned" in commissioning_svc.legal_transitions_from(db, "registered"),
+)
 
 result = commissioning_svc.transition(
-    db, node, "registered", reason="stored pending future campaign", actor="test")
+    db, node, "registered", reason="stored pending future campaign", actor="test"
+)
 db.commit()
 check("transition applied", node.commission_state == "registered")
-check("transition reports both states",
-      result["from_state"] == "commissioned" and result["to_state"] == "registered")
+check(
+    "transition reports both states",
+    result["from_state"] == "commissioned" and result["to_state"] == "registered",
+)
 
 hist = commissioning_svc.history(db, node.id)
 check("audit row written", len(hist) == 1, str(hist))
@@ -1629,17 +2011,23 @@ except commissioning_svc.IllegalTransition:
     unknown_rejected = True
 check("unknown state rejected", unknown_rejected)
 
-check("no-op transition is legal and records nothing",
-      commissioning_svc.transition(db, node, "registered") is None)
+check(
+    "no-op transition is legal and records nothing",
+    commissioning_svc.transition(db, node, "registered") is None,
+)
 check("history unchanged by the no-op", len(commissioning_svc.history(db, node.id)) == 1)
 
 # An unmonitored node alerts on nothing.
-pol = classify(db, {"code": "N002", "node": node, "deployment": None},
-               CONFIG, datetime(2026, 7, 29))
-check("registered node alerts on nothing",
-      not any([pol.electrical, pol.heartbeat, pol.sensors,
-               pol.measurement_freshness, pol.node_hardware]),
-      pol.rationale)
+pol = classify(
+    db, {"code": "N002", "node": node, "deployment": None}, CONFIG, datetime(2026, 7, 29)
+)
+check(
+    "registered node alerts on nothing",
+    not any(
+        [pol.electrical, pol.heartbeat, pol.sensors, pol.measurement_freshness, pol.node_hardware]
+    ),
+    pol.rationale,
+)
 
 # Put it back so later sections see a commissioned node.
 commissioning_svc.transition(db, node, "commissioned", reason="test teardown")

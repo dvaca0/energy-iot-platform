@@ -23,9 +23,7 @@ from app.monitoring.severity import Severity
 
 def _serialize(alert: MonitorAlert, now: datetime) -> dict[str, Any]:
     """Alert row as a plain dictionary."""
-    open_seconds = (
-        (alert.resolved_at or now) - alert.created_at
-    ).total_seconds()
+    open_seconds = ((alert.resolved_at or now) - alert.created_at).total_seconds()
 
     return {
         "id": alert.id,
@@ -50,9 +48,7 @@ def _serialize(alert: MonitorAlert, now: datetime) -> dict[str, Any]:
         "created_at": alert.created_at.isoformat(),
         "last_seen_at": alert.last_seen_at.isoformat(),
         "escalated_at": alert.escalated_at.isoformat() if alert.escalated_at else None,
-        "acknowledged_at": (
-            alert.acknowledged_at.isoformat() if alert.acknowledged_at else None
-        ),
+        "acknowledged_at": (alert.acknowledged_at.isoformat() if alert.acknowledged_at else None),
         "acknowledged_by": alert.acknowledged_by,
         "resolved_at": alert.resolved_at.isoformat() if alert.resolved_at else None,
         "duration_seconds": alert.duration_seconds if alert.resolved_at else open_seconds,
@@ -117,9 +113,7 @@ def list_alerts(
 
 def get_alert(session: Session, alert_id: str) -> dict[str, Any] | None:
     """One alert with its full event timeline and delivery record."""
-    alert = (
-        session.query(MonitorAlert).filter(MonitorAlert.alert_id == alert_id).first()
-    )
+    alert = session.query(MonitorAlert).filter(MonitorAlert.alert_id == alert_id).first()
     if alert is None:
         return None
 
@@ -162,9 +156,7 @@ def get_alert(session: Session, alert_id: str) -> dict[str, Any] | None:
     return data
 
 
-def recurrence(
-    session: Session, fingerprint: str, *, days: int = 30
-) -> dict[str, Any]:
+def recurrence(session: Session, fingerprint: str, *, days: int = 30) -> dict[str, Any]:
     """How often this exact problem has occurred recently.
 
     Answers "has this happened before?" — the question that separates a one-off
@@ -190,9 +182,7 @@ def recurrence(
         "occurrences": len(rows),
         "first_seen": rows[-1].created_at.isoformat() if rows else None,
         "last_seen": rows[0].created_at.isoformat() if rows else None,
-        "mean_duration_seconds": (
-            round(sum(durations) / len(durations), 1) if durations else None
-        ),
+        "mean_duration_seconds": (round(sum(durations) / len(durations), 1) if durations else None),
         "longest_duration_seconds": max(durations) if durations else None,
     }
 
@@ -247,9 +237,7 @@ def statistics(session: Session, *, days: int = 7) -> dict[str, Any]:
             .scalar()
             or 0
         ),
-        "mean_resolution_seconds": (
-            round(float(mean_resolution), 1) if mean_resolution else None
-        ),
+        "mean_resolution_seconds": (round(float(mean_resolution), 1) if mean_resolution else None),
     }
 
 
@@ -291,9 +279,9 @@ def node_heartbeat_history(
 
 
 __all__ = [
-    "list_alerts",
     "get_alert",
+    "list_alerts",
+    "node_heartbeat_history",
     "recurrence",
     "statistics",
-    "node_heartbeat_history",
 ]

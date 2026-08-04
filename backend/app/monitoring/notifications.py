@@ -51,6 +51,7 @@ log = logging.getLogger("monitoring.notifications")
 # Formatting helpers
 # --------------------------------------------------------------------------
 
+
 def local_time(moment: datetime, config: MonitoringConfig) -> str:
     """Render a stored UTC timestamp in the configured timezone.
 
@@ -94,6 +95,7 @@ def _line(label: str, value: Any) -> str | None:
 # --------------------------------------------------------------------------
 # Alert rendering
 # --------------------------------------------------------------------------
+
 
 def render_alert(
     notification: AlertNotification, config: MonitoringConfig | None = None
@@ -161,9 +163,7 @@ def render_alert(
     lines.append(_line("Detected", local_time(alert.created_at, config)) or "")
     if status == STATUS_RESOLVED and alert.resolved_at:
         lines.append(_line("Resolved", local_time(alert.resolved_at, config)) or "")
-        lines.append(
-            _line("Total duration", humanize_duration(alert.duration_seconds)) or ""
-        )
+        lines.append(_line("Total duration", humanize_duration(alert.duration_seconds)) or "")
     else:
         open_for = (datetime.utcnow() - alert.created_at).total_seconds()
         lines.append(_line("Open for", humanize_duration(open_for)) or "")
@@ -187,9 +187,11 @@ def render_alert(
     if status == STATUS_RESOLVED:
         recovery = [
             _line("Closed because", extra.get("resolution_reason")),
-            _line("Offline for", humanize_duration(extra.get("offline_seconds")))
-            if extra.get("offline_seconds") is not None
-            else None,
+            (
+                _line("Offline for", humanize_duration(extra.get("offline_seconds")))
+                if extra.get("offline_seconds") is not None
+                else None
+            ),
             _line("Likely cause", extra.get("estimated_cause")),
             _line("Buffered readings", extra.get("buffered_readings")),
             _line("Pending sync", extra.get("pending_sync")),
@@ -258,6 +260,7 @@ def render_alert(
 # Delivery policy
 # --------------------------------------------------------------------------
 
+
 def in_quiet_hours(now: datetime, config: MonitoringConfig) -> bool:
     """Whether the local time falls inside the configured quiet window.
 
@@ -289,7 +292,9 @@ def _suppressed_reason(
     if in_quiet_hours(now, config):
         threshold = Severity.parse(config.quiet_hours.suppress_at_or_below)
         if severity <= threshold and not severity.breaks_quiet_hours:
-            return f"quiet hours ({config.quiet_hours.start_hour}:00–{config.quiet_hours.end_hour}:00)"
+            return (
+                f"quiet hours ({config.quiet_hours.start_hour}:00–{config.quiet_hours.end_hour}:00)"
+            )
 
     # Rate limit counts what was actually sent in the last hour. EMERGENCY is
     # exempt: a cap that silences the worst possible alert is a cap that has
@@ -453,7 +458,7 @@ def dispatch_pending(
         row.attempts += 1
         try:
             result = channel.send(message)
-        except Exception as exc:  # noqa: BLE001 - a channel must not break the drain
+        except Exception as exc:
             log.exception("Channel %s raised", channel.name)
             from app.monitoring.channels.base import DeliveryResult
 
@@ -480,9 +485,7 @@ def dispatch_pending(
             )
             _log_alert_event(session, row, "notify_failed", result.detail, now)
         else:
-            row.next_attempt_at = now + timedelta(
-                seconds=_backoff_delay(row.attempts, config)
-            )
+            row.next_attempt_at = now + timedelta(seconds=_backoff_delay(row.attempts, config))
             counts["retried"] += 1
             log.warning(
                 "Notification %s attempt %d failed (%s), retrying at %s",
@@ -517,11 +520,7 @@ def _log_alert_event(
 
 def pending_count(session: Session) -> int:
     """Number of notifications still awaiting delivery."""
-    return (
-        session.query(NotificationOutbox)
-        .filter(NotificationOutbox.status == "pending")
-        .count()
-    )
+    return session.query(NotificationOutbox).filter(NotificationOutbox.status == "pending").count()
 
 
 def notify_alerts(
@@ -559,12 +558,12 @@ def notify_alerts(
 
 
 __all__ = [
-    "render_alert",
-    "enqueue",
     "dispatch_pending",
+    "enqueue",
+    "humanize_duration",
+    "in_quiet_hours",
+    "local_time",
     "notify_alerts",
     "pending_count",
-    "in_quiet_hours",
-    "humanize_duration",
-    "local_time",
+    "render_alert",
 ]

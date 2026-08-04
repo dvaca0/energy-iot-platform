@@ -61,6 +61,7 @@ except ImportError:  # pragma: no cover - psutil is a declared dependency
 # Low-level probes
 # --------------------------------------------------------------------------
 
+
 def _run(command: list[str], timeout: float = 5.0) -> tuple[int, str, str]:
     """Run a command, never raising.
 
@@ -101,7 +102,7 @@ def probe_cpu() -> dict[str, Any]:
         out["percent"] = psutil.cpu_percent(interval=0.5)
         times = psutil.cpu_times_percent(interval=None)
         out["iowait"] = getattr(times, "iowait", None)
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         out["error"] = str(exc)
     return out
 
@@ -122,7 +123,7 @@ def probe_memory() -> dict[str, Any]:
         out["swap_present"] = swap.total > 0
         out["swap_percent"] = swap.percent if swap.total > 0 else None
         out["swap_total_mb"] = round(swap.total / 1024 / 1024, 1)
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         out["error"] = str(exc)
     return out
 
@@ -135,8 +136,8 @@ def probe_disks(mounts: Iterable[str]) -> dict[str, dict[str, Any]]:
             usage = shutil.disk_usage(mount)
             out[mount] = {
                 "percent": round(usage.used / usage.total * 100, 2),
-                "free_gb": round(usage.free / 1024 ** 3, 2),
-                "total_gb": round(usage.total / 1024 ** 3, 2),
+                "free_gb": round(usage.free / 1024**3, 2),
+                "total_gb": round(usage.total / 1024**3, 2),
             }
         except OSError as exc:
             out[mount] = {"error": str(exc)}
@@ -198,7 +199,7 @@ def probe_temperature() -> dict[str, Any]:
         return out
     try:
         sensors = psutil.sensors_temperatures()
-    except Exception:  # noqa: BLE001
+    except Exception:
         return out
 
     hottest: float | None = None
@@ -228,7 +229,7 @@ def probe_uptime() -> dict[str, Any]:
         out["boot_time"] = datetime.utcfromtimestamp(boot).isoformat()
         out["boot_timestamp"] = boot
         out["uptime_seconds"] = round(time.time() - boot, 1)
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         out["error"] = str(exc)
     return out
 
@@ -302,7 +303,7 @@ def probe_api(base_url: str, timeout: float) -> dict[str, Any]:
             "latency_seconds": round(time.perf_counter() - started, 3),
             "error": f"HTTP {exc.code}",
         }
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         return {
             "ok": False,
             "status_code": None,
@@ -472,9 +473,7 @@ def probe_certificates() -> dict[str, Any]:
         cert_file = cert_dir / "fullchain.pem"
         if not cert_file.exists():
             continue
-        code, stdout, _ = _run(
-            ["openssl", "x509", "-enddate", "-noout", "-in", str(cert_file)]
-        )
+        code, stdout, _ = _run(["openssl", "x509", "-enddate", "-noout", "-in", str(cert_file)])
         if code == 0 and "=" in stdout:
             certs.append({"name": cert_dir.name, "not_after": stdout.split("=", 1)[1]})
     return {"available": True, "certificates": certs}
@@ -499,7 +498,7 @@ def probe_database() -> dict[str, Any]:
             session.execute(text("SELECT 1")).scalar()
         out["ok"] = True
         out["query_seconds"] = round(time.perf_counter() - started, 4)
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         out["ok"] = False
         out["query_seconds"] = round(time.perf_counter() - started, 4)
         out["error"] = str(exc)
@@ -509,7 +508,7 @@ def probe_database() -> dict[str, Any]:
             result = session.execute(text("PRAGMA integrity_check")).scalar()
         out["integrity"] = result
         out["integrity_ok"] = result == "ok"
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         out["integrity"] = None
         out["integrity_ok"] = None
         out["integrity_error"] = str(exc)
@@ -550,7 +549,7 @@ def collect_server_snapshot(config) -> dict[str, Any]:
     for name, probe in probes.items():
         try:
             snapshot[name] = probe()
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             log.exception("Server probe %s failed", name)
             snapshot[name] = {"error": str(exc)}
 
@@ -570,11 +569,7 @@ def check_cpu(ctx: RuleContext) -> Iterable[Finding]:
     cpu = ctx.server.get("cpu") or {}
     value = cpu.get("percent")
     if value is None:
-        return [
-            unavailable(
-                "server.cpu", Subsystem.SERVER, "Server CPU", "psutil unavailable"
-            )
-        ]
+        return [unavailable("server.cpu", Subsystem.SERVER, "Server CPU", "psutil unavailable")]
 
     severity = ctx.threshold_severity(
         value, ctx.config.server.cpu_warning, ctx.config.server.cpu_critical
@@ -610,9 +605,7 @@ def check_memory(ctx: RuleContext) -> Iterable[Finding]:
     value = memory.get("percent")
     if value is None:
         return [
-            unavailable(
-                "server.memory", Subsystem.SERVER, "Server memory", "psutil unavailable"
-            )
+            unavailable("server.memory", Subsystem.SERVER, "Server memory", "psutil unavailable")
         ]
 
     severity = ctx.threshold_severity(
@@ -1101,7 +1094,9 @@ def check_database(ctx: RuleContext) -> Iterable[Finding]:
                     "Disk I/O saturation",
                 ],
                 suggested_commands=["iostat -x 1 3"],
-                suggested_actions=["A trivial query taking this long means contention, not query cost."],
+                suggested_actions=[
+                    "A trivial query taking this long means contention, not query cost."
+                ],
             )
         )
 

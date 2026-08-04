@@ -1,19 +1,30 @@
 from __future__ import annotations
 
-from typing import Any
-from datetime import datetime
-from zoneinfo import ZoneInfo
 import re
+from datetime import datetime
+from typing import Any
+from zoneinfo import ZoneInfo
+
 from bs4 import BeautifulSoup
 from playwright.sync_api import sync_playwright
 
-
-CFE_GDMTH_URL = "https://app.cfe.mx/Aplicaciones/CCFE/Tarifas/TarifasCRENegocio/Tarifas/GranDemandaMTH.aspx"
+CFE_GDMTH_URL = (
+    "https://app.cfe.mx/Aplicaciones/CCFE/Tarifas/TarifasCRENegocio/Tarifas/GranDemandaMTH.aspx"
+)
 
 MONTHS_ES = {
-    1: "ENE", 2: "FEB", 3: "MAR", 4: "ABR",
-    5: "MAY", 6: "JUN", 7: "JUL", 8: "AGO",
-    9: "SEP", 10: "OCT", 11: "NOV", 12: "DIC",
+    1: "ENE",
+    2: "FEB",
+    3: "MAR",
+    4: "ABR",
+    5: "MAY",
+    6: "JUN",
+    7: "JUL",
+    8: "AGO",
+    9: "SEP",
+    10: "OCT",
+    11: "NOV",
+    12: "DIC",
 }
 
 

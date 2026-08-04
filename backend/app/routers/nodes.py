@@ -1,12 +1,13 @@
 from datetime import datetime, timedelta
+
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.db import commissioning
-from app.services import deployment_ops as ops
 from app.db.database import get_db
-from app.db.models import Node, Deployment
+from app.db.models import Node
+from app.services import deployment_ops as ops
 
 router = APIRouter()
 
@@ -45,7 +46,6 @@ def _node_payload(db: Session, node: Node) -> dict:
     return {
         "id": node.code,
         "name": node.name,
-
         # Identity and authorization — independent of connectivity.
         "commission_state": node.commission_state,
         "commission_label": state.label if state else node.commission_state,
@@ -53,7 +53,6 @@ def _node_payload(db: Session, node: Node) -> dict:
         "is_monitored": state.is_monitored if state else False,
         "hardware_kind": node.hardware_kind,
         "measurement_context": node.measurement_context,
-
         # Runtime health — derived, never stored as an authority.
         "status": "online" if online else "offline",
         "online": online,
@@ -61,7 +60,6 @@ def _node_payload(db: Session, node: Node) -> dict:
         "buffer_pending": node.buffer_pending,
         "samples": node.samples,
         "ip": node.ip_address,
-
         # Location, stated explicitly. `current_deployment` is null whenever the
         # node is not actually deployed; it never falls back to the last one.
         "current_deployment": ops.deployment_summary(db, current),
@@ -136,17 +134,13 @@ def commission_history(code: str, db: Session = Depends(get_db)):
     return {
         "node_code": node.code,
         "current_state": node.commission_state,
-        "legal_transitions": list(
-            commissioning.legal_transitions_from(db, node.commission_state)
-        ),
+        "legal_transitions": list(commissioning.legal_transitions_from(db, node.commission_state)),
         "history": commissioning.history(db, node.id),
     }
 
 
 @router.post("/{code}/commission-state")
-def set_commission_state(
-    code: str, payload: CommissionTransition, db: Session = Depends(get_db)
-):
+def set_commission_state(code: str, payload: CommissionTransition, db: Session = Depends(get_db)):
     """Transition a node to a new commission state.
 
     The supported way to change ``commission_state``. An illegal move is
@@ -187,9 +181,7 @@ def set_commission_state(
                 "after": after.is_monitored if after else None,
             },
         },
-        "legal_transitions": list(
-            commissioning.legal_transitions_from(db, node.commission_state)
-        ),
+        "legal_transitions": list(commissioning.legal_transitions_from(db, node.commission_state)),
     }
 
 
@@ -218,16 +210,12 @@ def get_node_ratings(code: str, db: Session = Depends(get_db)):
 
     return {
         "node_code": node.code,
-        "ratings": {
-            field: getattr(node, field) for field in NodeRatings.model_fields
-        },
+        "ratings": {field: getattr(node, field) for field in NodeRatings.model_fields},
     }
 
 
 @router.put("/{code}/ratings")
-def set_node_ratings(
-    code: str, payload: NodeRatings, db: Session = Depends(get_db)
-):
+def set_node_ratings(code: str, payload: NodeRatings, db: Session = Depends(get_db)):
     """Record the physical ratings of a node's measurement hardware.
 
     Only fields present in the request body are written, so a partial update
@@ -240,16 +228,12 @@ def set_node_ratings(
     provided = payload.model_dump(exclude_unset=True)
     for field, value in provided.items():
         if value is not None and value <= 0:
-            raise HTTPException(
-                status_code=422, detail=f"{field} must be positive, got {value}"
-            )
+            raise HTTPException(status_code=422, detail=f"{field} must be positive, got {value}")
         setattr(node, field, value)
 
     db.commit()
     return {
         "node_code": node.code,
         "updated": sorted(provided),
-        "ratings": {
-            field: getattr(node, field) for field in NodeRatings.model_fields
-        },
+        "ratings": {field: getattr(node, field) for field in NodeRatings.model_fields},
     }

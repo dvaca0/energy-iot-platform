@@ -45,7 +45,6 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any
 
-from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.db.models import Deployment, EnergyReading, Node
@@ -127,7 +126,7 @@ def learned_baseline(
         from app.db import lifecycle as db_lifecycle
 
         operational = tuple(db_lifecycle.operational_statuses(session))
-    except Exception:  # noqa: BLE001
+    except Exception:
         operational = ()
 
     if not operational:
@@ -295,8 +294,8 @@ def describe(node: Node | None, deployment: Deployment | None) -> dict[str, Any]
 
 __all__ = [
     "CurrentThresholds",
-    "resolve_current_thresholds",
-    "physical_ceiling",
-    "learned_baseline",
     "describe",
+    "learned_baseline",
+    "physical_ceiling",
+    "resolve_current_thresholds",
 ]

@@ -44,6 +44,7 @@ DEFAULT_SETTINGS = {
     },
 }
 
+
 def deep_merge(base, incoming):
     result = deepcopy(base)
     for k, v in (incoming or {}).items():
@@ -52,6 +53,7 @@ def deep_merge(base, incoming):
         else:
             result[k] = v
     return result
+
 
 #: Cached merged settings, keyed on the file's (mtime_ns, size).
 #:
@@ -102,10 +104,12 @@ def get_platform_settings():
     _CACHE["value"] = merged
     return merged
 
+
 def save_platform_settings(payload):
     merged = deep_merge(get_platform_settings(), payload or {})
     SETTINGS_FILE.write_text(json.dumps(merged, indent=2, ensure_ascii=False))
     return merged
+
 
 def get_thresholds():
     return get_platform_settings()["thresholds"]

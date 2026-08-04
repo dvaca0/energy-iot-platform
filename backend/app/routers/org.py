@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from app.db.database import get_db
-from app.db.models import Delegation, Campus, OrganizationalUnit, Building, ElectricalPanel
+from app.db.models import Building, Campus, Delegation, ElectricalPanel, OrganizationalUnit
 
 router = APIRouter()
 

@@ -31,6 +31,7 @@ CRITICAL.
 Evaluation covers the whole scope window (a deployment's measuring period) in
 one conditional aggregate per node, rather than loading readings into Python.
 """
+
 from __future__ import annotations
 
 from datetime import datetime, timedelta
@@ -78,7 +79,7 @@ def _rule_definitions() -> list[dict]:
             # The load guard lives in the predicate, so an idle reading is not a
             # breach for either the current test or the historical one.
             "sql": "power_factor IS NOT NULL AND power_factor < :min_pf "
-                   "AND current IS NOT NULL AND current >= :min_load",
+            "AND current IS NOT NULL AND current >= :min_load",
             "test": lambda r: (
                 r.power_factor is not None
                 and r.current is not None
@@ -116,22 +117,19 @@ def _rule_definitions() -> list[dict]:
             # Correcting it changes which readings qualify, so it is left as-is
             # and reported separately rather than folded into this change.
             "sql": "power_kw IS NOT NULL AND power_kw > :night_kw "
-                   "AND CAST(strftime('%H', timestamp) AS INTEGER) < 6",
+            "AND CAST(strftime('%H', timestamp) AS INTEGER) < 6",
             "test": lambda r: (
-                r.power_kw is not None
-                and r.timestamp.hour < 6
-                and r.power_kw > NIGHT_POWER_KW
+                r.power_kw is not None and r.timestamp.hour < 6 and r.power_kw > NIGHT_POWER_KW
             ),
             "value": lambda r: r.power_kw,
-            "describe": lambda b, v: (
-                f"{b}: power is {v:.2f} kW outside normal operating hours."
-            ),
+            "describe": lambda b, v: (f"{b}: power is {v:.2f} kW outside normal operating hours."),
         },
     ]
 
 
-def _last_breach_sql(db: Session, rules: list[dict], node_id: int,
-                     deployment_id: int | None) -> tuple[str, dict]:
+def _last_breach_sql(
+    db: Session, rules: list[dict], node_id: int, deployment_id: int | None
+) -> tuple[str, dict]:
     """One conditional aggregate: the last breach timestamp for every rule."""
     contexts = scope.analytic_contexts(db)
     thresholds = get_thresholds()
@@ -155,8 +153,7 @@ def _last_breach_sql(db: Session, rules: list[dict], node_id: int,
         binds["deployment_id"] = int(deployment_id)
 
     selects = ",\n               ".join(
-        f"MAX(CASE WHEN {rule['sql']} THEN timestamp END) AS {rule['key']}_last"
-        for rule in rules
+        f"MAX(CASE WHEN {rule['sql']} THEN timestamp END) AS {rule['key']}_last" for rule in rules
     )
     sql = f"""
         SELECT {selects}
@@ -192,10 +189,14 @@ def _first_reading_after(db: Session, node_id: int, stamp, deployment_id: int | 
 def detect_node_anomalies(db: Session, node: Node, deployment_id: int | None = None):
     anomalies = []
 
-    latest = deployment_scope.scope_readings(
-        scope.production_readings(db).filter(EnergyReading.node_id == node.id),
-        deployment_id,
-    ).order_by(EnergyReading.timestamp.desc()).first()
+    latest = (
+        deployment_scope.scope_readings(
+            scope.production_readings(db).filter(EnergyReading.node_id == node.id),
+            deployment_id,
+        )
+        .order_by(EnergyReading.timestamp.desc())
+        .first()
+    )
 
     if not latest:
         return anomalies
@@ -228,28 +229,32 @@ def detect_node_anomalies(db: Session, node: Node, deployment_id: int | None = N
             continue
 
         reference_value = current_value if currently else previous_value
-        anomalies.append({
-            # --- fields the previous response already carried -------------
-            "severity": rule["severity"],
-            "category": rule["category"],
-            "node_id": node.code,
-            "building": building_name,
-            "title": rule["title"],
-            "description": (rule["describe"](building_name, reference_value)
-                            if reference_value is not None else rule["title"]),
-            "value": reference_value,
-            "threshold": rule["threshold"],
-            "timestamp": (latest.timestamp if currently else previous_at).isoformat(),
-
-            # --- recovery tracking, added --------------------------------
-            "status": status,
-            "current_value": current_value,
-            "current_at": latest.timestamp.isoformat(),
-            "previous_value": previous_value,
-            "previous_at": previous_at.isoformat() if previous_at else None,
-            "recovered_at": recovered_at.isoformat() if recovered_at else None,
-            "unit": rule["unit"],
-        })
+        anomalies.append(
+            {
+                # --- fields the previous response already carried -------------
+                "severity": rule["severity"],
+                "category": rule["category"],
+                "node_id": node.code,
+                "building": building_name,
+                "title": rule["title"],
+                "description": (
+                    rule["describe"](building_name, reference_value)
+                    if reference_value is not None
+                    else rule["title"]
+                ),
+                "value": reference_value,
+                "threshold": rule["threshold"],
+                "timestamp": (latest.timestamp if currently else previous_at).isoformat(),
+                # --- recovery tracking, added --------------------------------
+                "status": status,
+                "current_value": current_value,
+                "current_at": latest.timestamp.isoformat(),
+                "previous_value": previous_value,
+                "previous_at": previous_at.isoformat() if previous_at else None,
+                "recovered_at": recovered_at.isoformat() if recovered_at else None,
+                "unit": rule["unit"],
+            }
+        )
 
     # Demand spike is a transient by construction — it compares the newest
     # reading against its own trailing average. There is no meaningful
@@ -263,14 +268,18 @@ def detect_node_anomalies(db: Session, node: Node, deployment_id: int | None = N
 
 def _demand_spike(db, node, latest, building_name, deployment_id):
     start = datetime.utcnow() - timedelta(hours=2)
-    readings = deployment_scope.scope_readings(
-        scope.production_readings(db).filter(
-            EnergyReading.node_id == node.id,
-            EnergyReading.timestamp >= start,
-            EnergyReading.power_kw.isnot(None),
-        ),
-        deployment_id,
-    ).order_by(EnergyReading.timestamp.asc()).all()
+    readings = (
+        deployment_scope.scope_readings(
+            scope.production_readings(db).filter(
+                EnergyReading.node_id == node.id,
+                EnergyReading.timestamp >= start,
+                EnergyReading.power_kw.isnot(None),
+            ),
+            deployment_id,
+        )
+        .order_by(EnergyReading.timestamp.asc())
+        .all()
+    )
 
     if len(readings) < 10:
         return None
@@ -290,7 +299,7 @@ def _demand_spike(db, node, latest, building_name, deployment_id):
         "building": building_name,
         "title": "Demand spike detected",
         "description": f"{building_name}: latest power {latest.power_kw:.2f} kW is above "
-                       f"the recent average of {avg_power:.2f} kW.",
+        f"the recent average of {avg_power:.2f} kW.",
         "value": latest.power_kw,
         "threshold": round(avg_power * 1.35, 3),
         "timestamp": latest.timestamp.isoformat(),

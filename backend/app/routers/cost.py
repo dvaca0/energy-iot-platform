@@ -3,8 +3,8 @@ from sqlalchemy.orm import Session
 
 from app.db.database import get_db
 from app.db.models import TariffPeriod
-from app.routers.metrics import tariff_metrics
 from app.routers.dashboard import dashboard_summary
+from app.routers.metrics import tariff_metrics
 
 router = APIRouter()
 
