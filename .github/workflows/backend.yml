@@ -1,0 +1,149 @@
+name: Backend
+
+on:
+  push:
+    branches: [main]
+    paths: ["backend/**", "edge/**", "monitoring/**", "scripts/**", "pyproject.toml", ".github/workflows/backend.yml"]
+  pull_request:
+    paths: ["backend/**", "edge/**", "monitoring/**", "scripts/**", "pyproject.toml", ".github/workflows/backend.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: backend-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: Lint and format
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # Linting needs no project dependencies, so it stays fast and cannot be
+      # broken by an unrelated dependency problem.
+      - name: Install tools
+        run: python -m pip install --upgrade pip ruff==0.8.4 black==24.10.0 isort==5.13.2
+
+      - name: ruff
+        run: ruff check backend/app backend/tests scripts
+
+      - name: black
+        run: black --check --diff backend/app backend/tests scripts
+
+      - name: isort
+        run: isort --check-only --diff backend/app backend/tests scripts
+
+  typecheck:
+    name: Type check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install
+        run: |
+          sudo apt-get update -qq
+          # WeasyPrint's rendering stack — the reports router imports it at
+          # module load, so the app will not import without these.
+          sudo apt-get install -y --no-install-recommends \
+            libpango-1.0-0 libpangoft2-1.0-0 libcairo2 libgdk-pixbuf-2.0-0 libffi-dev
+          python -m pip install --upgrade pip
+          python -m pip install -r backend/requirements.txt
+          python -m pip install mypy==1.14.0 types-requests
+
+      # Advisory, by decision rather than by neglect — see the rationale in
+      # pyproject.toml [tool.mypy]. The findings are surfaced in the job
+      # summary so they stay visible instead of being silently swallowed.
+      - name: mypy (advisory)
+        working-directory: backend
+        run: |
+          set +e
+          mypy app 2>&1 | tee /tmp/mypy.txt
+          echo "### mypy (advisory)" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          tail -30 /tmp/mypy.txt >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          exit 0
+
+  test:
+    name: Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            libpango-1.0-0 libpangoft2-1.0-0 libcairo2 libgdk-pixbuf-2.0-0 libffi-dev
+          python -m pip install --upgrade pip
+          python -m pip install -r backend/requirements.txt
+
+      # Plain-python assertion suites, not pytest: the deployment host has no
+      # pytest and the tests must be runnable there. Each writes to its own
+      # throwaway SQLite database.
+      #
+      # test_deployment_lifecycle is deliberately absent: it asserts against a
+      # copy of the live production database and cannot run on a fresh
+      # checkout. See docs/Development.md.
+      - name: Monitoring (329 checks)
+        run: python -m tests.test_monitoring
+        working-directory: backend
+
+      - name: Collector contract
+        run: python -m tests.test_collector
+        working-directory: backend
+
+      - name: Energy aggregation
+        run: python -m tests.test_energy_aggregate
+        working-directory: backend
+
+      - name: Smart plugs
+        run: python -m tests.test_smart_plugs
+        working-directory: backend
+
+      # The guarantee that monitoring did not go quiet because it stopped
+      # looking: a real 300 A overload past a 250 A breaker must still page.
+      - name: End-to-end alerting (synthetic campaign)
+        run: python -m tests.test_synthetic_deployment
+        working-directory: backend
+
+  api-docs:
+    name: API reference is current
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            libpango-1.0-0 libpangoft2-1.0-0 libcairo2 libgdk-pixbuf-2.0-0 libffi-dev
+          python -m pip install --upgrade pip
+          python -m pip install -r backend/requirements.txt
+
+      # Fails when a route exists but docs/API.md does not document it, or
+      # documents one that no longer exists.
+      - name: Check docs/API.md against the application
+        run: python scripts/check_api_docs.py

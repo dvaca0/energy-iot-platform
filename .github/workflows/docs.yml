@@ -1,0 +1,115 @@
+name: Documentation
+
+on:
+  push:
+    branches: [main]
+    paths: ["**/*.md", "assets/**", ".github/workflows/docs.yml"]
+  pull_request:
+    paths: ["**/*.md", "assets/**", ".github/workflows/docs.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: docs-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  links:
+    name: Internal links and images resolve
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Relative links between documents are the ones that rot, and they are
+      # the ones a reviewer clicks. External URLs are checked separately and
+      # non-blockingly, because a third-party site being down is not a defect
+      # in this repository.
+      - name: Check relative links and image paths
+        run: python3 scripts/check_links.py
+
+  mermaid:
+    name: Mermaid diagrams parse
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install mermaid-cli
+        run: npm install -g @mermaid-js/mermaid-cli@11
+
+      # Every diagram in this repository is Mermaid so it diffs as text. That
+      # only helps if the text is valid — a diagram that fails to parse renders
+      # on GitHub as a raw code block and nobody notices for months.
+      - name: Render every diagram
+        run: |
+          set -e
+          mkdir -p /tmp/mmd /tmp/out
+          python3 - <<'PY'
+          import pathlib, re
+          n = 0
+          for md in pathlib.Path('.').rglob('*.md'):
+              if any(p in md.parts for p in ('node_modules', 'venv', 'dist')):
+                  continue
+              for block in re.findall(r'```mermaid\n(.*?)```', md.read_text(encoding='utf-8'), re.S):
+                  n += 1
+                  pathlib.Path(f'/tmp/mmd/{n:03d}.mmd').write_text(block, encoding='utf-8')
+          print(f'extracted {n} diagrams')
+          PY
+          fail=0
+          for f in /tmp/mmd/*.mmd; do
+            if ! mmdc -i "$f" -o "/tmp/out/$(basename "$f").svg" >/dev/null 2>&1; then
+              echo "::error::Mermaid diagram failed to parse: $f"
+              head -5 "$f"
+              fail=1
+            fi
+          done
+          echo "$(ls /tmp/mmd | wc -l) diagrams checked"
+          exit $fail
+
+  assets:
+    name: Referenced assets exist
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # The screenshot manifest promises specific files under specific names,
+      # because the README and docs reference them directly. A renamed
+      # screenshot must not silently become a broken image.
+      - name: Check the screenshot set
+        run: |
+          missing=0
+          for n in 01-executive-dashboard 02-live-monitoring 03-node-infrastructure \
+                   04-deployments 05-smart-plugs 06-ai-center 07-cost-analysis \
+                   08-data-explorer 09-data-mining 10-reports 11-buildings \
+                   12-campus-map 13-settings 14-login 15-deployment-selector; do
+            if [ ! -f "assets/screenshots/$n.png" ]; then
+              echo "::error::missing assets/screenshots/$n.png (see MANIFEST.md)"
+              missing=1
+            fi
+          done
+          for f in logo.svg logo-mark.svg favicon.svg hero.svg social-preview.png; do
+            [ -f "assets/branding/$f" ] || { echo "::error::missing assets/branding/$f"; missing=1; }
+          done
+          exit $missing
+
+  external-links:
+    name: External links (advisory)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - name: lychee
+        uses: lycheeverse/lychee-action@v2
+        with:
+          args: >-
+            --no-progress --max-concurrency 4 --timeout 20 --accept 200,206,429
+            --exclude-path node_modules --exclude-path backend/venv
+            --exclude '^https?://(127\.0\.0\.1|localhost)'
+            --exclude 'github\.com/dvaca0/energy-iot-platform'
+            './**/*.md'
+          fail: false

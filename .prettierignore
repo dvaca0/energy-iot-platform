@@ -1,0 +1,8 @@
+node_modules
+dist
+build
+venv
+*.min.*
+package-lock.json
+frontend/public
+assets/branding/*.svg

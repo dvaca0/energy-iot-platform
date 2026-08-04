@@ -1,0 +1,17 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 🔒 Report a security vulnerability
+    url: https://github.com/dvaca0/energy-iot-platform/security/advisories/new
+    about: Report privately. Never open a public issue for a security problem.
+
+  - name: 💬 Ask a question or share a deployment
+    url: https://github.com/dvaca0/energy-iot-platform/discussions
+    about: Questions, ideas and show-and-tell belong in Discussions, not issues.
+
+  - name: 📖 Troubleshooting guide
+    url: https://github.com/dvaca0/energy-iot-platform/blob/main/docs/Troubleshooting.md
+    about: Symptom-first diagnostics. Please check here before filing a bug.
+
+  - name: 📚 Documentation
+    url: https://github.com/dvaca0/energy-iot-platform/blob/main/docs/README.md
+    about: Architecture, deployment, hardware, monitoring and API reference.

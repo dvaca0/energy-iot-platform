@@ -1,0 +1,87 @@
+name: Feature request
+description: Propose a capability or an improvement
+labels: ["enhancement", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please open this **before** writing a large change. A substantial
+        unsolicited PR is likely to be declined on scope alone — see
+        [CONTRIBUTING.md](../blob/main/CONTRIBUTING.md).
+
+  - type: dropdown
+    id: component
+    attributes:
+      label: Component
+      options:
+        - Backend (FastAPI)
+        - Frontend (React dashboard)
+        - Edge collector / smart plugs
+        - Monitoring and alerting
+        - AI / forecasting
+        - Database / migrations
+        - Documentation
+        - Cross-cutting
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: |
+        What can you not do today? Describe the situation, not the solution —
+        the best fix is often not the one first imagined.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed approach
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+
+  - type: checkboxes
+    id: constraints
+    attributes:
+      label: Constraints this proposal touches
+      description: |
+        These are the platform's non-negotiable rules. Tick anything your
+        proposal interacts with, and explain below how it stays compatible.
+      options:
+        - label: Adds hardware-specific logic to the backend (the collector contract forbids this)
+        - label: Changes the meaning of an existing measurement field (historical data cannot be re-collected)
+        - label: Adds or changes a monitoring threshold or alert route
+        - label: Requires a database migration
+        - label: Requires nodes and backend to be updated in lockstep
+        - label: None of the above
+
+  - type: textarea
+    id: alerting
+    attributes:
+      label: If this adds or changes alerting
+      description: |
+        Answer all four. See
+        [docs/Monitoring.md](../blob/main/docs/Monitoring.md).
+      value: |
+        1. Gated on deployment state?
+        2. Threshold outside the normal operating range, derived from a physical rating?
+        3. Sustain window and hysteresis?
+        4. Would you get out of bed for it at 3 a.m.? If not, it is report-only.
+
+  - type: dropdown
+    id: contributing
+    attributes:
+      label: Would you like to implement this?
+      options:
+        - "Yes"
+        - "Maybe, with guidance"
+        - "No — proposing only"
+    validations:
+      required: true
