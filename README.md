@@ -26,7 +26,7 @@ synchronise to a FastAPI backend that attributes, analyses, forecasts and watche
 [![Security](https://github.com/dvaca0/energy-iot-platform/actions/workflows/security.yml/badge.svg)](https://github.com/dvaca0/energy-iot-platform/actions/workflows/security.yml)
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-1.1.0-blue.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.2.0-blue.svg)](CHANGELOG.md)
 [![Last commit](https://img.shields.io/github/last-commit/dvaca0/energy-iot-platform)](https://github.com/dvaca0/energy-iot-platform/commits/main)
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 [![Conventional Commits](https://img.shields.io/badge/commits-conventional-FE5196?logo=conventionalcommits&logoColor=white)](https://www.conventionalcommits.org/)

@@ -1,6 +1,6 @@
 [project]
 name = "energy-iot-platform"
-version = "1.1.0"
+version = "1.2.0"
 description = "Distributed energy monitoring, forecasting and alerting for university campuses"
 readme = "README.md"
 requires-python = ">=3.11"

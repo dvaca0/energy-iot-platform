@@ -16,27 +16,88 @@ Component changelogs with finer detail:
 
 ## [Unreleased]
 
+Nothing yet.
+
+---
+
+## [1.2.0] — 2026-08-04 — Public repository
+
+The platform brought under a single version-controlled repository, with the
+documentation, quality gates and provenance a reader needs to evaluate it.
+**No application behaviour changed.**
+
 ### Added
 
-- Public repository structure: documentation set, brand assets, CI workflows,
-  issue and PR templates, contribution and security policy.
-- `scripts/gen_api_docs.py` and `scripts/check_api_docs.py` — the API reference
-  is generated from the running OpenAPI schema and verified in CI, so an
-  undocumented route fails the build.
+- **Documentation set** — 18 documents and 12 Mermaid diagrams covering
+  architecture, backend, frontend, collector, database, hardware, monitoring,
+  AI, smart plugs, networking, security, deployment, recovery, versioning,
+  troubleshooting, development and the API.
+- **Brand identity** — SVG sources, rasterised PNGs and a reproducible
+  generator (`assets/branding/generate_raster.py`).
+- **Screenshot gallery** — 15 application screens with a manifest specifying
+  capture settings and the outstanding hardware photographs.
+- **CI** — six workflows: backend lint/type/test, frontend build, documentation
+  link and diagram validation, security scanning (gitleaks, pip-audit, npm
+  audit, CodeQL), commitlint, and a release drafter.
+- **`scripts/check_api_docs.py`** — fails the build when a route exists that
+  `docs/API.md` does not document, or vice versa. The API reference is generated
+  from the running OpenAPI schema rather than written by hand.
+- **`scripts/check_links.py`** — verifies every relative link and heading anchor
+  across the documentation resolves.
+- Community health files: `SECURITY.md`, `CONTRIBUTING.md`,
+  `CODE_OF_CONDUCT.md`, issue and PR templates, `CODEOWNERS`, Dependabot.
+- Tooling: `pyproject.toml` (ruff, black, isort, mypy),
+  `.pre-commit-config.yaml`, `.editorconfig`, Prettier, commitlint, `Makefile`.
+
+### Fixed
+
+- **Two test suites were passing vacuously.** Both fixtures predated migration
+  010, which introduced `activated_at` / `closed_at` as the marker for the
+  campaign currently measuring a building. Setting only `status` meant no
+  deployment was ever found — so in `test_synthetic_deployment` the node read as
+  having no operational deployment and every electrical rule was correctly
+  suppressed. The suite whose entire purpose is to prove monitoring did not go
+  quiet because it stopped looking was itself not exercising that path.
+
+  | Suite | Before | After |
+  |---|---|---|
+  | `test_synthetic_deployment` | 5 passed / 6 failed | **18 passed / 0 failed** |
+  | `test_smart_plugs` | 52 passed / 1 failed | **53 passed / 0 failed** |
+
+  The end-to-end path now genuinely runs: 300 A past a 250 A breaker is
+  detected, the threshold comes from the panel rating rather than statistics,
+  the sustain window suppresses it, it pages as EMERGENCY once sustained, and
+  completing the campaign closes the alert rather than leaving it hanging.
+
+- **The test suites could only run on the deployment host.** Every one of them
+  hardcoded `/home/manager/energy-platform`. Paths now derive from `__file__`.
 
 ### Changed
 
 - The frontend's 59 commits (2026-06-14 → 06-19) were rewritten under a
-  `frontend/` path prefix and merged into this repository, preserving their
-  original authorship and dates.
+  `frontend/` path prefix and merged, preserving their original authorship and
+  dates. `git log frontend/` reaches back to the first React migration commit.
+- The Python codebase formatted with black, isort and ruff (140 findings fixed
+  automatically), applied as an isolated commit.
+- `frontend/public/energy-platform-professional.html` — the June 2026 phase-1
+  prototype — moved to `docs/prototype/`. Sitting in `public/` meant the
+  production static server published an unreferenced, unmaintained page that
+  loaded React from a CDN, on the same origin as the live dashboard.
+- `frontend/README.md` replaced; it was still Vite's default template text.
 
 ### Known gaps
 
-- Ingestion endpoints remain unauthenticated — see
-  [docs/Security.md](docs/Security.md).
+Documented rather than deferred — see
+[README § Known limitations](README.md#known-limitations).
+
+- Ingestion endpoints remain unauthenticated
+  ([docs/Security.md](docs/Security.md)).
 - The base measurement collector is still maintained on the devices rather than
   in this repository.
-- The frontend has no test suite.
+- The frontend has no test suite; ESLint reports 36 pre-existing findings.
+- mypy is advisory: 45 findings in `app/monitoring` alone.
+- `test_deployment_lifecycle` asserts against a copy of the live production
+  database and cannot run in CI.
 
 ---
 
@@ -193,7 +254,8 @@ rather than back-attributed — see
 
 ---
 
-[Unreleased]: https://github.com/dvaca0/energy-iot-platform/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/dvaca0/energy-iot-platform/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/dvaca0/energy-iot-platform/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/dvaca0/energy-iot-platform/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/dvaca0/energy-iot-platform/compare/v0.3.0...v1.0.0
 [0.3.0]: https://github.com/dvaca0/energy-iot-platform/compare/v0.2.0...v0.3.0
