@@ -1,0 +1,106 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 360" width="1280" height="360" role="img"
+     aria-label="Energy IQ — distributed energy monitoring for university campuses">
+  <defs>
+    <linearGradient id="hero-sky" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%"   stop-color="#0B1120"/>
+      <stop offset="55%"  stop-color="#111C33"/>
+      <stop offset="100%" stop-color="#0B1120"/>
+    </linearGradient>
+    <linearGradient id="hero-mark" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#3B82F6"/>
+      <stop offset="100%" stop-color="#1D4ED8"/>
+    </linearGradient>
+    <linearGradient id="hero-trace" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%"   stop-color="#3B82F6" stop-opacity="0"/>
+      <stop offset="18%"  stop-color="#3B82F6" stop-opacity="0.85"/>
+      <stop offset="72%"  stop-color="#F59E0B" stop-opacity="0.85"/>
+      <stop offset="100%" stop-color="#F59E0B" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="hero-fill" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%"   stop-color="#3B82F6" stop-opacity="0.16"/>
+      <stop offset="100%" stop-color="#3B82F6" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="1280" height="360" fill="url(#hero-sky)"/>
+
+  <!-- Faint measurement grid -->
+  <g stroke="#FFFFFF" stroke-opacity="0.04" stroke-width="1">
+    <path d="M0 90h1280M0 180h1280M0 270h1280"/>
+    <path d="M160 0v360M320 0v360M480 0v360M640 0v360M800 0v360M960 0v360M1120 0v360"/>
+  </g>
+
+  <!-- Load curve: a day of real campus demand, stylised -->
+  <path d="M0 300 C 90 296, 150 292, 210 286 S 320 268, 400 236 S 500 176, 570 168
+           S 660 196, 720 186 S 820 132, 900 148 S 1010 214, 1090 238
+           S 1200 268, 1280 276 L1280 360 L0 360 Z" fill="url(#hero-fill)"/>
+  <path d="M0 300 C 90 296, 150 292, 210 286 S 320 268, 400 236 S 500 176, 570 168
+           S 660 196, 720 186 S 820 132, 900 148 S 1010 214, 1090 238
+           S 1200 268, 1280 276"
+        fill="none" stroke="url(#hero-trace)" stroke-width="2.5" stroke-linecap="round"/>
+
+  <!-- Sampled points -->
+  <g fill="#93C5FD" fill-opacity="0.9">
+    <circle cx="400" cy="236" r="3"/><circle cx="570" cy="168" r="3"/>
+    <circle cx="720" cy="186" r="3"/><circle cx="900" cy="148" r="3.5" fill="#FBBF24"/>
+    <circle cx="1090" cy="238" r="3"/>
+  </g>
+
+  <!-- Logo mark -->
+  <g transform="translate(80 96) scale(0.82)">
+    <rect x="0" y="0" width="92" height="92" rx="24" fill="url(#hero-mark)"/>
+    <path d="M12 64 L24 64 L30 50 L36 72 L42 58 L48 58"
+          fill="none" stroke="#BFDBFE" stroke-opacity="0.55"
+          stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M54 14 L30 50 L44 50 L38 78 L64 40 L49 40 Z" fill="#FFFFFF"/>
+  </g>
+
+  <g font-family="Inter, 'Segoe UI', system-ui, -apple-system, sans-serif">
+    <text x="180" y="150" font-size="52" font-weight="800" fill="#F8FAFC" letter-spacing="-1.4">Energy IQ</text>
+    <text x="184" y="190" font-size="18" font-weight="500" fill="#94A3B8" letter-spacing="0.2">
+      Distributed energy monitoring and forecasting for university campuses
+    </text>
+
+    <!-- Capability chips -->
+    <g font-size="12.5" font-weight="600" letter-spacing="0.4">
+      <g transform="translate(184 214)">
+        <rect width="132" height="28" rx="14" fill="#3B82F6" fill-opacity="0.14" stroke="#3B82F6" stroke-opacity="0.35"/>
+        <text x="66" y="18.5" text-anchor="middle" fill="#93C5FD">Raspberry Pi edge</text>
+      </g>
+      <g transform="translate(326 214)">
+        <rect width="104" height="28" rx="14" fill="#3B82F6" fill-opacity="0.14" stroke="#3B82F6" stroke-opacity="0.35"/>
+        <text x="52" y="18.5" text-anchor="middle" fill="#93C5FD">FastAPI</text>
+      </g>
+      <g transform="translate(440 214)">
+        <rect width="96" height="28" rx="14" fill="#3B82F6" fill-opacity="0.14" stroke="#3B82F6" stroke-opacity="0.35"/>
+        <text x="48" y="18.5" text-anchor="middle" fill="#93C5FD">React 19</text>
+      </g>
+      <g transform="translate(546 214)">
+        <rect width="150" height="28" rx="14" fill="#F59E0B" fill-opacity="0.13" stroke="#F59E0B" stroke-opacity="0.35"/>
+        <text x="75" y="18.5" text-anchor="middle" fill="#FCD34D">39 health rules</text>
+      </g>
+    </g>
+
+    <!-- Live figures. Update these together with README.md. -->
+    <g transform="translate(880 96)">
+      <g font-size="11.5" font-weight="600" fill="#64748B" letter-spacing="1.6">
+        <text x="0"   y="0">MEASUREMENTS</text>
+        <text x="150" y="0">NODES</text>
+        <text x="240" y="0">API ROUTES</text>
+      </g>
+      <g font-size="30" font-weight="700" fill="#E2E8F0">
+        <text x="0"   y="34">255K</text>
+        <text x="150" y="34">3</text>
+        <text x="240" y="34">90</text>
+      </g>
+      <g font-size="11.5" font-weight="600" fill="#64748B" letter-spacing="1.6">
+        <text x="0"   y="76">CADENCE</text>
+        <text x="150" y="76">UPTIME BASIS</text>
+      </g>
+      <g font-size="30" font-weight="700" fill="#E2E8F0">
+        <text x="0"   y="110">15s</text>
+        <text x="150" y="110">45s</text>
+      </g>
+    </g>
+  </g>
+</svg>

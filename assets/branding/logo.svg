@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 420 96" width="420" height="96" role="img" aria-label="Energy IQ — UCOL Platform">
+  <defs>
+    <linearGradient id="logo-bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#3B82F6"/>
+      <stop offset="100%" stop-color="#1D4ED8"/>
+    </linearGradient>
+    <linearGradient id="logo-bolt" x1="0.2" y1="0" x2="0.8" y2="1">
+      <stop offset="0%" stop-color="#FFFFFF"/>
+      <stop offset="100%" stop-color="#DBEAFE"/>
+    </linearGradient>
+  </defs>
+
+  <rect x="2" y="2" width="92" height="92" rx="24" fill="url(#logo-bg)"/>
+  <path d="M14 66 L26 66 L32 52 L38 74 L44 60 L50 60"
+        fill="none" stroke="#BFDBFE" stroke-opacity="0.55"
+        stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M56 16 L32 52 L46 52 L40 80 L66 42 L51 42 Z" fill="url(#logo-bolt)"/>
+
+  <g font-family="Inter, 'Segoe UI', system-ui, -apple-system, sans-serif">
+    <text x="118" y="48" font-size="34" font-weight="700"
+          fill="currentColor" letter-spacing="-0.6">Energy IQ</text>
+    <text x="119" y="72" font-size="13" font-weight="600"
+          fill="currentColor" fill-opacity="0.62" letter-spacing="3.4">UCOL PLATFORM</text>
+  </g>
+</svg>
