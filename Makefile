@@ -15,7 +15,7 @@ NPM := npm --prefix frontend
 SUITES := monitoring collector energy_aggregate smart_plugs synthetic_deployment
 
 .DEFAULT_GOAL := help
-.PHONY: help setup dev build test lint format check docs-check mermaid api-docs \
+.PHONY: help setup dev build test lint format check docs-check mermaid api-docs deps-check \
         clean reload backup dev-ui
 
 help:  ## Show this help
@@ -66,10 +66,13 @@ mermaid:  ## Verify every Mermaid diagram parses
 	@test -d scripts/mermaid/node_modules || npm --prefix scripts/mermaid install --no-audit --no-fund
 	node scripts/mermaid/check_mermaid.mjs .
 
+deps-check:  ## Verify every backend import is declared in requirements
+	python3 scripts/check_requirements.py
+
 api-docs:  ## Verify docs/API.md still matches the application
 	$(PY) scripts/check_api_docs.py
 
-check: lint test docs-check mermaid api-docs  ## Everything CI runs
+check: lint deps-check test docs-check mermaid api-docs  ## Everything CI runs
 
 backup:  ## Safe database backup — never use cp on a WAL database
 	@mkdir -p backups

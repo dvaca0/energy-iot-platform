@@ -40,6 +40,12 @@ jobs:
       - name: isort
         run: isort --check-only --diff backend/app backend/tests scripts
 
+      # Catches an import that a developer's virtualenv happens to satisfy but
+      # a clean install does not. This found google-generativeai-vs-google-genai,
+      # playwright and psutil the first time it ran.
+      - name: Dependencies are declared
+        run: python scripts/check_requirements.py
+
   typecheck:
     name: Type check
     runs-on: ubuntu-latest

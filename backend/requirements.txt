@@ -1,18 +1,53 @@
+# Runtime dependencies. Development and CI extras are in requirements-dev.txt.
+#
+# Deliberately unpinned: this deploys to one server and a handful of Pis that
+# are upgraded together, and Dependabot raises the upgrade PRs. If this ever
+# ships to more than one operator, pin it.
+
+# ── Web ──────────────────────────────────────────────────────────────────────
 fastapi
 uvicorn[standard]
 gunicorn
-sqlalchemy
 pydantic
 python-dotenv
-requests
-beautifulsoup4
+
+# ── Data ─────────────────────────────────────────────────────────────────────
+sqlalchemy
 pandas
 numpy
+
+# ── System probes ────────────────────────────────────────────────────────────
+# app/monitoring/health.py reads CPU, memory, disk and load through psutil for
+# the 15 server health rules.
+psutil
+
+# ── Machine learning ─────────────────────────────────────────────────────────
+# Forecasting (RandomForest), anomaly detection (IsolationForest) and building
+# clustering (KMeans), all run locally. See docs/AI.md.
 scikit-learn
 joblib
-google-genai
+
+# ── CFE tariff scraping ──────────────────────────────────────────────────────
+# app/services/cfe_scraper.py imports playwright at module load and the router
+# graph pulls that module in, so the application does not import without it.
+# The browser binaries are only needed to actually scrape:
+#     python -m playwright install chromium
+requests
+beautifulsoup4
+playwright
+
+# ── Reporting ────────────────────────────────────────────────────────────────
+# WeasyPrint needs a system rendering stack:
+#     libpango-1.0-0 libpangoft2-1.0-0 libcairo2 libgdk-pixbuf-2.0-0
 weasyprint
 jinja2
 markdown
 reportlab
 openpyxl
+
+# ── Optional LLM narration ───────────────────────────────────────────────────
+# The google-genai SDK, which provides `from google import genai`. This is NOT
+# google-generativeai, the legacy package — that one provides
+# `google.generativeai` and the application cannot import against it.
+# Disabled entirely by LLM_ENABLED=0; the statistical models are unaffected.
+google-genai
