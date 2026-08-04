@@ -1,0 +1,160 @@
+[project]
+name = "energy-iot-platform"
+version = "1.1.0"
+description = "Distributed energy monitoring, forecasting and alerting for university campuses"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { file = "LICENSE" }
+authors = [{ name = "dvaca0" }]
+keywords = [
+    "iot", "energy-monitoring", "raspberry-pi", "edge-computing",
+    "fastapi", "time-series", "forecasting", "distributed-systems",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Framework :: FastAPI",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering",
+    "Topic :: System :: Monitoring",
+]
+
+[project.urls]
+Homepage = "https://github.com/dvaca0/energy-iot-platform"
+Documentation = "https://github.com/dvaca0/energy-iot-platform/blob/main/docs/README.md"
+Issues = "https://github.com/dvaca0/energy-iot-platform/issues"
+Changelog = "https://github.com/dvaca0/energy-iot-platform/blob/main/CHANGELOG.md"
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  Formatting
+# ─────────────────────────────────────────────────────────────────────────────
+[tool.black]
+line-length = 100
+target-version = ["py312"]
+extend-exclude = '''
+/(
+    \.venv | venv | migrations/versions | .*_backup_.* | node_modules
+)/
+'''
+
+[tool.isort]
+profile = "black"
+line_length = 100
+skip_glob = ["**/venv/*", "**/node_modules/*", "**/*_backup_*/*"]
+# The suites set sys.path and chdir before importing the application, so their
+# imports are ordered by dependency, not alphabetically. Sorting them across
+# that boundary breaks every suite.
+skip = ["backend/tests/test_collector.py", "backend/tests/test_smart_plugs.py",
+        "backend/tests/test_monitoring.py", "backend/tests/test_synthetic_deployment.py",
+        "backend/tests/test_deployment_lifecycle.py"]
+known_first_party = ["app", "tests", "migrations"]
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  Linting
+# ─────────────────────────────────────────────────────────────────────────────
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+extend-exclude = ["venv", ".venv", "node_modules", "*_backup_*", "frontend"]
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "W",    # pycodestyle warnings
+    "F",    # pyflakes
+    "I",    # isort
+    "B",    # flake8-bugbear
+    "C4",   # comprehensions
+    "UP",   # pyupgrade
+    "SIM",  # flake8-simplify
+    "RUF",  # ruff-specific
+]
+ignore = [
+    # ── Required by the libraries in use ─────────────────────────────────────
+    "E501",    # line length is black's job
+    "B008",    # FastAPI's Depends() in a default is the documented idiom
+    "E712",    # `Column == True` is how SQLAlchemy builds a SQL predicate.
+               # ruff's suggested `if Column:` produces a Python bool and
+               # silently breaks the query.
+    "RUF012",  # ClassVar on mutable defaults — noise on every ORM model
+
+    # ── Deliberate in this codebase ──────────────────────────────────────────
+    "RUF001",  # "ambiguous" unicode: the UI strings are Spanish and the
+    "RUF003",  # comments use typographic punctuation (— · →) on purpose.
+
+    # ── Style preferences, not defects ───────────────────────────────────────
+    "SIM108",  # ternary-vs-if is a readability call
+    "SIM102",  # collapsible if
+    "SIM103",  # needless bool
+    "SIM105",  # contextlib.suppress over try/except/pass
+    "C408",    # dict() over {} — the call form reads better with kwargs here
+    "C401",    # generator vs set comprehension
+    "RUF015",  # next(iter(x)) over x[0]
+    "B905",    # zip(strict=) — the call sites pair equal-length sequences
+    "B007",    # unused loop variable
+    "UP047",   # PEP 695 generics — would drop support below 3.12
+
+    # ── Accepted technical debt ──────────────────────────────────────────────
+    # Pre-existing at the time linting was adopted. Enabling these would mean
+    # editing working application logic in the same change that introduced the
+    # linter, which is how formatting commits turn into outages. They are
+    # tracked on the roadmap rather than silently discarded:
+    #
+    #   F841  15 unused locals. Most are `suppressed` counters in
+    #         monitoring/metrics.py; three in routers/dashboard.py
+    #         (yesterday_kwh, prev_week_kwh, days_elapsed) look like an
+    #         unfinished comparison feature and deserve a real read.
+    #   B904  6 `raise` inside `except` without `from` — worth fixing for
+    #         traceback quality.
+    #   E722  1 bare except in ml_engine.py.
+    #   SIM115 2 files opened without a context manager.
+    "F841",
+    "B904",
+    "E722",
+    "SIM115",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# The suites are scripts: module-level fixtures run at import, and imports are
+# deliberately placed after sys.path and env setup.
+"backend/tests/*" = ["E402", "F401", "T201"]
+# `load_dotenv` must run before any router is imported, and the settings router
+# resolves its config at import time. The order is the behaviour.
+"backend/app/main.py" = ["E402"]
+"backend/app/routers/settings.py" = ["E402"]
+# Migrations are historical records. They are never reformatted or "improved" —
+# a migration that ran in production is frozen.
+"backend/migrations/versions/*" = ["ALL"]
+"scripts/*" = ["T201"]
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  Type checking
+# ─────────────────────────────────────────────────────────────────────────────
+[tool.mypy]
+python_version = "3.12"
+warn_return_any = false
+warn_unused_configs = true
+ignore_missing_imports = true
+exclude = '(venv|node_modules|.*_backup_.*|migrations/versions)'
+
+# The codebase predates type annotation as a standing requirement, so mypy is
+# **advisory**: CI reports its findings and does not fail on them.
+#
+# This is a deliberate, temporary position rather than an aspiration. Turning
+# `disallow_untyped_defs` on today produces 45 errors in `app/monitoring` alone
+# — mostly missing return annotations on route handlers. Failing the build on
+# them would mean either annotating the live alerting subsystem in the same
+# change that introduced the type checker, or adding a repository-wide
+# `# type: ignore`, and both are worse than saying plainly that the codebase is
+# not yet fully typed.
+#
+# The path forward is per-module: annotate a module, then add it to a strict
+# override below. New modules should be written annotated from the start.
+check_untyped_defs = true
+disallow_untyped_defs = false
+disallow_incomplete_defs = false
+
+[[tool.mypy.overrides]]
+module = ["tests.*", "migrations.*"]
+ignore_errors = true

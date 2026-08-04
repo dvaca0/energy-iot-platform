@@ -1,0 +1,72 @@
+name: Frontend
+
+on:
+  push:
+    branches: [main]
+    paths: ["frontend/**", ".github/workflows/frontend.yml"]
+  pull_request:
+    paths: ["frontend/**", ".github/workflows/frontend.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: frontend-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    working-directory: frontend
+
+jobs:
+  build:
+    name: Lint, type check and build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      # Advisory. `src/App.tsx` carries 36 pre-existing findings — a
+      # `@ts-nocheck`, several `any`s, and components declared during render.
+      # They are real and worth fixing, but fixing them is a refactor of a
+      # 2.4k-line file, not a step in a CI change. Reported in the job summary
+      # so the number is visible and can be driven down. See
+      # docs/Frontend.md § Known gaps.
+      - name: ESLint (advisory)
+        run: |
+          set +e
+          npx eslint src 2>&1 | tee /tmp/eslint.txt
+          echo "### ESLint (advisory)" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          tail -20 /tmp/eslint.txt >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          exit 0
+
+      # `npm run build` runs `tsc -b` first, so a type error already fails the
+      # build. This step exists to report type errors distinctly from bundling
+      # errors when something breaks.
+      - name: Type check
+        run: npx tsc --noEmit
+
+      - name: Build
+        run: npm run build
+
+      # Deployment is the build: the static server serves `dist` with
+      # Cache-Control: no-store. If `dist` is empty, the release is empty.
+      - name: Verify build output
+        run: |
+          test -f dist/index.html || { echo "::error::dist/index.html missing"; exit 1; }
+          echo "### Bundle" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          du -sh dist >> "$GITHUB_STEP_SUMMARY"
+          ls -la dist/assets | head -20 >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"

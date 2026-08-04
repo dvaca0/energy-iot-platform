@@ -1,0 +1,113 @@
+name: Bug report
+description: Something is not working as documented
+labels: ["bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting this.
+
+        **If this is a security issue, stop.** Do not file it here — use
+        [private reporting](https://github.com/dvaca0/energy-iot-platform/security/advisories/new)
+        instead. See [SECURITY.md](../blob/main/SECURITY.md).
+
+  - type: dropdown
+    id: component
+    attributes:
+      label: Component
+      options:
+        - Backend (FastAPI)
+        - Frontend (React dashboard)
+        - Edge collector / smart plugs
+        - Monitoring and alerting
+        - Database / migrations
+        - Documentation
+        - Not sure
+    validations:
+      required: true
+
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you observed, and what you expected instead.
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. …
+        2. …
+        3. …
+    validations:
+      required: true
+
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Diagnostics
+      description: |
+        The four commands from
+        [docs/Troubleshooting.md](../blob/main/docs/Troubleshooting.md). Run them
+        even if they look unrelated — they separate whole classes of cause.
+      value: |
+        ```
+        # 1. API alive?
+        curl -s http://127.0.0.1:8010/health
+
+        # 2. Readings arriving? (run twice, a minute apart)
+        cd backend && python3 -c "import sqlite3;print(sqlite3.connect('file:energy_platform.db?mode=ro',uri=True).execute('select count(*), max(timestamp) from energy_readings').fetchone())"
+
+        # 3. Nodes reporting?
+        python3 -c "import sqlite3;print(sqlite3.connect('file:energy_platform.db?mode=ro',uri=True).execute('select code, last_sync from nodes order by code').fetchall())"
+
+        # 4. Monitoring scheduler ticking?
+        python3 -c "import json;d=json.load(open('monitoring_watchdog.json'));print(d['pid'], d['tick'], d['updated_at'][:19])"
+        ```
+
+        Output:
+      render: shell
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs
+      description: |
+        `journalctl -u energy-platform-backend -n 100 --no-pager`, or the
+        collector unit's journal on a node.
+
+        **Redact** tokens, public addresses and hostnames before pasting.
+      render: shell
+
+  - type: input
+    id: version
+    attributes:
+      label: Version or commit
+      placeholder: "v1.1.0, or the commit SHA"
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      value: |
+        - OS:
+        - Python:
+        - Node.js (if frontend):
+        - Raspberry Pi model (if edge):
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I checked [docs/Troubleshooting.md](../blob/main/docs/Troubleshooting.md)
+          required: true
+        - label: I searched existing issues
+          required: true
+        - label: I removed secrets, tokens and addresses from everything I pasted
+          required: true

@@ -1,0 +1,22 @@
+# Normalise line endings on checkin; check out native.
+* text=auto eol=lf
+
+*.sh        text eol=lf
+*.py        text eol=lf
+*.service   text eol=lf
+
+# Binary — never diff or normalise.
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.ico  binary
+*.db   binary
+*.joblib binary
+
+# Keep generated and vendored files out of language statistics and diffs,
+# so the repository's language breakdown reflects code that was written.
+package-lock.json      linguist-generated=true -diff
+frontend/dist/**       linguist-generated=true
+assets/screenshots/**  linguist-documentation=true
+docs/**                linguist-documentation=true
+*.md                   linguist-documentation=true

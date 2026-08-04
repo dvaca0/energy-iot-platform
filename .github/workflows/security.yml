@@ -1,0 +1,116 @@
+name: Security
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    # Monday 06:00 UTC — a dependency advisory published mid-week should not
+    # wait for someone to push.
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: security-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  secrets:
+    name: No secrets committed
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # The platform holds three credentials, all in backend/.env. A secret that
+      # reaches a remote must be treated as compromised regardless of any later
+      # history rewrite, so this scans the whole history, not just the diff.
+      - name: gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: No secret-bearing files tracked
+        run: |
+          if git ls-files | grep -iE '(^|/)\.env$|\.pem$|\.key$|(^|/)secrets\.json$'; then
+            echo "::error::A secret-bearing file is tracked. See docs/Security.md."
+            exit 1
+          fi
+          echo "No .env, key or secret files tracked."
+
+      - name: Ignore rules still cover the sensitive paths
+        run: |
+          fail=0
+          for f in backend/.env backend/energy_platform.db backend/monitoring_config.json; do
+            git check-ignore -q "$f" || { echo "::error::$f is no longer git-ignored"; fail=1; }
+          done
+          exit $fail
+
+  python-deps:
+    name: Python dependencies
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: pip-audit
+        run: |
+          python -m pip install --upgrade pip pip-audit
+          set +e
+          pip-audit -r backend/requirements.txt 2>&1 | tee /tmp/audit.txt
+          code=$?
+          echo "### pip-audit" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          tail -40 /tmp/audit.txt >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          # Advisory: a transitive advisory with no available fix should be
+          # visible, not a blocked merge. Dependabot raises the upgrade PRs.
+          exit 0
+
+  npm-deps:
+    name: npm dependencies
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: npm audit
+        working-directory: frontend
+        run: |
+          set +e
+          npm audit --audit-level=high 2>&1 | tee /tmp/npm-audit.txt
+          echo "### npm audit" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          tail -40 /tmp/npm-audit.txt >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          exit 0
+
+  codeql:
+    name: CodeQL
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [python, javascript-typescript]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: github/codeql-action/init@v3
+        with:
+          language: ${{ matrix.language }}
+          queries: security-and-quality
+      - uses: github/codeql-action/analyze@v3
+        with:
+          category: /language:${{ matrix.language }}

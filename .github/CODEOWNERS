@@ -1,0 +1,12 @@
+# Every change is reviewed by the maintainer.
+*                       @dvaca0
+
+# Areas where a mistake is silent, permanent, or wakes someone at 3 a.m.
+# Listed explicitly so they are never approved by momentum.
+/backend/app/monitoring/     @dvaca0
+/backend/migrations/         @dvaca0
+/backend/app/services/attribution.py  @dvaca0
+/backend/docs/adr/           @dvaca0
+/edge/                       @dvaca0
+/.github/                    @dvaca0
+/SECURITY.md                 @dvaca0

@@ -1,0 +1,59 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*.*.*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  draft:
+    name: Draft release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # Notes come from CHANGELOG.md, not from the commit log. A commit log is
+      # a record of work; release notes describe change. Generating one from
+      # the other produces notes nobody can act on. See docs/Changelog.md.
+      - name: Extract this version's changelog section
+        id: notes
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          awk -v v="$VERSION" '
+            $0 ~ "^## \\[" v "\\]" { capture = 1; print; next }
+            capture && /^## \[/     { exit }
+            capture                 { print }
+          ' CHANGELOG.md > /tmp/notes.md
+          if [ ! -s /tmp/notes.md ]; then
+            echo "::warning::No CHANGELOG.md section for $VERSION; drafting an empty body."
+            echo "_No changelog section found for \`$VERSION\`. Write one before publishing._" > /tmp/notes.md
+          fi
+          cat /tmp/notes.md
+
+      - name: Component versions
+        run: |
+          {
+            echo ""
+            echo "### Component versions"
+            echo ""
+            echo "| Component | Version |"
+            echo "|---|---|"
+            echo "| Platform | ${GITHUB_REF_NAME} |"
+            echo "| Edge / smart plugs | $(cat edge/VERSION 2>/dev/null || echo '—') |"
+            echo "| Migrations | 001–$(ls backend/migrations/versions/*.up.sql backend/migrations/versions/*.py 2>/dev/null | sed 's#.*/##' | cut -d_ -f1 | sort -u | tail -1) |"
+          } >> /tmp/notes.md
+
+      # Draft, never published automatically. A release is a statement to
+      # operators and gets read by a human first.
+      - name: Create draft release
+        uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          name: ${{ github.ref_name }}
+          body_path: /tmp/notes.md
+          generate_release_notes: false
