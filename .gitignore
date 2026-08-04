@@ -1,0 +1,118 @@
+# ─────────────────────────────────────────────────────────────────────────────
+#  Energy IoT Platform — repository ignore rules
+#
+#  This tree is a LIVE PRODUCTION DIRECTORY. The backend, the monitoring
+#  scheduler and both static servers run from these paths. The rules below
+#  exist first to keep operational state and secrets out of version control,
+#  and only second to keep the repository tidy.
+#
+#  Before relaxing any rule in the "Secrets" or "Operational state" sections,
+#  read docs/Security.md.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# ── Secrets ──────────────────────────────────────────────────────────────────
+# Real credentials live in .env; the committed template is .env.example.
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+!**/public.key
+secrets.json
+smart-plugs.conf
+!smart-plugs.conf.template
+
+# ── Operational state ────────────────────────────────────────────────────────
+# The platform database is ~180 MB of live measurements in WAL mode. It is
+# never committed; it is reproduced with `python -m migrations.runner`.
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+monitoring_watchdog.json
+# Operator-editable runtime config: the live copy is mutated through the
+# Settings UI, so only the committed template tracks its shape.
+runtime_platform_settings.json
+!runtime_platform_settings.example.json
+monitoring_config.json
+!monitoring_config.example.json
+
+# ── Backups ──────────────────────────────────────────────────────────────────
+# Point-in-time copies taken by the operator. Several GB; never in git.
+backups/
+**/backups/
+*_backup_*/
+app_backup_*/
+src_backup_*/
+*.bak
+*.bak_*
+*-before-*
+pre-standardize-*/
+
+# ── Build output and dependencies ────────────────────────────────────────────
+node_modules/
+dist/
+dist-ssr/
+build/
+.vite/
+*.tsbuildinfo
+
+venv/
+.venv/
+env/
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# ── Generated artefacts ──────────────────────────────────────────────────────
+generated_reports/
+edge/reports/
+docs/deployments/
+*.tar.gz
+*.zip
+
+# ── Logs ─────────────────────────────────────────────────────────────────────
+*.log
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ── Machine-learning models ──────────────────────────────────────────────────
+# Retrained from data; large, binary, and not meaningfully diffable.
+*.joblib
+*.pkl
+models/*.h5
+
+# ── OS and editor noise ──────────────────────────────────────────────────────
+# `._*` are macOS AppleDouble forks left by an SMB copy; they carry no content.
+.DS_Store
+._*
+.Spotlight-V100
+.Trashes
+Thumbs.db
+desktop.ini
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+.idea/
+*.swp
+*.swo
+*~
+
+# ── Scratch files ────────────────────────────────────────────────────────────
+part[0-9].txt
+test.txt
+patch_frontend_safe.py
+patch_backend_real_data.py
+clean_seed_data.py
