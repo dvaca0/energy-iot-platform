@@ -523,7 +523,7 @@ sequenceDiagram
     GU->>WK: fork worker (-w 1)
     WK->>WK: load .env via python-dotenv
     WK->>WK: import routers, register 90 routes
-    WK->>WK: import monitoring package<br/>(registers 39 rules; creates no tables)
+    WK->>WK: import monitoring package<br/>(registers 39 rules, creates no tables)
     WK->>DB: open connection, WAL mode
     WK-->>GU: ready — /health serves 200
     SD->>FS: start energy-platform-frontend.service
@@ -621,7 +621,7 @@ sequenceDiagram
   COL->>BUF: append (server unreachable)
   BUF->>BUF: rows accumulate — up to 7 days
   BUF--xAPI: sync fails, rows stay unsent
-  Note right of BUF: Backpressure is the only<br/>symptom; no sample is dropped.
+  Note right of BUF: Backpressure is the only<br/>symptom, no sample is dropped.
 
   BUF->>API: server returns — replay backlog
   API->>ATT: rows carry their original captured_at

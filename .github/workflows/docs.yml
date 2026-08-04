@@ -39,37 +39,17 @@ jobs:
         with:
           node-version: "20"
 
-      - name: Install mermaid-cli
-        run: npm install -g @mermaid-js/mermaid-cli@11
+      - name: Install the parser
+        run: npm --prefix scripts/mermaid install --no-audit --no-fund
 
       # Every diagram in this repository is Mermaid so it diffs as text. That
       # only helps if the text is valid — a diagram that fails to parse renders
       # on GitHub as a raw code block and nobody notices for months.
-      - name: Render every diagram
-        run: |
-          set -e
-          mkdir -p /tmp/mmd /tmp/out
-          python3 - <<'PY'
-          import pathlib, re
-          n = 0
-          for md in pathlib.Path('.').rglob('*.md'):
-              if any(p in md.parts for p in ('node_modules', 'venv', 'dist')):
-                  continue
-              for block in re.findall(r'```mermaid\n(.*?)```', md.read_text(encoding='utf-8'), re.S):
-                  n += 1
-                  pathlib.Path(f'/tmp/mmd/{n:03d}.mmd').write_text(block, encoding='utf-8')
-          print(f'extracted {n} diagrams')
-          PY
-          fail=0
-          for f in /tmp/mmd/*.mmd; do
-            if ! mmdc -i "$f" -o "/tmp/out/$(basename "$f").svg" >/dev/null 2>&1; then
-              echo "::error::Mermaid diagram failed to parse: $f"
-              head -5 "$f"
-              fail=1
-            fi
-          done
-          echo "$(ls /tmp/mmd | wc -l) diagrams checked"
-          exit $fail
+      #
+      # Uses Mermaid's own parser under jsdom rather than mermaid-cli, which
+      # would download a full Chromium to render SVGs we immediately discard.
+      - name: Parse every diagram
+        run: node scripts/mermaid/check_mermaid.mjs .
 
   assets:
     name: Referenced assets exist

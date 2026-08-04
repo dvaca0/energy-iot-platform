@@ -173,7 +173,7 @@ sequenceDiagram
 
   Note over BUF,DB: Outage and replay
   BUF->>BUF: rows accumulate — up to 7 days
-  BUF--xAPI: sync fails; rows stay unsent
+  BUF--xAPI: sync fails, rows stay unsent
   BUF->>API: server returns — replay backlog
   API->>ATT: rows carry their original captured_at
   alt backfill spans a deployment change

@@ -15,8 +15,8 @@ NPM := npm --prefix frontend
 SUITES := monitoring collector energy_aggregate smart_plugs synthetic_deployment
 
 .DEFAULT_GOAL := help
-.PHONY: help setup dev build test lint format check docs-check api-docs clean \
-        reload backup
+.PHONY: help setup dev build test lint format check docs-check mermaid api-docs \
+        clean reload backup dev-ui
 
 help:  ## Show this help
 	@grep -hE '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) \
@@ -62,10 +62,14 @@ format:  ## Apply black, isort and ruff --fix
 docs-check:  ## Verify every relative link and anchor resolves
 	python3 scripts/check_links.py
 
+mermaid:  ## Verify every Mermaid diagram parses
+	@test -d scripts/mermaid/node_modules || npm --prefix scripts/mermaid install --no-audit --no-fund
+	node scripts/mermaid/check_mermaid.mjs .
+
 api-docs:  ## Verify docs/API.md still matches the application
 	$(PY) scripts/check_api_docs.py
 
-check: lint test docs-check api-docs  ## Everything CI runs
+check: lint test docs-check mermaid api-docs  ## Everything CI runs
 
 backup:  ## Safe database backup — never use cp on a WAL database
 	@mkdir -p backups

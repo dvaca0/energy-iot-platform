@@ -1,0 +1,18 @@
+# Development and CI dependencies. Install alongside requirements.txt:
+#
+#     venv/bin/python3 -m pip install -r requirements.txt -r requirements-dev.txt
+#
+# Versions are pinned so CI and a contributor's machine reach the same verdict.
+# An unpinned formatter is a formatter that rewrites the codebase on upgrade.
+
+-r requirements.txt
+
+# starlette.testclient needs an HTTP client; tests/test_smart_plugs.py drives
+# the app through TestClient.
+httpx==0.28.1
+
+ruff==0.16.1
+black==26.5.1
+isort==8.0.1
+mypy==1.14.0
+types-requests
