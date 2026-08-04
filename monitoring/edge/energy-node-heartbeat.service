@@ -1,0 +1,50 @@
+[Unit]
+Description=Energy Platform node heartbeat agent
+Documentation=file:/opt/energy-monitoring/README.md
+After=network-online.target
+Wants=network-online.target
+# Deliberately NOT After=/Requires= the collector. The heartbeat must keep
+# reporting when the collector is dead — telling the server that the collector
+# died is the single most valuable thing this agent does.
+
+[Service]
+Type=simple
+
+# Node code exactly as registered in the platform (N001, N002, N003).
+# Determine this ON THE DEVICE from the existing collector configuration.
+# Do not guess it: a wrong code makes the node report as unregistered.
+Environment=NODE_ID=CHANGE-ME
+Environment=BACKEND_URL=http://CHANGE-ME:8010
+
+# 30-60s. The server treats 2 missed beats as WARNING, 5 as ERROR, 10 as
+# CRITICAL, using its own configured interval, so keep these consistent.
+Environment=HEARTBEAT_INTERVAL=45
+
+# systemd unit name of the existing collector, read for its status and PID.
+Environment=COLLECTOR_SERVICE=energy-collector
+
+# Optional: the collector's buffer database. Opened READ-ONLY to report its
+# size and pending row count. Leave unset if unknown — the agent works without
+# it and simply omits those fields.
+#Environment=COLLECTOR_DB=/var/lib/energy-collector/buffer.db
+
+ExecStart=/usr/bin/python3 /opt/energy-monitoring/node_heartbeat.py
+
+# The agent is expected to run forever. Any exit is a fault.
+Restart=always
+RestartSec=15
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=node-heartbeat
+
+# Hardening. ProtectSystem=strict is safe because the agent writes nothing;
+# ReadOnlyPaths keeps the collector's database explicitly read-only even if the
+# path is later pointed somewhere writable by mistake.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target

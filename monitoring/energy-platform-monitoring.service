@@ -1,0 +1,38 @@
+[Unit]
+Description=Energy Platform Monitoring and Alerting
+Documentation=file:/home/manager/energy-platform/monitoring/README.md
+# Ordered after the backend so the API self-probe has something to talk to on a
+# cold boot. Deliberately NOT Requires= or BindsTo=: monitoring must keep
+# running when the backend dies, because reporting that is its whole purpose.
+After=network-online.target energy-platform-backend.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=manager
+Group=manager
+
+WorkingDirectory=/home/manager/energy-platform/backend
+ExecStart=/home/manager/energy-platform/backend/venv/bin/python3 -m app.monitoring.scheduler
+
+# Credentials come from backend/.env (mode 600), loaded by the scheduler at
+# startup. Nothing secret belongs in this unit file, which is world-readable.
+Environment=PYTHONUNBUFFERED=1
+
+# The scheduler is expected to run forever. Any exit is a fault. The backoff
+# stops a persistent crash from spinning, and the gap it leaves is detected and
+# reported by the watchdog on the next successful start.
+Restart=always
+RestartSec=15
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=energy-monitoring
+
+# Hardening: the scheduler needs its working directory, outbound HTTPS for
+# Telegram, and read access to systemd/journal state for the server probes.
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,54 @@
+#!/usr/bin/env bash
+#
+# Smart Plug diagnostics for this Raspberry Pi.
+#
+#   smart-plug-health          human readable
+#   smart-plug-health --json   machine readable
+#
+# Safe to run at any time: it only reads the local buffer, the config and the
+# journal, and does one read-only GET against the backend. It never touches a
+# plug and never disturbs the collector.
+#
+set -uo pipefail
+
+CONF="/etc/energy-node/smart-plugs.conf"
+JSON=""
+[[ "${1:-}" == "--json" ]] && JSON="--json"
+
+[[ -r "${CONF}" ]] || { echo "not installed: ${CONF} missing" >&2; exit 2; }
+
+# shellcheck disable=SC1090
+NODE_ID="$(sed -nE 's/^NODE_ID=(.*)/\1/p' "${CONF}" | head -1)"
+BACKEND="$(sed -nE 's/^CENTRAL_API_URL=(.*)/\1/p' "${CONF}" | head -1)"
+BUFFER="$(sed -nE 's/^SMART_PLUG_BUFFER=(.*)/\1/p' "${CONF}" | head -1)"
+ENABLED="$(sed -nE 's/^SMART_PLUGS_ENABLED=(.*)/\1/p' "${CONF}" | head -1)"
+
+UNIT=""
+for candidate in energy-node-collector.service udec-edge.service; do
+  systemctl cat "${candidate}" >/dev/null 2>&1 && { UNIT="${candidate}"; break; }
+done
+
+COLLECTOR="$(systemctl cat "${UNIT}" 2>/dev/null | awk -F' ' '/^ExecStart=/{print $NF; exit}')"
+APP_DIR="$(dirname "${COLLECTOR:-/opt/energy-node/app/collector.py}")"
+PYTHON="$(systemctl cat "${UNIT}" 2>/dev/null | sed -nE 's/^ExecStart=([^ ]+).*/\1/p' | head -1)"
+[[ -x "${PYTHON}" ]] || PYTHON="$(command -v python3)"
+
+if [[ -n "${JSON}" ]]; then
+  "${PYTHON}" "${APP_DIR}/smart_plug_source.py" --health --json \
+    --node-id "${NODE_ID}" --backend "${BACKEND}" --buffer "${BUFFER}"
+  exit $?
+fi
+
+echo "host                       $(hostname)"
+echo "collector unit             ${UNIT:-none} ($(systemctl is-active "${UNIT}" 2>/dev/null || echo unknown))"
+echo "plug source enabled        ${ENABLED}"
+
+if [[ -n "${UNIT}" ]]; then
+  started="$(journalctl -u "${UNIT}" --no-pager 2>/dev/null | grep -c 'Smart Plug source started')"
+  echo "plug source start events   ${started}"
+  last_err="$(journalctl -u "${UNIT}" --since '-24h' --no-pager 2>/dev/null | grep -iE 'Smart Plug source failed' | tail -1)"
+  [[ -n "${last_err}" ]] && echo "last start failure         ${last_err}"
+fi
+
+"${PYTHON}" "${APP_DIR}/smart_plug_source.py" --health \
+  --node-id "${NODE_ID}" --backend "${BACKEND}" --buffer "${BUFFER}"
