@@ -30,7 +30,7 @@ jobs:
       # reaches a remote must be treated as compromised regardless of any later
       # history rewrite, so this scans the whole history, not just the diff.
       - name: gitleaks
-        uses: gitleaks/gitleaks-action@v2
+        uses: gitleaks/gitleaks-action@v3
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
