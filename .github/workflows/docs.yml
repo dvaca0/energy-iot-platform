@@ -20,7 +20,7 @@ jobs:
     name: Internal links and images resolve
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # Relative links between documents are the ones that rot, and they are
       # the ones a reviewer clicks. External URLs are checked separately and
@@ -33,7 +33,7 @@ jobs:
     name: Mermaid diagrams parse
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-node@v4
         with:
@@ -75,7 +75,7 @@ jobs:
     name: Referenced assets exist
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # The screenshot manifest promises specific files under specific names,
       # because the README and docs reference them directly. A renamed
@@ -102,7 +102,7 @@ jobs:
     runs-on: ubuntu-latest
     continue-on-error: true
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: lychee
         uses: lycheeverse/lychee-action@v2
         with:
