@@ -145,6 +145,14 @@ deployment = models.Deployment(
     node_id=node.id, building_id=building.id, electrical_panel_id=panel.id,
     start_date=(NOW - timedelta(days=3)).strftime("%Y-%m-%d"),
     end_date=None, status="active",
+    # `collect_node_state` resolves the CURRENT deployment by
+    # `activated_at IS NOT NULL AND closed_at IS NULL` (migration 010), not by
+    # status, so that an alert never names a building the node has already left.
+    # Without these the node reads as having no operational deployment and every
+    # electrical rule is correctly suppressed — which would make this suite pass
+    # vacuously by never exercising the path it exists to guard.
+    activated_at=NOW - timedelta(days=3),
+    closed_at=None,
     panel_main_breaker_a=250.0, nominal_voltage_v=127.0, phase_count=3,
 )
 db.add(deployment); db.commit()

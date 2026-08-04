@@ -64,8 +64,13 @@ db.add(models.Building(id=8, code="B-TEST", name="Edificio de prueba", campus_id
 db.add(models.ElectricalPanel(id=8, name="Tablero principal", building_id=8))
 db.add(models.Node(id=1, code="N001", name="Edge Node 001"))
 db.add(models.Node(id=3, code="N003", name="Energy Node 003"))
+# `activated_at` / `closed_at` (migration 010) are what mark a campaign as the
+# one CURRENTLY measuring a building — assignment resolves the deployment through
+# them, deliberately, so a plug is never attached to a campaign that ended months
+# ago. A fixture that sets only `status` leaves the plug with no deployment.
 db.add(models.Deployment(id=4, node_id=1, building_id=8, electrical_panel_id=8,
-                         start_date="2026-06-14", end_date="2026-06-21", status="active"))
+                         start_date="2026-06-14", end_date="2026-06-21", status="active",
+                         activated_at=datetime(2026, 6, 14), closed_at=None))
 db.commit()
 db.close()
 
