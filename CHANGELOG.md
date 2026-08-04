@@ -73,6 +73,23 @@ documentation, quality gates and provenance a reader needs to evaluate it.
 - **The test suites could only run on the deployment host.** Every one of them
   hardcoded `/home/manager/energy-platform`. Paths now derive from `__file__`.
 
+- **Three undeclared dependencies meant a clean install could not import the
+  application.** All three were present in the deployment virtualenv, so nothing
+  ever failed there; the first CI run on a clean machine found them all.
+
+  | Dependency | Problem |
+  |---|---|
+  | `google-genai` | `requirements.txt` named `google-generativeai`, the legacy SDK. The code imports `from google import genai`, which that package does not provide. |
+  | `playwright` | Imported at module load by `app/services/cfe_scraper.py`, which the router graph pulls in. |
+  | `psutil` | Used by `app/monitoring/health.py` for the 15 server health rules. |
+
+  `scripts/check_requirements.py` now walks every import in `backend/app` and
+  fails the build when one is undeclared.
+
+- **Three Mermaid diagrams did not parse.** A semicolon in a sequence-diagram
+  message or note is a statement separator, so the text was truncated mid-parse
+  and the diagram would have rendered on GitHub as a raw code block.
+
 ### Changed
 
 - The frontend's 59 commits (2026-06-14 → 06-19) were rewritten under a
