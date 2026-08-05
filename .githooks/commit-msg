@@ -1,0 +1,42 @@
+#!/bin/sh
+# Strip AI-assistant attribution trailers from commit messages.
+#
+# Commits in this repository are authored by the repository owner. Tooling that
+# appends "Co-Authored-By: Claude ..." (or any @anthropic.com co-author, or a
+# "Generated with Claude Code" line) causes GitHub to render a second author on
+# every commit, which misattributes the work.
+#
+# This runs regardless of which client made the commit, so it holds even if a
+# tool's own attribution setting is missed or reset.
+#
+# Enable (once per clone):
+#     git config core.hooksPath .githooks
+#
+# Verify:
+#     git config core.hooksPath        # -> .githooks
+#
+# To bypass deliberately for one commit: git commit --no-verify
+
+msg_file="$1"
+[ -f "$msg_file" ] || exit 0
+
+tmp="$msg_file.stripped"
+
+sed -E \
+  -e '/^[[:space:]]*[Cc]o-[Aa]uthored-[Bb]y:.*(([Cc]laude)|(@anthropic\.com)).*$/d' \
+  -e '/^[[:space:]]*🤖[[:space:]]*Generated with \[?Claude Code\]?.*$/d' \
+  "$msg_file" > "$tmp"
+
+# Collapse any trailing blank lines the removal left behind.
+awk 'BEGIN { blanks = 0 }
+     /^[[:space:]]*$/ { blanks++; next }
+     { while (blanks-- > 0) print ""; blanks = 0; print }
+    ' "$tmp" > "$tmp.trimmed"
+
+if ! cmp -s "$msg_file" "$tmp.trimmed"; then
+  printf 'commit-msg: removed AI attribution trailer(s) from the commit message.\n' >&2
+fi
+
+mv "$tmp.trimmed" "$msg_file"
+rm -f "$tmp"
+exit 0

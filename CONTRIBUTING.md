@@ -39,7 +39,15 @@ Install the hooks so formatting and linting run automatically:
 
 ```bash
 pip install pre-commit && pre-commit install
+git config core.hooksPath .githooks   # required — see below
 ```
+
+> [!IMPORTANT]
+> `git config core.hooksPath .githooks` is not optional. `.githooks/commit-msg`
+> strips AI-assistant attribution trailers (`Co-Authored-By: Claude …`,
+> `🤖 Generated with Claude Code`) from commit messages. Commits here are
+> authored solely by the repository owner; a co-author trailer makes GitHub
+> render a second author on every commit. See [CLAUDE.md](CLAUDE.md).
 
 ---
 
