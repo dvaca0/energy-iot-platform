@@ -303,21 +303,79 @@ check(
 db.close()
 
 
-print("\n--- 3e. HTTP heartbeat endpoint ---")
+print("\n--- 3e. Heartbeat endpoint requires a credential (ADR-0002) ---")
+from app.db import node_auth
+
+db = TestSession()
+N001_TOKEN = node_auth.issue_token(db, db.query(models.Node).filter_by(code="N001").first())
+N002_TOKEN = node_auth.issue_token(db, db.query(models.Node).filter_by(code="N002").first())
+db.commit()
+db.close()
+AUTH = {"Authorization": f"Bearer {N001_TOKEN}"}
+
 r = client.post(
     "/api/monitoring/heartbeat",
+    headers=AUTH,
     json={"node_id": "N001", "cpu_percent": 22.0, "collector_status": "active"},
 )
-check("endpoint accepts heartbeat", r.status_code == 200, r.text)
-check("endpoint reports registration", r.json().get("registered") is True, r.text)
+check("authenticated heartbeat accepted", r.status_code == 200, r.text)
+check("reports registration", r.json().get("registered") is True, r.text)
+check("reports authenticated", r.json().get("authenticated") is True, r.text)
+check("auth_status recorded", r.json().get("auth_status") == "authenticated", r.text)
 check(
-    "endpoint returns cadence",
+    "returns cadence",
     r.json().get("next_interval_seconds") == CONFIG.heartbeat.interval_seconds,
     r.text,
 )
-r = client.post("/api/monitoring/heartbeat", json={"node_id": "NOT-A-NODE"})
-check("unregistered node still accepted", r.status_code == 200, r.text)
-check("but flagged unregistered", r.json().get("registered") is False, r.text)
+
+print("\n--- 3f. Identity enforcement ---")
+check(
+    "no credential -> 401",
+    client.post("/api/monitoring/heartbeat", json={"node_id": "N001"}).status_code == 401,
+)
+check(
+    "unknown credential -> 401",
+    client.post(
+        "/api/monitoring/heartbeat",
+        headers={"Authorization": "Bearer nope"},
+        json={"node_id": "N001"},
+    ).status_code
+    == 401,
+)
+r = client.post(
+    "/api/monitoring/heartbeat",
+    headers={"Authorization": f"Bearer {N002_TOKEN}"},
+    json={"node_id": "N001"},
+)
+check("N002 credential claiming N001 -> 403", r.status_code == 403, r.text)
+check("403 names the true subject", "N002" in r.text, r.text)
+check(
+    "a credential cannot invent a node code",
+    client.post("/api/monitoring/heartbeat", headers=AUTH, json={"node_id": "GHOST"}).status_code
+    == 403,
+)
+
+db = TestSession()
+from sqlalchemy import text as _sqltext
+
+kinds = {
+    row[0]
+    for row in db.execute(_sqltext("SELECT DISTINCT violation FROM node_identity_violations")).all()
+}
+check("unauthenticated attempt recorded", "unauthenticated" in kinds, str(kinds))
+check("unknown credential recorded", "unknown_credential" in kinds, str(kinds))
+check("impersonation recorded", "subject_mismatch" in kinds, str(kinds))
+check(
+    "provenance stored on accepted beats",
+    db.execute(
+        _sqltext(
+            "SELECT COUNT(*) FROM monitor_node_heartbeats "
+            "WHERE auth_status='authenticated' AND auth_subject='N001'"
+        )
+    ).scalar()
+    >= 1,
+)
+db.close()
 
 
 # ==========================================================================
@@ -1124,7 +1182,7 @@ db = TestSession()
 now = datetime.utcnow()
 
 
-def node_ctx(policy=None, **beat_kwargs):
+def node_ctx(policy=None, reading_age_seconds=10, **beat_kwargs):
     beat = NodeHeartbeat(node_code="N001", received_at=now, **beat_kwargs)
     state = {
         "N001": {
@@ -1138,7 +1196,7 @@ def node_ctx(policy=None, **beat_kwargs):
             "building": "Engineering",
             "deployment_label": "active",
             "deployment": True,
-            "reading_age_seconds": 10,
+            "reading_age_seconds": reading_age_seconds,
             "policy": policy or FULL,
         }
     }
@@ -1166,7 +1224,13 @@ check(
     "read-only filesystem is CRITICAL",
     [
         f.severity
-        for f in hb_module.check_node_power(node_ctx(filesystem_readonly=True))
+        for f in hb_module.check_node_power(
+            node_ctx(
+                filesystem_readonly=True,
+                collector_status="inactive",
+                reading_age_seconds=None,
+            )
+        )
         if f.rule_id == "node.filesystem_readonly"
     ]
     == [Severity.CRITICAL],
@@ -1428,6 +1492,7 @@ check("legacy heartbeat endpoint unchanged", r.status_code == 200, r.text)
 
 r = client.post(
     "/api/v1/measurements/batch",
+    headers=AUTH,
     json={
         "device_id": "N001",
         "measurements": [
@@ -2033,6 +2098,273 @@ check(
 # Put it back so later sections see a commissioned node.
 commissioning_svc.transition(db, node, "commissioned", reason="test teardown")
 db.commit()
+db.close()
+
+
+# ==========================================================================
+print("\n=== 26. filesystem_readonly — full tri-state regression matrix ===")
+# ==========================================================================
+# Guards the 2026-08-06 false EMERGENCY: the node probe read `/` from inside the
+# collector's own systemd mount namespace (ProtectSystem=strict), where `/` is
+# genuinely `ro`, while the storage was healthy and writing.
+
+
+def fs_findings(**kw):
+    out = list(hb_module.check_node_power(node_ctx(**kw)))
+    apply_routing(out, CONFIG)
+    return out
+
+
+def fs_rule_ids(**kw):
+    return {f.rule_id for f in fs_findings(**kw)}
+
+
+# --- NULL / missing: unknown is not a fault ---------------------------
+check(
+    "NULL filesystem_readonly raises nothing",
+    "node.filesystem_readonly" not in fs_rule_ids(filesystem_readonly=None),
+)
+check("missing filesystem_readonly raises nothing", "node.filesystem_readonly" not in fs_rule_ids())
+check(
+    "NULL raises no contradiction either",
+    "node.filesystem_readonly_contradiction" not in fs_rule_ids(filesystem_readonly=None),
+)
+
+# --- False: confirmed read-write --------------------------------------
+check(
+    "False raises nothing",
+    not fs_rule_ids(filesystem_readonly=False)
+    & {"node.filesystem_readonly", "node.filesystem_readonly_contradiction"},
+)
+
+# --- True, uncontradicted: a real fault, pages immediately ------------
+real = fs_findings(filesystem_readonly=True, collector_status="inactive", reading_age_seconds=None)
+real_fs = [f for f in real if f.rule_id == "node.filesystem_readonly"]
+check("uncontradicted True fires", len(real_fs) == 1, str([f.rule_id for f in real]))
+check("uncontradicted True is CRITICAL", real_fs[0].severity is Severity.CRITICAL)
+check("uncontradicted True pages", real_fs[0].notify)
+check("uncontradicted True has no sustain delay", real_fs[0].sustain_seconds == 0)
+check(
+    "does NOT assert SD-card failure without evidence",
+    not any(
+        "SD card" in (c or "") for c in (*real_fs[0].suggested_causes, real_fs[0].summary or "")
+    )
+    or "Probe measuring" in " ".join(real_fs[0].suggested_causes),
+    str(real_fs[0].suggested_causes),
+)
+check(
+    "tells the operator to confirm before replacing hardware",
+    any("Confirm on the device" in a for a in real_fs[0].suggested_actions),
+)
+
+# --- True while writing: contradiction, not a storage fault -----------
+for label, kw in (
+    ("active collector", dict(collector_status="active", reading_age_seconds=None)),
+    (
+        "growing database",
+        dict(collector_status="inactive", sqlite_size_mb=25.1, reading_age_seconds=None),
+    ),
+    (
+        "free space reported",
+        dict(collector_status="inactive", disk_free_mb=51357.0, reading_age_seconds=None),
+    ),
+    ("measurements arriving", dict(collector_status="inactive", reading_age_seconds=10)),
+):
+    ids = fs_rule_ids(filesystem_readonly=True, **kw)
+    check(
+        f"True + {label} -> contradiction, not storage fault",
+        "node.filesystem_readonly_contradiction" in ids and "node.filesystem_readonly" not in ids,
+        str(ids),
+    )
+
+# The exact production payload from N001 on 2026-08-06.
+prod = fs_findings(
+    filesystem_readonly=True,
+    collector_status="active",
+    sqlite_size_mb=25.15,
+    disk_free_mb=51357.3,
+    disk_percent=17.5,
+    reading_age_seconds=12,
+)
+contra = [f for f in prod if f.rule_id == "node.filesystem_readonly_contradiction"]
+check(
+    "the real 2026-08-06 payload produces a contradiction",
+    len(contra) == 1,
+    str([f.rule_id for f in prod]),
+)
+check("the contradiction NEVER pages", not contra[0].notify)
+check("and never escalates past WARNING", contra[0].max_severity is Severity.WARNING)
+check(
+    "it names the mount-namespace cause",
+    "namespace" in (contra[0].summary or "").lower(),
+    contra[0].summary,
+)
+check(
+    "it lists the writes that contradict the claim",
+    len(contra[0].context.get("contradictions", [])) >= 3,
+    str(contra[0].context.get("contradictions")),
+)
+
+# --- Stale telemetry: a node that stopped reporting says nothing ------
+stale = node_ctx(filesystem_readonly=True, collector_status="inactive", reading_age_seconds=None)
+stale.nodes["N001"]["missed_beats"] = 5
+check(
+    "stale telemetry raises no filesystem finding",
+    len(list(hb_module.check_node_power(stale))) == 0,
+)
+
+# --- Lifecycle gate ----------------------------------------------------
+check(
+    "unmonitored node raises no filesystem finding",
+    len(
+        list(
+            hb_module.check_node_power(
+                node_ctx(
+                    filesystem_readonly=True,
+                    collector_status="inactive",
+                    reading_age_seconds=None,
+                    policy=MUTED,
+                )
+            )
+        )
+    )
+    == 0,
+)
+
+
+# ==========================================================================
+print("\n=== 27. Disk policy — dual axis, df denominator, no timer escalation ===")
+# ==========================================================================
+# Guards the 2026-08-04 false EMERGENCY: a disk at 80% with ~10 days of headroom
+# reached EMERGENCY after 60 minutes purely because the duration ladder ran, and
+# sent 48 notifications.
+from app.monitoring import health as health_module
+
+_DISK_CFG = CONFIG.disk
+
+
+def disk_ctx(percent, free_gb, days=None, gb_per_day=0.1):
+    server = {
+        "hostname": "test",
+        "disks": {
+            "/": {
+                "percent": percent,
+                "free_gb": free_gb,
+                "percent_of_total": percent - 4,
+                "total_gb": 46.0,
+            }
+        },
+    }
+    ctx = RuleContext(
+        session=db, config=CONFIG, now=datetime.utcnow(), server=server, nodes={}, metrics={}
+    )
+    health_module.disk_projection = lambda mount="/": (
+        {"days_to_full": days, "gb_per_day": gb_per_day, "samples": 4000}
+        if days is not None
+        else {
+            "days_to_full": None,
+            "gb_per_day": None,
+            "samples": 0,
+            "reason": "free space flat or growing — no projection",
+        }
+    )
+    return ctx
+
+
+db = TestSession()
+_real_projection = health_module.disk_projection
+
+
+def disk_sev(percent, free_gb, days=None):
+    found = list(health_module.check_disk(disk_ctx(percent, free_gb, days)))
+    return found[0].severity if found else Severity.OK
+
+
+def disk_finding(percent, free_gb, days=None):
+    found = list(health_module.check_disk(disk_ctx(percent, free_gb, days)))
+    return found[0] if found else None
+
+
+# --- axis 1: percentage, df denominator -------------------------------
+check("70% healthy -> silent", disk_sev(70.0, 14.0, 400) is Severity.OK)
+check("80% -> WARNING", disk_sev(80.0, 9.0, 400) is Severity.WARNING)
+check("90% -> ERROR", disk_sev(90.0, 4.6, 400) is Severity.ERROR)
+check("95% -> CRITICAL", disk_sev(95.0, 2.3, 400) is Severity.CRITICAL)
+check("98% -> EMERGENCY", disk_sev(98.0, 0.9, 400) is Severity.EMERGENCY)
+
+# --- axis 2: days-to-full, independent of percentage -------------------
+check("70% but 10 days left -> WARNING", disk_sev(70.0, 14.0, 10) is Severity.WARNING)
+check("70% but 5 days left -> ERROR", disk_sev(70.0, 14.0, 5) is Severity.ERROR)
+check("70% but 1 day left -> CRITICAL", disk_sev(70.0, 14.0, 1) is Severity.CRITICAL)
+
+# --- severity is the WORSE of the two ----------------------------------
+check("90% and 1 day -> CRITICAL (worse axis wins)", disk_sev(90.0, 4.0, 1) is Severity.CRITICAL)
+check(
+    "85% with 400 days -> WARNING (percentage only)", disk_sev(85.0, 7.0, 400) is Severity.WARNING
+)
+
+# --- absolute reserve ---------------------------------------------------
+check(
+    "below 1 GB free -> EMERGENCY regardless of percentage",
+    disk_sev(60.0, 0.5, 400) is Severity.EMERGENCY,
+)
+
+# --- THE REGRESSION: time must not escalate a capacity trend ------------
+f = disk_finding(80.2, 8.7, 23)
+check(
+    "the live condition is WARNING, not EMERGENCY", f.severity is Severity.WARNING, f.severity.name
+)
+check(
+    "capped at its own severity so the duration ladder cannot raise it at all",
+    f.max_severity is Severity.WARNING,
+    str(f.max_severity),
+)
+
+db.query(AlertEvent).delete()
+db.query(MonitorAlert).delete()
+db.commit()
+t_disk = datetime.utcnow()
+process_findings(db, [f], now=t_disk, config=CONFIG)
+db.commit()
+# Two hours later, unchanged: the old ladder would be at EMERGENCY by now.
+f2 = disk_finding(80.2, 8.7, 23)
+process_findings(db, [f2], now=t_disk + timedelta(minutes=120), config=CONFIG)
+db.commit()
+row = db.query(MonitorAlert).filter_by(rule_id="server.disk").first()
+check(
+    "after 2 hours unchanged it is still not EMERGENCY", row.severity != "EMERGENCY", row.severity
+)
+check("and never peaked at EMERGENCY", row.peak_severity != "EMERGENCY", row.peak_severity)
+
+# --- a genuine emergency still escalates immediately --------------------
+crit = disk_finding(98.5, 0.6, 1)
+check(
+    "real emergency is EMERGENCY on the first evaluation",
+    crit.severity is Severity.EMERGENCY,
+    crit.severity.name,
+)
+check(
+    "a real emergency caps at EMERGENCY, i.e. is not held down",
+    crit.max_severity is Severity.EMERGENCY,
+    str(crit.max_severity),
+)
+
+# --- hysteresis ----------------------------------------------------------
+# Within the clear margin (80 - 3 = 77%), behaviour depends on whether an alert
+# is already open: a new one must not start, an existing one must not resolve
+# and immediately reopen.
+check(
+    "78% while an alert is open -> stays open (hysteresis)",
+    disk_sev(78.0, 10.0, 400) is Severity.WARNING,
+)
+
+db.query(AlertEvent).delete()
+db.query(MonitorAlert).delete()
+db.commit()
+check("78% with no open alert -> silent", disk_sev(78.0, 10.0, 400) is Severity.OK)
+check("76% (below the clear margin) -> silent", disk_sev(76.0, 11.0, 400) is Severity.OK)
+
+health_module.disk_projection = _real_projection
 db.close()
 
 

@@ -53,6 +53,36 @@ class TelegramConfig:
 
 
 @dataclass
+class NodeAuthConfig:
+    """Enforcement of node identity on ingest — ADR-0002 step 1.
+
+    Two modes, because switching an unauthenticated fleet to mandatory
+    credentials in one step guarantees an ingestion outage:
+
+    ``permissive``
+        Authenticate, record provenance and raise identity alerts, but still
+        accept the payload. Used while credentials are provisioned.
+    ``enforce``
+        A request without a valid credential is rejected (401), and one whose
+        claimed node_id does not match its credential is rejected (403).
+
+    ``permissive`` is not a safe resting state — it is a rollout step. The
+    ``security.unauthenticated_producer`` rule fires continuously while any
+    node is still unauthenticated, so the fleet cannot be left here quietly.
+    """
+
+    #: permissive | enforce
+    mode: str = "permissive"
+    #: Node codes exempted from enforcement, for a staged rollout. Every entry
+    #: keeps the identity alert firing, so an exemption is visible.
+    exempt_nodes: tuple[str, ...] = ()
+
+    @property
+    def enforcing(self) -> bool:
+        return self.mode == "enforce"
+
+
+@dataclass
 class HeartbeatConfig:
     """Node heartbeat expectations and the missed-beat escalation ladder."""
 
@@ -115,6 +145,57 @@ class ServerThresholds:
     #: Seconds. Backend API self-probe latency.
     api_latency_warning: float = 2.0
     api_latency_critical: float = 5.0
+
+
+@dataclass
+class DiskThresholds:
+    """Filesystem capacity policy.
+
+    Two independent axes, because a percentage alone cannot distinguish "80%
+    and stable for a year" from "80% and full by Thursday":
+
+    *How full is it* — measured with **df's denominator**,
+    ``used / (used + available)``. The kernel reserves ~5% of an ext4
+    filesystem for root, which `df` excludes from the space you can actually
+    use. Reporting ``used/total`` instead read 80.4% where `df` said 84.3%, and
+    an operator comparing the alert against `df` saw two different numbers for
+    the same disk.
+
+    *How long until it is full* — linear projection over the trailing window of
+    recorded server heartbeats. This is what makes the alert actionable: 86%
+    with 6 GB free and no growth needs a ticket, 86% shrinking 2 GB/day needs
+    someone tonight.
+
+    Severity is the **worse** of the two axes. Time alone never escalates it —
+    that is the explicit fix for a capacity trend reaching EMERGENCY after 60
+    minutes purely because ``escalation.emergency_after_minutes`` elapsed.
+    """
+
+    #: Percent used, df denominator.
+    warning_pct: float = 80.0
+    error_pct: float = 90.0
+    critical_pct: float = 95.0
+    emergency_pct: float = 98.0
+
+    #: Projected days until full. Lower is worse.
+    warning_days: float = 14.0
+    error_days: float = 7.0
+    critical_days: float = 2.0
+
+    #: An absolute floor. Below this the percentage stops mattering: SQLite
+    #: needs room for its WAL and a checkpoint, and a full disk stops ingestion.
+    emergency_reserve_gb: float = 1.0
+
+    #: Hysteresis. Once open, the alert clears only below
+    #: ``warning_pct - clear_margin_pct`` so a disk hovering at the boundary
+    #: does not flap open and closed.
+    clear_margin_pct: float = 3.0
+
+    #: Hours of history used for the projection. Long enough to ignore a single
+    #: large write, short enough to notice a change in trend.
+    projection_window_hours: int = 72
+    #: Minimum samples before a projection is trusted at all.
+    projection_min_samples: int = 30
 
 
 @dataclass
@@ -376,9 +457,11 @@ class MonitoringConfig:
 
     telegram: TelegramConfig = field(default_factory=TelegramConfig)
     heartbeat: HeartbeatConfig = field(default_factory=HeartbeatConfig)
+    node_auth: NodeAuthConfig = field(default_factory=NodeAuthConfig)
     escalation: EscalationConfig = field(default_factory=EscalationConfig)
     policy: AlertPolicy = field(default_factory=AlertPolicy)
     server: ServerThresholds = field(default_factory=ServerThresholds)
+    disk: DiskThresholds = field(default_factory=DiskThresholds)
     node: NodeThresholds = field(default_factory=NodeThresholds)
     electrical: ElectricalThresholds = field(default_factory=ElectricalThresholds)
     database: DatabaseThresholds = field(default_factory=DatabaseThresholds)
@@ -413,6 +496,11 @@ class MonitoringConfig:
         "electrical.reverse_energy",
         # Fleet state that changes on human timescales.
         "node.heartbeat_never",
+        # Standing configuration gap, not an incident. Kept visible in the
+        # report so permissive mode cannot be forgotten.
+        "security.unauthenticated_producer",
+        # A probe defect, not a storage fault. Visible in the report; never a page.
+        "node.filesystem_readonly_contradiction",
         "node.standby",
         "node.latency",
         "node.sqlite_size",
@@ -655,10 +743,12 @@ def write_default_config_file(path: Path | None = None) -> Path:
 
 __all__ = [
     "DatabaseThresholds",
+    "DiskThresholds",
     "ElectricalThresholds",
     "EscalationConfig",
     "HeartbeatConfig",
     "MonitoringConfig",
+    "NodeAuthConfig",
     "NodeThresholds",
     "NotificationConfig",
     "QuietHours",

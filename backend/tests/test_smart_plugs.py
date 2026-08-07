@@ -325,9 +325,23 @@ check(
     == 404,
 )
 
+
+# Batch ingest authenticates (ADR-0002). Issue a credential for the node this
+# suite uses, and commission it so authorization passes too.
+from app.db import node_auth as _na
+
+_db = TestSession()
+_node = _db.query(models.Node).filter_by(code="N001").first()
+_node.commission_state = "commissioned"
+N001_TOKEN = _na.issue_token(_db, _node)
+_db.commit()
+_db.close()
+BATCH_AUTH = {"Authorization": f"Bearer {N001_TOKEN}"}
+
 print("\n=== 14. Energy Node ingestion untouched ===")
 r = client.post(
     "/api/v1/measurements/batch",
+    headers=BATCH_AUTH,
     json={
         "device_id": "N001",
         "measurements": [

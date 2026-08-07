@@ -134,13 +134,96 @@ def probe_disks(mounts: Iterable[str]) -> dict[str, dict[str, Any]]:
     for mount in mounts:
         try:
             usage = shutil.disk_usage(mount)
+            # df's denominator: used + available, NOT total. ext4 reserves ~5%
+            # for root, which df excludes from usable space. Reporting
+            # used/total showed 80.4% where df showed 84.3% for the same disk.
+            usable = usage.used + usage.free
             out[mount] = {
-                "percent": round(usage.used / usage.total * 100, 2),
+                "percent": round(usage.used / usable * 100, 2) if usable else 0.0,
+                "percent_of_total": round(usage.used / usage.total * 100, 2),
+                "used_gb": round(usage.used / 1024**3, 2),
                 "free_gb": round(usage.free / 1024**3, 2),
                 "total_gb": round(usage.total / 1024**3, 2),
             }
         except OSError as exc:
             out[mount] = {"error": str(exc)}
+    return out
+
+
+def disk_projection(mount: str = "/") -> dict[str, Any]:
+    """Project days until this filesystem is full, from recorded history.
+
+    Least-squares fit of ``disk_free_gb`` against time over the trailing window
+    of ``monitor_server_heartbeats``. Returns ``days_to_full = None`` when the
+    disk is flat or shrinking in usage — the honest answer, rather than a
+    misleadingly large number.
+
+    Why a projection at all: a percentage cannot separate "80% and stable for a
+    year" from "80% and full by Thursday". Those need different responses, and
+    before this the alert could not tell them apart — it escalated on elapsed
+    time instead, which is a property of the clock, not the disk.
+    """
+    from app.monitoring.config import get_config
+    from app.monitoring.storage import session_scope
+
+    policy = get_config().disk
+    out: dict[str, Any] = {"days_to_full": None, "gb_per_day": None, "samples": 0}
+
+    try:
+        with session_scope() as session:
+            from sqlalchemy import text as _text
+
+            rows = session.execute(
+                _text(
+                    "SELECT recorded_at, disk_free_gb FROM monitor_server_heartbeats "
+                    " WHERE disk_free_gb IS NOT NULL "
+                    "   AND recorded_at >= datetime('now', :window) "
+                    " ORDER BY recorded_at"
+                ),
+                {"window": f"-{policy.projection_window_hours} hours"},
+            ).all()
+    except Exception as exc:
+        out["error"] = str(exc)
+        return out
+
+    out["samples"] = len(rows)
+    if len(rows) < policy.projection_min_samples:
+        out["reason"] = (
+            f"insufficient history ({len(rows)}/{policy.projection_min_samples} samples)"
+        )
+        return out
+
+    points: list[tuple[float, float]] = []
+    base: datetime | None = None
+    for recorded_at, free_gb in rows:
+        moment = (
+            recorded_at
+            if isinstance(recorded_at, datetime)
+            else datetime.fromisoformat(str(recorded_at))
+        )
+        if base is None:
+            base = moment
+        points.append(((moment - base).total_seconds() / 86400.0, float(free_gb)))
+
+    n = len(points)
+    mean_x = sum(x for x, _ in points) / n
+    mean_y = sum(y for _, y in points) / n
+    denominator = sum((x - mean_x) ** 2 for x, _ in points)
+    if denominator == 0:
+        out["reason"] = "no elapsed time between samples"
+        return out
+
+    # slope is change in FREE space per day: negative means filling up.
+    slope = sum((x - mean_x) * (y - mean_y) for x, y in points) / denominator
+    out["gb_per_day"] = round(-slope, 3)
+
+    current_free = points[-1][1]
+    if slope >= -0.001:
+        out["reason"] = "free space flat or growing — no projection"
+        return out
+
+    out["days_to_full"] = round(current_free / -slope, 1)
+    out["current_free_gb"] = round(current_free, 2)
     return out
 
 
@@ -679,9 +762,32 @@ def check_swap(ctx: RuleContext) -> Iterable[Finding]:
     ]
 
 
-@rule("server.disk", Subsystem.SERVER, "Filesystem capacity")
+@rule("server.disk", Subsystem.SERVER, "Filesystem capacity and days-to-full")
 def check_disk(ctx: RuleContext) -> Iterable[Finding]:
+    """Capacity, judged on two axes and never on elapsed time.
+
+    Severity is the worse of:
+
+    * **how full** — percent used on df's denominator, so the alert and `df`
+      agree;
+    * **how soon** — days until full, projected from recorded history.
+
+    Neither axis is time-since-the-alert-opened. ``max_severity`` caps the
+    finding so the generic duration ladder cannot promote a slow capacity trend
+    to EMERGENCY simply because an hour passed: on 2026-08-04 that produced an
+    EMERGENCY and 48 notifications for a disk at 80% with ten days of headroom.
+
+    EMERGENCY is reserved for cases where writes are genuinely at risk: past
+    ``emergency_pct``, or below an absolute free-space reserve. SQLite needs
+    room for its WAL and a checkpoint; below that, ingestion stops.
+
+    Hysteresis: once open, the finding persists until usage falls
+    ``clear_margin_pct`` below the warning threshold, so a disk sitting on the
+    boundary does not flap.
+    """
     findings: list[Finding] = []
+    policy = ctx.config.disk
+
     for mount, usage in (ctx.server.get("disks") or {}).items():
         if "error" in usage:
             findings.append(
@@ -695,12 +801,56 @@ def check_disk(ctx: RuleContext) -> Iterable[Finding]:
             )
             continue
 
-        value = usage.get("percent")
-        severity = ctx.threshold_severity(
-            value, ctx.config.server.disk_warning, ctx.config.server.disk_critical
-        )
-        if severity is Severity.OK:
+        percent = usage.get("percent")
+        free_gb = usage.get("free_gb")
+        if percent is None:
             continue
+
+        projection = disk_projection(mount)
+        days = projection.get("days_to_full")
+
+        # --- axis 1: how full (df denominator) ---------------------------
+        by_pct = Severity.OK
+        if percent >= policy.emergency_pct:
+            by_pct = Severity.EMERGENCY
+        elif percent >= policy.critical_pct:
+            by_pct = Severity.CRITICAL
+        elif percent >= policy.error_pct:
+            by_pct = Severity.ERROR
+        elif percent >= policy.warning_pct:
+            by_pct = Severity.WARNING
+
+        # --- axis 2: how soon --------------------------------------------
+        by_days = Severity.OK
+        if days is not None:
+            if days < policy.critical_days:
+                by_days = Severity.CRITICAL
+            elif days < policy.error_days:
+                by_days = Severity.ERROR
+            elif days < policy.warning_days:
+                by_days = Severity.WARNING
+
+        # --- absolute reserve: writes are at risk regardless of percentage
+        by_reserve = Severity.OK
+        if free_gb is not None and free_gb < policy.emergency_reserve_gb:
+            by_reserve = Severity.EMERGENCY
+
+        severity = max(by_pct, by_days, by_reserve)
+
+        # --- hysteresis ---------------------------------------------------
+        # Below the warning line but within the clear margin: keep an already
+        # open alert open rather than resolving and immediately reopening.
+        if severity is Severity.OK:
+            if percent < policy.warning_pct - policy.clear_margin_pct:
+                continue
+            if not _disk_alert_open(ctx, mount):
+                continue
+            severity = Severity.WARNING
+
+        if days is not None:
+            horizon = f"{days:.0f} days to full at {projection.get('gb_per_day')} GB/day"
+        else:
+            horizon = projection.get("reason") or "no trend available"
 
         findings.append(
             Finding(
@@ -709,29 +859,74 @@ def check_disk(ctx: RuleContext) -> Iterable[Finding]:
                 severity=severity,
                 title=f"Filesystem {mount} is filling up",
                 target=mount,
+                summary=(
+                    f"{percent:.1f}% used ({free_gb} GB free) — {horizon}. "
+                    "Severity is the worse of usage and projected headroom; it "
+                    "does not rise with elapsed time."
+                ),
                 metric="disk_percent",
-                current_value=f"{value:.1f}% used, {usage.get('free_gb')} GB free",
-                expected_value=f"< {ctx.config.server.disk_warning:.0f}% used",
+                current_value=f"{percent:.1f}% used, {free_gb} GB free, {horizon}",
+                expected_value=(
+                    f"< {policy.warning_pct:.0f}% and > {policy.warning_days:.0f} days headroom"
+                ),
                 hostname=ctx.server.get("hostname"),
+                # A capacity trend is a state, not an incident: the two axes
+                # above are the whole answer. Capping at exactly the computed
+                # severity stops the generic duration ladder raising it at all —
+                # not merely stopping it short of EMERGENCY. If the disk really
+                # worsens the rule emits a higher severity and the cap rises
+                # with it, so this suppresses the clock, never the disk.
+                max_severity=severity,
+                sustain_seconds=1800,
                 suggested_causes=[
+                    "Migration backups accumulating (scripts/retention.py)",
+                    "Journal growth (SystemMaxUse uncapped)",
+                    "Docker images and volumes from co-hosted applications",
                     "Database and WAL growth",
-                    "Generated reports accumulating in backend/generated_reports",
-                    "Timestamped backups accumulating in backend/backups",
-                    "Journal logs",
                 ],
                 suggested_commands=[
-                    f"du -xh {mount} --max-depth=2 2>/dev/null | sort -rh | head -20",
-                    "du -sh /home/manager/energy-platform/backend/backups",
-                    "journalctl --disk-usage",
+                    "python3 scripts/retention.py report",
+                    "df -h /",
+                    "du -xh --max-depth=1 / 2>/dev/null | sort -rh | head",
+                    "docker system df",
                 ],
                 suggested_actions=[
-                    "A full disk stops SQLite writes and silently ends ingestion. "
-                    "Clear space before it reaches 100%.",
+                    "Run `python3 scripts/retention.py plan` and review before applying.",
+                    "See docs/Runbook-Retention.md.",
                 ],
-                context=dict(usage),
+                context={
+                    "percent_df": percent,
+                    "percent_of_total": usage.get("percent_of_total"),
+                    "free_gb": free_gb,
+                    "projection": projection,
+                    "severity_by_percent": by_pct.name,
+                    "severity_by_days": by_days.name,
+                },
             )
         )
     return findings
+
+
+def _disk_alert_open(ctx: RuleContext, mount: str) -> bool:
+    """Whether a disk alert for this mount is currently open.
+
+    Used only for hysteresis. Failure to answer is treated as "not open", so a
+    query problem can never manufacture an alert.
+    """
+    try:
+        from app.monitoring.models import MonitorAlert
+
+        return (
+            ctx.session.query(MonitorAlert)
+            .filter(
+                MonitorAlert.rule_id == "server.disk",
+                MonitorAlert.resolved_at.is_(None),
+            )
+            .count()
+            > 0
+        )
+    except Exception:
+        return False
 
 
 @rule("server.filesystem_readonly", Subsystem.SERVER, "Read-only filesystem detection")

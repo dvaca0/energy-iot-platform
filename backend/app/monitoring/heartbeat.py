@@ -40,7 +40,7 @@ from __future__ import annotations
 import json
 import logging
 from collections.abc import Iterable
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from pydantic import BaseModel, Field
@@ -163,6 +163,8 @@ def record_heartbeat(
     payload: HeartbeatPayload,
     *,
     source_ip: str | None = None,
+    auth_subject: str | None = None,
+    auth_status: str | None = None,
     now: datetime | None = None,
 ) -> NodeHeartbeat:
     """Persist one heartbeat and refresh the node's liveness state.
@@ -237,6 +239,8 @@ def record_heartbeat(
         local_alerts=json.dumps(payload.local_alerts) if payload.local_alerts else None,
         raw_payload=json.dumps(raw, ensure_ascii=False),
         source_ip=source_ip,
+        auth_subject=auth_subject,
+        auth_status=auth_status,
     )
     session.add(beat)
     session.flush()  # assign beat.id for the latest-state reference
@@ -783,32 +787,117 @@ def check_node_power(ctx: RuleContext) -> Iterable[Finding]:
                 )
             )
 
-        if beat.filesystem_readonly:
-            findings.append(
-                Finding(
-                    rule_id="node.filesystem_readonly",
-                    subsystem=Subsystem.NODE,
-                    severity=Severity.CRITICAL,
-                    title=f"Node {code} filesystem is read-only",
-                    target=code,
-                    summary=(
-                        "The SD card has almost certainly failed. Local buffering is "
-                        "silently discarding everything it tries to write."
-                    ),
-                    metric="filesystem",
-                    current_value="read-only",
-                    expected_value="read-write",
-                    suggested_causes=[
-                        "SD card wear-out or corruption",
-                        "I/O errors forcing remount",
-                    ],
-                    suggested_commands=["mount | grep ' / '", "dmesg | tail -50"],
-                    suggested_actions=[
-                        "Data from this node is being lost now. Replace the SD card.",
-                    ],
-                    **location,
+        # --- Read-only filesystem, tri-state and corroborated -------------
+        #
+        # `filesystem_readonly` is deliberately tri-state:
+        #   True  -> confirmed read-only        False -> confirmed read-write
+        #   None  -> unknown; the probe could not answer, which is not a fault
+        #
+        # A True on its own is not sufficient evidence. On 2026-08-06 this rule
+        # paged 43 times because the node's probe read `/` from inside the
+        # collector's own systemd mount namespace (`ProtectSystem=strict`),
+        # where `/` genuinely is `ro` by design. The storage was healthy: writes
+        # succeeded, SQLite committed, 0 remount-ro events, `tune2fs` clean.
+        #
+        # So the claim is cross-examined against the same heartbeat. A
+        # filesystem that cannot be written to cannot simultaneously accept
+        # buffered rows and grow its database, and a collector cannot stay
+        # active while every write fails. When the payload contradicts itself
+        # the honest report is "contradictory telemetry", not "the SD card
+        # failed" — a claim this rule has no evidence for and must not make.
+        if beat.filesystem_readonly is True:
+            contradictions = []
+            if beat.collector_status in ("active", "running", "ok"):
+                contradictions.append(f"collector is {beat.collector_status}")
+            if beat.sqlite_size_mb:
+                contradictions.append(f"local database is {beat.sqlite_size_mb} MB")
+            if beat.disk_free_mb:
+                contradictions.append(f"{beat.disk_free_mb:.0f} MB reported free")
+            if state.get("reading_age_seconds") is not None and (
+                state["reading_age_seconds"] < 600
+            ):
+                contradictions.append("measurements still arriving")
+
+            if contradictions:
+                findings.append(
+                    Finding(
+                        rule_id="node.filesystem_readonly_contradiction",
+                        subsystem=Subsystem.NODE,
+                        severity=Severity.WARNING,
+                        title=f"Node {code} reports read-only but is writing",
+                        target=code,
+                        summary=(
+                            "The node claims its filesystem is read-only while the same "
+                            "heartbeat shows it writing: "
+                            + "; ".join(contradictions)
+                            + ". This is a probe fault, not a storage fault. The usual "
+                            "cause is reading /proc/mounts from inside a hardened "
+                            "systemd mount namespace (ProtectSystem=strict), where / "
+                            "really is ro for that service while the disk is fine."
+                        ),
+                        metric="filesystem_readonly",
+                        current_value="True (contradicted by same payload)",
+                        expected_value="agreement between the probe and observed writes",
+                        # A probe defect is not an incident; it must not page or
+                        # climb the ladder on a timer.
+                        max_severity=Severity.WARNING,
+                        suggested_causes=[
+                            "Probe reads / from inside a service mount namespace",
+                            "Probe measures the wrong path for this service",
+                        ],
+                        suggested_commands=[
+                            "systemctl show energy-node-collector -p ProtectSystem -p ReadWritePaths",
+                            "awk '$2==\"/\" {print $4}' /proc/$(systemctl show energy-node-collector -p MainPID --value)/mounts",
+                            "awk '$2==\"/\" {print $4}' /proc/mounts",
+                        ],
+                        suggested_actions=[
+                            "Probe the path the service actually writes to "
+                            "(its ReadWritePaths/StateDirectory), not /.",
+                        ],
+                        context={"contradictions": contradictions},
+                        **location,
+                    )
                 )
-            )
+            else:
+                findings.append(
+                    Finding(
+                        rule_id="node.filesystem_readonly",
+                        subsystem=Subsystem.NODE,
+                        severity=Severity.CRITICAL,
+                        title=f"Node {code} filesystem is read-only",
+                        target=code,
+                        summary=(
+                            "The node reports a read-only filesystem and nothing in the "
+                            "same heartbeat contradicts it. Local buffering cannot "
+                            "persist while this is true."
+                        ),
+                        metric="filesystem_readonly",
+                        current_value="read-only (uncontradicted)",
+                        expected_value="read-write",
+                        # Genuine data-integrity risk: no sustain window.
+                        sustain_seconds=0,
+                        suggested_causes=[
+                            "Kernel remounted read-only after an I/O error",
+                            "Storage or SD card fault",
+                            "Probe measuring a path that is legitimately read-only",
+                        ],
+                        # Deliberately NOT asserting SD-card failure. That claim
+                        # requires ext4 / I/O / mmc / remount-ro evidence, none
+                        # of which this rule can see from a heartbeat.
+                        suggested_commands=[
+                            "awk '$2==\"/\" {print $4}' /proc/mounts",
+                            "dmesg -T | grep -iE 'ext4|I/O error|mmc|remount'",
+                            "tune2fs -l $(findmnt -no SOURCE /) | grep -i 'state\\|error'",
+                        ],
+                        suggested_actions=[
+                            "Confirm on the device before replacing hardware: check "
+                            "/proc/mounts, dmesg for ext4/mmc errors, and whether a "
+                            "write actually fails. Only conclude SD-card failure if "
+                            "that evidence exists.",
+                        ],
+                        **location,
+                    )
+                )
 
     return findings
 
@@ -1283,6 +1372,206 @@ def check_unknown_nodes(ctx: RuleContext) -> Iterable[Finding]:
                     "is rejected.",
                 ],
                 context={"source_ip": beat.source_ip if beat else None},
+            )
+        )
+
+    return findings
+
+
+@rule(
+    "security.duplicate_node_identity",
+    Subsystem.SECURITY,
+    "Contradictory or unauthenticated producers publishing as one node",
+)
+def check_duplicate_node_identity(ctx: RuleContext) -> Iterable[Finding]:
+    """Detect two producers publishing under a single node code.
+
+    Node identity is a credential, never a source address. On 2026-08-06 two
+    producers published as N001 from one NAT address with the same hostname and
+    the same PID in the payload; nothing in the platform could separate them,
+    and they disagreed on ``filesystem_readonly``.
+
+    Three signals, any of which is a violation:
+
+    * **Distinct producer signatures** for one node inside the window. A node
+      runs one agent; two self-declared versions means two processes.
+    * **Contradictory telemetry** on a field that cannot legitimately differ
+      between two reports of the same machine seconds apart.
+    * **Recorded identity violations** — a rejected credential or a mismatched
+      claim, which is an impersonation attempt rather than a misconfiguration.
+
+    Deliberately not gated on lifecycle policy: an impersonation attempt against
+    a decommissioned node still matters.
+    """
+    from sqlalchemy import text as _text
+
+    findings: list[Finding] = []
+    window_start = ctx.now - timedelta(minutes=15)
+
+    # --- Distinct producer signatures ------------------------------------
+    rows = (
+        ctx.session.query(
+            NodeHeartbeat.node_code,
+            NodeHeartbeat.software_version,
+            func.count(NodeHeartbeat.id),
+            func.max(NodeHeartbeat.received_at),
+        )
+        .filter(NodeHeartbeat.received_at >= window_start)
+        .group_by(NodeHeartbeat.node_code, NodeHeartbeat.software_version)
+        .all()
+    )
+
+    by_node: dict[str, list[tuple[str | None, int, Any]]] = {}
+    for code, version, count, last in rows:
+        by_node.setdefault(code, []).append((version, count, last))
+
+    for code, producers in by_node.items():
+        if len(producers) < 2:
+            continue
+        detail = ", ".join(
+            f"{ver or 'unknown'} ({n} beats, last {last})" for ver, n, last in producers
+        )
+        findings.append(
+            Finding(
+                rule_id="security.duplicate_node_identity",
+                subsystem=Subsystem.SECURITY,
+                severity=Severity.CRITICAL,
+                title=f"Multiple producers publishing as {code}",
+                target=code,
+                summary=(
+                    f"{len(producers)} distinct producer signatures reported as {code} "
+                    "in the last 15 minutes. A node runs one agent; two signatures "
+                    "means a second process is impersonating it, and its telemetry "
+                    "cannot be trusted until resolved."
+                ),
+                metric="producer_signatures",
+                current_value=detail,
+                expected_value="exactly one producer",
+                node_code=code,
+                # Identity is not a transient. One extra beat is enough evidence.
+                sustain_seconds=0,
+                suggested_causes=[
+                    "An old agent left in a backups/ directory being run manually",
+                    "A duplicate service or timer publishing the same node code",
+                    "A second host configured with the same NODE_ID",
+                    "A stale container or cron job",
+                ],
+                suggested_commands=[
+                    "curl -s localhost:8010/api/monitoring/identity/violations",
+                    'sqlite3 energy_platform.db "SELECT source_ip, software_version, '
+                    "auth_status, COUNT(*) FROM monitor_node_heartbeats "
+                    f"WHERE node_code='{code}' AND received_at > datetime('now','-1 hour') "
+                    'GROUP BY 1,2,3"',
+                    "ps -eo pid,etimes,cmd | grep -iE 'agent|heartbeat'",
+                ],
+                suggested_actions=[
+                    "Identify and stop the second producer before trusting this "
+                    "node's telemetry.",
+                    "Issue credentials and set node_auth.mode=enforce so an "
+                    "unauthenticated producer is refused rather than recorded.",
+                ],
+                context={"producers": detail},
+            )
+        )
+
+    # --- Recorded identity violations ------------------------------------
+    try:
+        violations = ctx.session.execute(
+            _text(
+                "SELECT claimed_node, violation, COUNT(*), MAX(occurred_at) "
+                "  FROM node_identity_violations "
+                " WHERE occurred_at >= :since AND violation != 'unauthenticated' "
+                " GROUP BY claimed_node, violation"
+            ),
+            {"since": window_start.strftime("%Y-%m-%dT%H:%M:%S")},
+        ).all()
+    except Exception:
+        violations = []
+
+    for claimed, violation, count, last in violations:
+        findings.append(
+            Finding(
+                rule_id="security.identity_violation",
+                subsystem=Subsystem.SECURITY,
+                severity=Severity.CRITICAL,
+                title=f"Identity violation on {claimed}: {violation}",
+                target=f"{claimed}:{violation}",
+                summary=(
+                    f"{count} request(s) in the last 15 minutes were refused or "
+                    f"flagged as {violation!r} while claiming to be {claimed}."
+                ),
+                metric="identity_violation",
+                current_value=f"{count} occurrence(s), last {last}",
+                expected_value="none",
+                node_code=claimed,
+                sustain_seconds=0,
+                suggested_commands=[
+                    "sqlite3 energy_platform.db 'SELECT * FROM node_identity_violations "
+                    "ORDER BY id DESC LIMIT 20'",
+                ],
+                suggested_actions=[
+                    "A mismatched or unknown credential is an impersonation "
+                    "attempt, not a misconfiguration. Investigate the source.",
+                ],
+            )
+        )
+
+    return findings
+
+
+@rule(
+    "security.unauthenticated_producer",
+    Subsystem.SECURITY,
+    "Nodes still publishing without a credential",
+)
+def check_unauthenticated_producers(ctx: RuleContext) -> Iterable[Finding]:
+    """Report nodes whose heartbeats carry no credential.
+
+    Exists so ``node_auth.mode = permissive`` cannot become a quiet resting
+    state. Permissive is a rollout step; while any node is unauthenticated the
+    endpoint can be impersonated, so this keeps saying so.
+
+    Report-only by default: it is a standing configuration gap, not an incident.
+    """
+    findings: list[Finding] = []
+    window_start = ctx.now - timedelta(minutes=15)
+
+    rows = (
+        ctx.session.query(NodeHeartbeat.node_code, func.count(NodeHeartbeat.id))
+        .filter(
+            NodeHeartbeat.received_at >= window_start,
+            (NodeHeartbeat.auth_status.is_(None)) | (NodeHeartbeat.auth_status != "authenticated"),
+        )
+        .group_by(NodeHeartbeat.node_code)
+        .all()
+    )
+
+    for code, count in rows:
+        findings.append(
+            Finding(
+                rule_id="security.unauthenticated_producer",
+                subsystem=Subsystem.SECURITY,
+                severity=Severity.WARNING,
+                title=f"Node {code} publishes without a credential",
+                target=code,
+                summary=(
+                    f"{count} heartbeat(s) in the last 15 minutes carried no valid "
+                    "credential. Until every node authenticates, any process can "
+                    "publish telemetry as this node."
+                ),
+                metric="auth_status",
+                current_value=f"{count} unauthenticated beat(s)",
+                expected_value="authenticated",
+                node_code=code,
+                max_severity=Severity.WARNING,
+                suggested_commands=[
+                    "venv/bin/python3 -m app.db.provision_node list",
+                    f"venv/bin/python3 -m app.db.provision_node issue {code}",
+                ],
+                suggested_actions=[
+                    "Issue a credential, install it on the node, then set "
+                    "node_auth.mode=enforce.",
+                ],
             )
         )
 

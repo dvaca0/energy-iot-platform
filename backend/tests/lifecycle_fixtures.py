@@ -175,6 +175,16 @@ def seed_lifecycle_tables(engine) -> None:
             CREATE TABLE IF NOT EXISTS node_commission_transitions (
                 from_code TEXT, to_code TEXT,
                 PRIMARY KEY (from_code, to_code))"""))
+        # M13: identity enforcement. Created by SQL migration, so the
+        # throwaway database needs it explicitly.
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS node_identity_violations (
+                id INTEGER PRIMARY KEY,
+                occurred_at DATETIME NOT NULL
+                    DEFAULT (STRFTIME('%Y-%m-%dT%H:%M:%fZ','now')),
+                claimed_node TEXT, auth_subject TEXT, violation TEXT NOT NULL,
+                source_ip TEXT, user_agent TEXT, producer TEXT,
+                endpoint TEXT, detail TEXT)"""))
         conn.execute(text("""
             CREATE TABLE IF NOT EXISTS node_commission_events (
                 id INTEGER PRIMARY KEY, node_id INTEGER NOT NULL,
