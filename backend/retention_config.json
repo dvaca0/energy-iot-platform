@@ -1,0 +1,13 @@
+{
+  "retention": {
+    "drill_keep": 2,
+    "drill_max_age_days": 7,
+    "min_total_keep": 3,
+    "keep_milestones": true,
+    "report_max_age_days": 90,
+    "report_keep": 20,
+    "tmp_max_age_days": 7,
+    "journal_max_use": "200M",
+    "docker_build_cache": true
+  }
+}
