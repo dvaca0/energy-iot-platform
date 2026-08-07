@@ -42,30 +42,32 @@ version drift between two nodes that should be identical**.
 
 ## D — Duplication and drift
 
-### D1 · `energy-node-heartbeat.service` on N002 — **BLOCKED**
+### D1 · `energy-node-heartbeat.service` on N002 — **DONE 2026-08-07**
 
 * **Why it exists:** installed 2026-07-26 as the standalone v1.0.0 agent, before
   the hardening package integrated heartbeats into the collector.
 * **Still needed:** **yes, today.** It is N002's only canonical-heartbeat source.
 * **Depends on it:** `monitor_node_heartbeats` for N002; every node rule and the
   hourly report entry for N002.
-* **Safe to remove:** **no, not yet.** Prerequisite: deploy N001's collector to
-  N002 so the canonical heartbeat moves into the collector, verify v2.0.0 beats
-  arrive, *then* disable and remove.
+* **Resolved:** D2 deployed the canonical collector to N002; v2.0.0 authenticated
+  beats verified at a steady 60 s cadence; the unit was then disabled. Files are
+  retained for rollback until the soak completes.
 * **Rollback:** `systemctl enable --now energy-node-heartbeat`; the unit and
   `/opt/energy-monitoring/node_heartbeat.py` are retained until the upgrade is
   verified in production for at least one full day.
 
-### D2 · Collector version drift — **DEFER (needs a change window)**
+### D2 · Collector version drift — **DONE 2026-08-07**
 
 N002's collector is 12 days behind N001's. This is the root cause of D1 and of
 the heartbeat asymmetry. Upgrading is a node software deployment, not a cleanup,
 and it touches the measurement path of a live (if idle) node.
 
-* **Recommended:** copy N001's `collector.py` to N002 with a timestamped backup,
-  restart, confirm v2.0.0 beats, then D1 becomes REMOVE.
-* **Risk:** N002 currently holds ~5 500 buffered rows; a collector restart must
-  not discard them. Verify `sync_status` counts before and after.
+* **Executed:** one node-agnostic canonical collector (`sha256 d9cc6138…`) now
+  runs byte-identical on both Pi 5 nodes. The startup banner was changed from a
+  literal `N001` to `CONFIG["NODE_ID"]` so the same bytes run everywhere, which
+  is what makes a fleet-wide checksum meaningful.
+* **Buffer preserved:** 5 660 → 5 671 pending, 34 357 discarded unchanged,
+  total 40 017 → 40 028. Growth only; nothing discarded by the restart.
 
 ### D3 · Two heartbeat *endpoints* — **KEEP both, for now**
 

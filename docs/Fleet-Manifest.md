@@ -7,9 +7,9 @@ design decision.
 Captured **2026-08-07**. Regenerate with `scripts/fleet_manifest.py` (see
 "Regenerating" below); do not hand-edit the measured columns.
 
-Reference build = **N001**. It is the only node whose collector publishes the
-canonical heartbeat, so it defines what "current" means until N002 is brought up
-to it.
+Reference build = the **Energy Node Package v2.1**
+([Energy-Node-Package.md](Energy-Node-Package.md)). N001 and N002 both run it,
+byte-identical. N003 does not and is out of scope.
 
 ---
 
@@ -51,8 +51,9 @@ to it.
 | Python | 3.13.5 | 3.13.5 | 3.13.5 |
 | Collector | `/opt/energy-node/app/collector.py` | same | **`/home/theblackdie/udec-edge/poller.py`** ⚠ |
 | Collector venv | `/opt/energy-node/venv` | same | **none — system python** ⚠ |
-| Collector mtime | 2026-08-06 | **2026-07-25** ⚠ (12 days behind) | 2026-07-24 |
-| **Canonical heartbeat in collector** | **yes** | **no** ⚠ | **no** ⚠ |
+| Collector mtime | 2026-08-07 | 2026-08-07 (converged) | 2026-07-24 |
+| Collector SHA-256 (24) | `d9cc6138c8be60b273615d13` | `d9cc6138c8be60b273615d13` ✅ identical | n/a ⚠ |
+| **Canonical heartbeat in collector** | **yes** | **yes** ✅ (D2, 2026-08-07) | **no** ⚠ |
 | Hardening package | 2.0.0, 12 modules | 2.0.0, 12 modules | **absent** ⚠ |
 | `config/node.env` | present, mode 600 | present, mode 600 | **absent** ⚠ |
 
@@ -71,25 +72,24 @@ to it.
 | Monitored (`is_monitored`) | yes | no | no |
 | Uploads accepted | yes (unattributed) | **403** (by design) | **401** (no credential) |
 
-## Heartbeat producers — the current divergence
+## Heartbeat producers — one per node
 
 | Node | Producer | Version | Unit | Status |
 |---|---|---|---|---|
 | N001 | collector, canonical `telemetry.build()` | 2.0.0 | `energy-node-collector` | ✅ reference |
-| N002 | **legacy standalone agent** | 1.0.0 | `energy-node-heartbeat` | ⚠ **load-bearing, not redundant** |
+| N002 | collector, canonical `telemetry.build()` | 2.0.0 | `energy-node-collector` | ✅ converged 2026-08-07 |
 | N003 | none | — | — | ⚠ no heartbeat at all |
 
-**N002's collector does not contain the canonical heartbeat call** —
-`grep -c '_hb_heartbeat.publish' collector.py` returns **0** on N002 and **1** on
-N001. Its `Heartbeat OK` log lines are the *legacy* 3-field post to
-`/api/edge/heartbeat`, which updates `nodes.last_sync` but writes nothing to
-`monitor_node_heartbeats`.
-
-> [!WARNING]
-> `energy-node-heartbeat.service` on N002 looks like duplication and is **not**.
-> It is currently N002's only source of canonical heartbeats. Removing it before
-> upgrading N002's collector would blind the node. See
-> [P2-Simplification-Audit.md](P2-Simplification-Audit.md) item **D1**.
+**Resolved 2026-08-07.** Before convergence, N002's collector lacked the
+canonical heartbeat call entirely (`grep -c '_hb_heartbeat.publish'` returned 0
+on N002, 1 on N001) and its `Heartbeat OK` lines were the *legacy* 3-field post
+to `/api/edge/heartbeat`, which updates `nodes.last_sync` but writes nothing to
+`monitor_node_heartbeats`. N002's collector was upgraded to the canonical build
+(D2), verified producing v2.0.0 authenticated beats at a 60 s cadence, and the
+legacy `energy-node-heartbeat.service` was then disabled (D1). Both Pi 5 nodes
+now run byte-identical collectors with exactly one heartbeat producer each.
+The legacy unit and agent are **retained on N002 for rollback** until the soak
+completes; see [Energy-Node-Package.md](Energy-Node-Package.md).
 
 ## systemd units
 
@@ -106,7 +106,7 @@ Both Pi 5 nodes run the same appliance stack:
 | `energy-node-recovery-arm` | recovery arming | enabled, oneshot | enabled, oneshot |
 | `energy-node-selfheal.timer` | 2-min self-heal check (inert unless enabled) | ✅ | ✅ |
 | `energy-node-verify.timer` | nightly package verification | ✅ | ✅ |
-| `energy-node-heartbeat` | **legacy standalone heartbeat** | absent ✅ | ⚠ **present** |
+| `energy-node-heartbeat` | legacy standalone heartbeat (retired) | absent ✅ | disabled ✅ (files retained for rollback) |
 | `energy-node-wifi-fallback` | maintenance AP fallback | absent | absent (N003 only) |
 
 N003 runs `udec-edge` plus the netd/portal/console/wifi-fallback subset; it has
@@ -118,7 +118,7 @@ no collector, powerlog, blackbox, recovery or verify units.
 |---|---|---|
 | Disk | 58 GB, 14 % used | 58 GB, 14 % used |
 | `/opt/energy-node/backups` | **218 MB, 26 entries** ⚠ | 1.6 MB, 13 entries |
-| Buffer pending (`sync_status=0`) | 0 | **~5 500 and growing** ⚠ |
+| Buffer pending (`sync_status=0`) | 0 | **~5 700 and growing** ⚠ |
 
 N002's buffer grows because its uploads are refused (403, `registered`) and the
 collector retains rather than discards them. That is correct behaviour and no
@@ -132,7 +132,7 @@ because a `registered` node is `is_monitored = 0`. Tracked as audit item **S3**.
 | Per-rail power (PMIC ADC) | yes | yes | **no — reported as unavailable, never faked** |
 | UPS telemetry | HAT present | HAT present | **HAT unreadable — no GPIO I²C bus** |
 | SPI sensors | available | **no spidev** | available (ADS1256 hardware present) |
-| Canonical heartbeat | yes | via legacy agent | **none** |
+| Canonical heartbeat | yes | yes | **none** |
 | Authentication | yes | yes | **no** |
 
 ## Regenerating
