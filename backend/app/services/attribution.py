@@ -59,6 +59,10 @@ class Reason:
     CALIBRATION_NODE = "CALIBRATION_NODE"
     SIMULATION_NODE = "SIMULATION_NODE"
     COMMISSIONING_NODE = "COMMISSIONING_NODE"
+    # Node powered for platform validation with no campaign running. Distinct
+    # from BENCH_NODE (hardware on a desk) and from UNKNOWN_CONTEXT, which must
+    # keep meaning "this context is not in the lookup table".
+    INFRASTRUCTURE_VALIDATION_NODE = "INFRASTRUCTURE_VALIDATION_NODE"
     UNKNOWN_CONTEXT = "UNKNOWN_CONTEXT"
 
     # Not resolvable — identity
@@ -94,6 +98,7 @@ _CONTEXT_REASON = MappingProxyType(
         "calibration": Reason.CALIBRATION_NODE,
         "simulation": Reason.SIMULATION_NODE,
         "commissioning": Reason.COMMISSIONING_NODE,
+        "infrastructure_validation": Reason.INFRASTRUCTURE_VALIDATION_NODE,
     }
 )
 

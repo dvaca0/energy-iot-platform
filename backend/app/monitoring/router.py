@@ -20,6 +20,7 @@ from datetime import datetime, timedelta
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.orm import Session
 
+from app.db import node_auth
 from app.db.database import get_db
 from app.monitoring import history
 from app.monitoring.alerts import acknowledge
@@ -48,19 +49,79 @@ def post_heartbeat(
     request: Request,
     db: Session = Depends(get_db),
 ):
-    """Accept a node heartbeat.
+    """Accept a node heartbeat — ADR-0002 steps 1 and 2.
 
-    Returns the interval the node should use, so the cadence can be retuned
-    centrally without redeploying every Pi.
+    Authenticate first, then decide. The three questions stay separate:
+
+    1. **Who is this?** A bearer credential resolved against
+       ``nodes.auth_token_hash``. The source address is recorded but is never
+       identity — three nodes share two NAT addresses here, and on 2026-08-06
+       two different producers published as N001 from one of them.
+    2. **Does the claim match the credential?** A credential for N002 may not
+       publish as N001. That is impersonation, not an authentication failure,
+       and is always refused: storing a payload known to be mislabelled would
+       corrupt the very table used to detect the problem.
+    3. **Store it, with provenance.** ``auth_subject`` and ``auth_status`` are
+       written on every heartbeat, including ones accepted in permissive mode,
+       so a collision is reconstructable afterwards instead of invisible.
     """
     config = get_config()
+    auth_cfg = config.node_auth
 
-    source_ip = request.client.host if request.client else None
-    forwarded = request.headers.get("x-forwarded-for")
-    if forwarded:
-        source_ip = forwarded.split(",")[0].strip()
+    source_ip = node_auth.client_ip(request)
+    user_agent = request.headers.get("user-agent")
+    result = node_auth.authenticate(db, node_auth.extract_token(request.headers))
 
-    beat = record_heartbeat(db, payload, source_ip=source_ip)
+    claimed = payload.node_id
+    exempt = claimed in (auth_cfg.exempt_nodes or ())
+
+    if result.authenticated and result.subject != claimed:
+        node_auth.record_violation(
+            db,
+            violation="subject_mismatch",
+            claimed_node=claimed,
+            auth_subject=result.subject,
+            source_ip=source_ip,
+            user_agent=user_agent,
+            producer=payload.software_version,
+            endpoint="/api/monitoring/heartbeat",
+            detail=f"credential for {result.subject} claimed {claimed}",
+        )
+        db.commit()
+        raise HTTPException(
+            status_code=403,
+            detail=(
+                f"credential authenticates as {result.subject}, " f"cannot publish as {claimed}"
+            ),
+        )
+
+    if not result.authenticated:
+        node_auth.record_violation(
+            db,
+            violation=result.violation or "unauthenticated",
+            claimed_node=claimed,
+            source_ip=source_ip,
+            user_agent=user_agent,
+            producer=payload.software_version,
+            endpoint="/api/monitoring/heartbeat",
+            detail=("enforcing" if auth_cfg.enforcing and not exempt else "permissive"),
+        )
+        if auth_cfg.enforcing and not exempt:
+            db.commit()
+            raise HTTPException(
+                status_code=401,
+                detail=(
+                    "node credential required (ADR-0002); " "present Authorization: Bearer <token>"
+                ),
+            )
+
+    beat = record_heartbeat(
+        db,
+        payload,
+        source_ip=source_ip,
+        auth_subject=result.subject,
+        auth_status=result.status,
+    )
     db.commit()
 
     return {
@@ -68,6 +129,9 @@ def post_heartbeat(
         "received_at": beat.received_at.isoformat(),
         "node_code": beat.node_code,
         "registered": beat.node_id is not None,
+        "authenticated": result.authenticated,
+        "auth_status": result.status,
+        "enforcement": auth_cfg.mode,
         "next_interval_seconds": config.heartbeat.interval_seconds,
         "clock_drift_seconds": beat.clock_drift_seconds,
     }

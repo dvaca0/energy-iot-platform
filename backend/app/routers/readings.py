@@ -1,12 +1,13 @@
-from datetime import datetime
+from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from app.db import lifecycle
 from app.db.database import get_db
-from app.db.models import Deployment, EnergyReading, Node
+from app.db.models import EnergyReading
+from app.monitoring.config import get_config
+from app.services import ingest_gate
 from app.services.cost_engine import estimate_reading_cost
 
 router = APIRouter()
@@ -45,25 +46,46 @@ class ReadingCreate(BaseModel):
     phase_c_current: float | None = None
 
 
+def _parse_captured_at(value: str | None) -> datetime | None:
+    """Parse the node's declared capture instant, or None.
+
+    Never falls back to "now": upload time must not influence attribution
+    (ADR-0004). An unparseable timestamp yields None, and the resolver reports
+    it as missing rather than guessing.
+    """
+    if not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except (TypeError, ValueError):
+        return None
+    if parsed.tzinfo is not None:
+        parsed = parsed.astimezone(UTC).replace(tzinfo=None)
+    return parsed
+
+
 @router.post("")
-def create_reading(payload: ReadingCreate, db: Session = Depends(get_db)):
-    node = db.query(Node).filter(Node.code == payload.node_id).first()
+def create_reading(payload: ReadingCreate, request: Request, db: Session = Depends(get_db)):
+    """Ingest one reading — authenticate, authorize, classify, attribute.
 
-    if not node:
-        raise HTTPException(status_code=404, detail="Node not found")
+    Every decision is delegated to :mod:`app.services.ingest_gate` so this path
+    and the batch path answer the same questions identically. This endpoint
+    previously picked ``order_by(Deployment.id.desc()).first()`` — the newest
+    deployment — which attributed idle readings to a campaign that closed days
+    earlier, and to that campaign's building.
+    """
+    captured_at = _parse_captured_at(payload.timestamp)
 
-    deployment = (
-        db.query(Deployment)
-        .filter(
-            Deployment.node_id == node.id,
-            Deployment.status.in_(lifecycle.attributing_statuses(db)),
-        )
-        .order_by(Deployment.id.desc())
-        .first()
+    decision = ingest_gate.admit(
+        db,
+        request,
+        payload.node_id,
+        captured_at,
+        endpoint="/api/readings",
+        enforcing=get_config().node_auth.enforcing,
     )
-
-    if not deployment:
-        raise HTTPException(status_code=400, detail="Node has no active deployment")
+    node = decision.node
+    timestamp = captured_at or datetime.utcnow()
 
     if payload.timestamp:
         timestamp = datetime.fromisoformat(payload.timestamp.replace("Z", "+00:00"))
@@ -72,8 +94,11 @@ def create_reading(payload: ReadingCreate, db: Session = Depends(get_db)):
 
     reading = EnergyReading(
         node_id=node.id,
-        building_id=deployment.building_id,
-        deployment_id=deployment.id,
+        # NULL when no operational deployment covers captured_at. A reading is
+        # stored unattributed rather than attached to the nearest campaign.
+        building_id=decision.building_id,
+        deployment_id=decision.deployment_id,
+        context=decision.context,
         timestamp=timestamp,
         voltage=payload.voltage,
         current=payload.current,

@@ -142,6 +142,14 @@ class NodeHeartbeat(Base):
     #: Complete payload as received, for fields not modelled above.
     raw_payload: Mapped[str | None] = mapped_column(Text, nullable=True)
 
+    #: Which credential this heartbeat authenticated as (M13). NULL means the
+    #: request presented none. Compared against node_code to detect
+    #: impersonation: on 2026-08-06 two producers published as N001 and nothing
+    #: recorded here could tell them apart afterwards.
+    auth_subject: Mapped[str | None] = mapped_column(String, nullable=True)
+    #: authenticated | unauthenticated | unknown_credential | subject_mismatch
+    auth_status: Mapped[str | None] = mapped_column(String, nullable=True)
+
     #: Source address, used to detect a node reporting from an unexpected
     #: network and to correlate with the backend access log.
     source_ip: Mapped[str | None] = mapped_column(String, nullable=True)

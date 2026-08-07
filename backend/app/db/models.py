@@ -102,6 +102,9 @@ class Node(Base):
     measurement_context: Mapped[str] = mapped_column(String, nullable=False, default="production")
     auth_token_hash: Mapped[str | None] = mapped_column(String, nullable=True)
     commissioned_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    # When the credential in auth_token_hash was issued (M13). Rotation is
+    # auditable; the hash itself never leaves the database.
+    auth_token_issued_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     # ------------------------------------------------------------ ratings
     # Physical limits of the measurement hardware that travels with this node
