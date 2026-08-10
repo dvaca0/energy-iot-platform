@@ -108,8 +108,34 @@ def run() -> int:
 
     threshold = enconfig.get_int("RECOVERY_AUTO_REBOOT_AFTER_FAILURES", 3)
     if enconfig.get_bool("RECOVERY_AUTO_REBOOT", False) and n >= threshold:
-        print(f"[recovery.selfheal] escalation: {n} >= {threshold} -> REBOOT")
-        failures(-1)
+        # The reboot budget is shared with the Recovery Manager and lives in
+        # the persistent ledger, NOT in this counter.
+        #
+        # This previously called failures(-1) here, which zeroes the counter.
+        # After the reboot the node therefore had no memory of having tried:
+        # three more restarts, another reboot, forever. That is the infinite
+        # reboot loop the ledger exists to make impossible. The counter is
+        # deliberately NOT reset - the reboot is recorded in the ledger and
+        # the budget decides whether another one is allowed.
+        import time
+
+        from recovery import ledger as ledger_mod
+
+        now = time.time()
+        led = ledger_mod.load()
+        budget = enconfig.get_int("RECOVERY_REBOOT_MAX", 3)
+        window = enconfig.get_int("RECOVERY_REBOOT_WINDOW_S", 1800)
+        used = led.reboots_in_window(now, window)
+        if used >= budget:
+            print(f"[recovery.selfheal] reboot budget exhausted "
+                  f"({used}/{budget} in {window}s) - NOT rebooting. "
+                  f"Recovery Manager owns SAFE MODE from here.")
+            return 0
+        print(f"[recovery.selfheal] escalation: {n} >= {threshold} -> REBOOT "
+              f"({used + 1}/{budget} in {window}s)")
+        led.reboots.append(now)
+        ledger_mod.prune(led, now)
+        ledger_mod.save(led)     # persist BEFORE rebooting, or it never happens
         from recovery import ups_wake
         ups_wake.arm()          # no-op unless its own flag is set
         subprocess.run(["systemctl", "reboot"], timeout=30)

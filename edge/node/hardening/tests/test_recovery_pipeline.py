@@ -50,6 +50,17 @@ class FirstFailure(unittest.TestCase):
     def test_missing_stage_is_not_a_failure(self):
         self.assertIsNone(p.first_failure([p.StageResult(p.CLOCK, p.OK)]))
 
+    def test_backend_is_attributed_before_heartbeat(self):
+        # A backend outage must be named as the backend's fault. Heartbeat is
+        # LOCAL, so attributing it first would reboot the node over an outage
+        # it cannot fix.
+        r = results(backend=p.FAILED, heartbeat=p.FAILED)
+        self.assertEqual(p.first_failure(r).stage, p.BACKEND)
+
+    def test_measurements_are_attributed_before_backend(self):
+        r = results(measurements=p.FAILED, backend=p.FAILED)
+        self.assertEqual(p.first_failure(r).stage, p.MEASUREMENTS)
+
 
 class Backoff(unittest.TestCase):
     def test_grows_exponentially_then_caps(self):

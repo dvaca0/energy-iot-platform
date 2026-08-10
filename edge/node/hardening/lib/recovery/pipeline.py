@@ -47,6 +47,12 @@ HEARTBEAT = "heartbeat"
 MEASUREMENTS = "measurements"
 BACKEND = "backend"
 
+#: Dependency order, and therefore the order in which a fault is attributed.
+#: MEASUREMENTS precedes BACKEND because measuring does not need the backend,
+#: and BACKEND precedes HEARTBEAT because heartbeat delivery does. Ordering
+#: heartbeat earlier would make every backend outage look like a local
+#: heartbeat fault - and heartbeat is LOCAL, so the node would reboot itself
+#: over an outage it cannot fix.
 STAGE_ORDER: Tuple[str, ...] = (
     FILESYSTEM,
     CLOCK,
@@ -54,9 +60,9 @@ STAGE_ORDER: Tuple[str, ...] = (
     TAILSCALE,
     SENSOR,
     COLLECTOR,
-    HEARTBEAT,
     MEASUREMENTS,
     BACKEND,
+    HEARTBEAT,
 )
 
 #: LOCAL   - the fault is on this node; a service restart, then a reboot, are

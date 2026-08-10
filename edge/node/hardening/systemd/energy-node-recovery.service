@@ -1,0 +1,64 @@
+[Unit]
+# WHY: the node had detection but no actuator. energy-node-verify ran at every
+# boot, exited non-zero when the node was degraded, and nothing consumed the
+# result. Recovery itself was a set of one-shot scripts with no escalation
+# ladder and no memory across reboots, so the only escalation that existed
+# (selfheal layer 4) zeroed its own counter immediately before rebooting and
+# could loop forever.
+#
+# PROTECTS AGAINST: a stage of boot or steady-state that never comes up -
+#   filesystem, clock, network, sensor, collector, measurements, heartbeat -
+#   by remedying that stage first and escalating to a bounded reboot only when
+#   service-level recovery is exhausted.
+# DOES NOT PROTECT AGAINST: an unpowered or latched SoC. Nothing running on
+#   the CPU can restart a CPU that is not running. That needs layer 7 or 8.
+Description=Energy Node Recovery Manager
+Documentation=file:/opt/energy-node/hardening/docs/node-hardening.md
+
+# Deliberately does NOT wait for network-online.target. This service must run
+# when the network is broken - that is precisely when it is needed. Same
+# reasoning as energy-node-netd.
+After=local-fs.target energy-node-netd.service
+Wants=energy-node-netd.service
+
+# MUST live in [Unit]: systemd ignores these in [Service]. A node must never
+# end up with its recovery supervisor permanently stopped because it restarted
+# too often. Being rate-limited into 'failed' is the exact state this
+# subsystem exists to make impossible - the mistake the collector unit still
+# makes with StartLimitBurst=20.
+StartLimitIntervalSec=0
+StartLimitBurst=0
+
+[Service]
+Type=notify
+NotifyAccess=main
+# System python3, NOT the collector venv: the hardening package needs smbus2
+# and psutil, which the venv deliberately does not carry. Every other
+# hardening entry point uses /usr/bin/env python3 for the same reason.
+ExecStart=/usr/bin/python3 -u /opt/energy-node/hardening/lib/recovery/daemon.py
+Environment=PYTHONPATH=/opt/energy-node/hardening/lib
+Environment=PYTHONUNBUFFERED=1
+Restart=always
+RestartSec=10
+# Generous: one tick probes the backend over the network with a 10s timeout.
+WatchdogSec=300
+
+# Root is required to restart units, remount the root filesystem and reboot.
+# Every one of those is the point of the service.
+User=root
+Group=root
+RuntimeDirectory=energy-node
+RuntimeDirectoryMode=0755
+RuntimeDirectoryPreserve=yes
+
+NoNewPrivileges=false
+ProtectHome=true
+PrivateTmp=true
+LockPersonality=true
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=energy-node-recovery
+
+[Install]
+WantedBy=multi-user.target

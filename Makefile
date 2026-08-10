@@ -19,7 +19,7 @@ SUITES := monitoring collector smart_plugs synthetic_deployment
 INTEGRATION := energy_aggregate deployment_lifecycle
 
 .DEFAULT_GOAL := help
-.PHONY: help setup dev build test test-integration lint format check docs-check mermaid api-docs deps-check \
+.PHONY: help setup dev build test test-node test-integration lint format check docs-check mermaid api-docs deps-check \
         clean reload backup dev-ui
 
 help:  ## Show this help
@@ -50,6 +50,16 @@ test:  ## Run the hermetic suites (any checkout, no database needed)
 	  if (cd backend && venv/bin/python3 -m tests.test_$$t >/tmp/eiq-$$t.log 2>&1); then \
 	    echo "PASS"; else echo "FAIL — /tmp/eiq-$$t.log"; fail=1; fi; \
 	done; exit $$fail
+
+test-node:  ## Run the on-node suites (no hardware, no radio, no network)
+	@fail=0; \
+	printf "\033[36m%-24s\033[0m " "netd"; \
+	if (cd edge/node/net && python3 -m unittest discover -s tests -t . \
+	    >/tmp/eiq-netd.log 2>&1); then echo "PASS"; else echo "FAIL — /tmp/eiq-netd.log"; fail=1; fi; \
+	printf "\033[36m%-24s\033[0m " "hardening"; \
+	if (python3 -m unittest discover -s edge/node/hardening/tests -t . \
+	    >/tmp/eiq-hardening.log 2>&1); then echo "PASS"; else echo "FAIL — /tmp/eiq-hardening.log"; fail=1; fi; \
+	exit $$fail
 
 test-integration:  ## Run the suites that need the live production database
 	@for t in $(INTEGRATION); do \
@@ -83,7 +93,7 @@ deps-check:  ## Verify every backend import is declared in requirements
 api-docs:  ## Verify docs/API.md still matches the application
 	$(PY) scripts/check_api_docs.py
 
-check: lint deps-check test docs-check mermaid api-docs  ## Everything CI runs
+check: lint deps-check test test-node docs-check mermaid api-docs  ## Everything CI runs
 
 backup:  ## Safe database backup — never use cp on a WAL database
 	@mkdir -p backups

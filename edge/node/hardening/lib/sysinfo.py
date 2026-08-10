@@ -287,6 +287,33 @@ def systemd_main_pid(unit: str) -> Optional[int]:
         return None
 
 
+def time_synchronized() -> Optional[bool]:
+    """Has the clock been disciplined by NTP since boot?
+
+    These boards do not hold time across a power cut: the kernel sets the clock
+    to 1970, systemd advances it to a saved timestamp that may be days stale,
+    and only then does NTP correct it. Anything that stamps a record before
+    that last step writes a wrong timestamp, so the answer must be knowable.
+
+    None when it cannot be determined — never a silent True.
+    """
+    # systemd creates this the moment timesyncd accepts a sample.
+    if os.path.exists("/run/systemd/timesync/synchronized"):
+        return True
+    try:
+        r = subprocess.run(["timedatectl", "show", "-p", "NTPSynchronized",
+                            "--value"],
+                           capture_output=True, text=True, timeout=10)
+        out = r.stdout.strip().lower()
+        if out in ("yes", "true", "1"):
+            return True
+        if out in ("no", "false", "0"):
+            return False
+    except (OSError, subprocess.SubprocessError):
+        pass
+    return None
+
+
 def watchdog_state() -> dict:
     base = "/sys/class/watchdog/watchdog0"
     if not os.path.isdir(base):

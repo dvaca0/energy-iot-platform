@@ -342,6 +342,18 @@ def check_collector() -> Result:
     return r
 
 
+def check_time_sync() -> Result:
+    """Has NTP disciplined the clock since boot?
+
+    A node whose clock has not been corrected yet will stamp measurements with
+    a timestamp that can be days wrong, and attribution is by captured_at, so
+    the error is silent and permanent once uploaded.
+    """
+    synced = sysinfo.time_synchronized()
+    return evaluate_boolean("time_sync", synced, fail_on=Tri.FALSE,
+                            label="clock disciplined by NTP")
+
+
 def check_sqlite() -> Result:
     db = enconfig.get("DB_PATH")
     try:
@@ -620,6 +632,7 @@ CHECKS = (
     ("buffer", check_buffer),
     ("sync_queue", check_sync_queue),
     ("filesystem", check_filesystem),
+    ("time_sync", check_time_sync),
     ("disk", check_disk),
     ("memory", check_memory),
     ("cpu", check_cpu),
