@@ -1,0 +1,9 @@
+[Unit]
+Description=Run energy-node verification after boot and daily
+[Timer]
+OnBootSec=3min
+OnCalendar=daily
+AccuracySec=1min
+Persistent=true
+[Install]
+WantedBy=timers.target

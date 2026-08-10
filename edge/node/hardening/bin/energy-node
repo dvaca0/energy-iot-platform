@@ -1,0 +1,193 @@
+#!/usr/bin/env python3
+"""energy-node — operator CLI for the node hardening package.
+
+  energy-node doctor [--json] [--quiet]     full health check, PASS/WARN/FAIL
+  energy-node hardening status [--json]     what version is installed
+  energy-node ups [--json]                  UPS discovery / fingerprint
+  energy-node sensors [--json]              measurement hardware discovery
+  energy-node recovery status               recovery modules and their flags
+  energy-node recovery <arm-ups|rtc-set|rtc-clear|self-heal>
+  energy-node selftest [--json]             non-destructive regression suite
+  energy-node blackbox [record|history|summary] [--json]
+                                            boot forensics / reboot reasons
+  energy-node version                       package version
+
+Exit codes: 0 = healthy / success, 1 = at least one FAIL.
+"""
+
+from __future__ import annotations
+
+import json
+import sys
+
+sys.path.insert(0, "/opt/energy-node/hardening/lib")
+
+COLOR = sys.stdout.isatty()
+
+
+def paint(text: str, code: str) -> str:
+    return f"\033[{code}m{text}\033[0m" if COLOR else text
+
+
+OUTCOME_COLOR = {"PASS": "32", "FAIL": "31", "WARN": "33",
+                 "UNKNOWN": "36", "SKIP": "90"}
+
+
+def cmd_doctor(argv) -> int:
+    import doctor
+    from tristate import Outcome
+    results = doctor.run_all()
+    payload = doctor.to_json(results)
+
+    if "--json" in argv:
+        print(json.dumps(payload, indent=2, default=str))
+        return 0 if payload["ok"] else 1
+
+    if "--quiet" not in argv:
+        print(f"=== energy-node doctor — {payload['node_id']} "
+              f"({payload['hostname']}) ===")
+        print(f"    hardening {payload['hardening_version'] or 'unmanaged'} · "
+              f"doctor {payload['doctor_version']} · {payload['generated_at']}\n")
+        for r in results:
+            tag = paint(f"{r.outcome.value:7}", OUTCOME_COLOR.get(
+                r.outcome.value, "0"))
+            print(f"  [{tag}] {r.subsystem:24} {r.detail}")
+        print()
+
+    c = payload["counts"]
+    print(f"  {len(results)} checks: {c['PASS']} PASS, {c['FAIL']} FAIL, "
+          f"{c['WARN']} WARN, {c['UNKNOWN']} UNKNOWN, {c['SKIP']} SKIP")
+    overall = payload["overall"]
+    print(f"  OVERALL: {paint(overall, OUTCOME_COLOR.get(overall, '0'))}")
+    if not payload["ok"]:
+        print("\n  Failing subsystems:")
+        for r in results:
+            if r.outcome is Outcome.FAIL:
+                print(f"    - {r.subsystem}: {r.detail}")
+    return 0 if payload["ok"] else 1
+
+
+def cmd_hardening(argv) -> int:
+    import version
+    if argv and argv[0] not in ("status", "--json"):
+        print("usage: energy-node hardening status [--json]")
+        return 2
+    if "--json" in argv:
+        print(json.dumps(version.status_dict(), indent=2, default=str))
+        return 0
+    return version.print_status()
+
+
+def cmd_ups(argv) -> int:
+    import ups
+    s = ups.discover()
+    if "--json" in argv:
+        print(json.dumps(s.as_dict(), indent=2, default=str))
+    else:
+        print(s.summary())
+        if s.present and not s.identified:
+            print("\nRaw fingerprint — add a driver to lib/ups/ for this "
+                  "hardware:")
+            print(json.dumps(s.fingerprint, indent=2))
+    return 0 if s.present else 1
+
+
+def cmd_sensors(argv) -> int:
+    import sensors
+    d = sensors.discover()
+    if "--json" in argv:
+        print(json.dumps({"expected": d["expected"],
+                          "primary": d["primary"].as_dict(),
+                          "all": [x.as_dict() for x in d["all"]]},
+                         indent=2, default=str))
+    else:
+        p = d["primary"]
+        print(f"primary: {p.kind} — {p.detail}")
+        for x in d["all"]:
+            if x is not p:
+                print(f"  also: {x.kind} — {x.detail}")
+    return 0 if d["primary"].identified else 1
+
+
+def cmd_recovery(argv) -> int:
+    import recovery
+    from recovery import rtc_wake, selfheal, ups_wake
+    sub = argv[0] if argv else "status"
+    table = {"status": recovery.print_status, "arm-ups": ups_wake.arm,
+             "rtc-set": rtc_wake.set_alarm, "rtc-clear": rtc_wake.clear,
+             "self-heal": selfheal.run}
+    if sub not in table:
+        print(f"usage: energy-node recovery [{'|'.join(table)}]")
+        return 2
+    return table[sub]()
+
+
+def cmd_selftest(argv) -> int:
+    import selftest
+    return selftest.main(json_out="--json" in argv)
+
+
+def cmd_blackbox(argv) -> int:
+    import blackbox
+    sub = argv[0] if argv and not argv[0].startswith("-") else "summary"
+    js = "--json" in argv
+    if sub == "record":
+        r = blackbox.record_boot()
+        if js:
+            print(json.dumps(r, indent=2, default=str)); return 0
+        print(f"boot recorded: {r.get('boot_id','?')[:8]} "
+              f"reason={r.get('reboot_reason')} gap={r.get('gap_seconds')}")
+        if r.get("reason_detail"):
+            print(f"  {r['reason_detail']}")
+        return 0
+    if sub == "history":
+        h = blackbox.history()
+        if js:
+            print(json.dumps(h, indent=2, default=str)); return 0
+        print(f"{'booted (UTC)':21}{'reason':17}{'gap':>10}  detail")
+        for b in h:
+            g = f"{b['gap_seconds']:.0f}s" if b.get("gap_seconds") else "-"
+            print(f"{(b.get('booted_at_iso') or ''):21}"
+                  f"{(b.get('reboot_reason') or ''):17}{g:>10}  "
+                  f"{(b.get('reason_detail') or '')[:60]}")
+        return 0
+    s = blackbox.summary()
+    if js:
+        print(json.dumps(s, indent=2, default=str)); return 0
+    print(f"recorded boots : {s['recorded_boots']}")
+    print(f"by reason      : {s['by_reason']}")
+    print(f"counters       : {s['counters']}")
+    if s.get("last_boot"):
+        lb = s["last_boot"]
+        print(f"last boot      : {lb['at']} reason={lb['reason']} "
+              f"gap={lb['gap_seconds']}")
+        print(f"  {lb['detail']}")
+    return 0
+
+
+def cmd_version(argv) -> int:
+    import version
+    print(version.PACKAGE_VERSION)
+    return 0
+
+
+COMMANDS = {"doctor": cmd_doctor, "hardening": cmd_hardening, "ups": cmd_ups,
+            "sensors": cmd_sensors, "recovery": cmd_recovery,
+            "selftest": cmd_selftest, "version": cmd_version,
+            "blackbox": cmd_blackbox}
+
+
+def main() -> int:
+    if len(sys.argv) < 2 or sys.argv[1] in ("-h", "--help", "help"):
+        print(__doc__)
+        return 0
+    cmd, argv = sys.argv[1], sys.argv[2:]
+    if cmd not in COMMANDS:
+        print(f"unknown command: {cmd}\n")
+        print(__doc__)
+        return 2
+    return COMMANDS[cmd](argv)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -1,0 +1,102 @@
+# Energy Node networking subsystem configuration
+#
+# Rendered per node at deployment time. Every value here has a documented
+# default in netd/config.py; a missing or malformed entry degrades to that
+# default rather than preventing the subsystem from starting.
+#
+# After editing:  sudo systemctl restart energy-node-netd
+
+node:
+  id: "N001"
+  hostname: "energy-node-001"
+  model: "120A"
+  site: ""
+
+interfaces:
+  wifi: "wlan0"
+  ethernet: "eth0"
+
+  # auto   - Ethernet becomes the uplink only when it actually carries a
+  #          default route. On these nodes eth0 is the private Shelly sensor
+  #          segment with no gateway, so 'auto' correctly keeps Wi-Fi as the
+  #          uplink while still preferring Ethernet the moment a real
+  #          gateway appears on it.
+  # always - always prefer Ethernet when the link is up
+  # never  - Ethernet is never an uplink
+  ethernet_is_uplink: "auto"
+  sensor_subnet: "192.168.50.0/24"
+
+access_point:
+  enabled: true
+  ssid_format: "EnergyNode-{node_id}"
+  password: "REDACTED-RENDERED-PER-NODE"
+  profile_name: "energy-node-maintenance-ap"
+
+  # NOTE: 192.168.50.0/24 is deliberately NOT used here. That subnet is the
+  # Shelly sensor segment on eth0; putting the AP on it would collide with
+  # the meter and break the collector's path to it.
+  address: "192.168.66.1"
+  prefix: 24
+  channel: 6
+  band: "bg"
+  hidden: false
+
+timing:
+  # Seconds. Tuned for a headless appliance on a campus network: patient
+  # enough not to flap the AP during a transient outage, quick enough that a
+  # technician standing at a dead node is not waiting long.
+  boot_grace: 45              # let NetworkManager settle before judging
+  connect_grace: 60           # how long CONNECTING may last
+  offline_before_ap: 180      # continuous offline time before raising the AP
+  stable_before_ap_down: 60   # uplink must be stable this long before AP down
+  monitor_interval: 10        # evaluation cadence
+  probe_timeout: 4
+  retry_backoff_initial: 15
+  retry_backoff_max: 300
+  scan_min_interval: 30
+  ap_min_uptime: 120          # AP stays up at least this long once raised
+
+probes:
+  dns_names:
+    - "deb.debian.org"
+    - "one.one.one.one"
+  internet_hosts:
+    - "1.1.1.1"
+    - "8.8.8.8"
+  backend_url: "http://148.213.1.15:8010/"
+  backend_timeout: 6
+  shelly_host: "192.168.50.10"
+
+portal:
+  enabled: true
+  bind: "0.0.0.0"
+  port: 80
+  always_on: true
+  allow_power_actions: true
+  log_tail_lines: 200
+
+  # Source networks allowed to perform *mutating* actions (connect, forget,
+  # restart, reboot, shutdown, factory reset). Status pages stay readable from
+  # anywhere the portal is reachable. The portal is intentionally
+  # unauthenticated -- a technician at a dead node must not need a password --
+  # so the trust boundary is where you connect from.
+  trusted_networks:
+    - "127.0.0.0/8"
+    - "::1/128"
+    - "192.168.66.0/24"   # maintenance AP segment
+    - "192.168.50.0/24"   # private sensor segment
+    - "100.64.0.0/10"     # Tailscale
+
+services:
+  collector: "energy-node-collector.service"
+  manageable:
+    - "energy-node-collector.service"
+    - "energy-node-netd.service"
+    - "energy-node-portal.service"
+    - "energy-node-console.service"
+    - "NetworkManager.service"
+
+paths:
+  state_dir: "/run/energy-node"
+  var_dir: "/var/lib/energy-node-net"
+  collector_db: "/opt/energy-node/database/edge_buffer.db"

@@ -1,0 +1,28 @@
+[Unit]
+# WHY: the UPS HAT can boot the Pi when charging power returns, but only if
+# the MCU was armed first and the Pi then powers off immediately. This unit
+# does nothing at boot; its ExecStop runs during shutdown, the only safe
+# moment to arm.
+# PROTECTS AGAINST: mains outage -> battery flat -> shutdown -> mains returns
+#   -> node boots unattended.
+# DOES NOT PROTECT AGAINST: the 2026-08-01 failure. That had no power
+#   transition for the MCU to detect; the rail stayed up for all 43h37m.
+# INERT unless RECOVERY_UPS_ARM_ON_SHUTDOWN=1 in hardening.conf.
+Description=Arm UPS wake-on-power at shutdown (inert unless enabled)
+Documentation=file:/opt/energy-node/hardening/docs/node-hardening.md
+DefaultDependencies=no
+Before=shutdown.target
+Conflicts=reboot.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/bin/true
+ExecStop=/opt/energy-node/hardening/bin/energy-node-recovery arm-ups
+TimeoutStopSec=30
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=energy-node-recovery
+
+[Install]
+WantedBy=multi-user.target

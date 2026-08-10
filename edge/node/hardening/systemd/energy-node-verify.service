@@ -1,0 +1,14 @@
+[Unit]
+# Runs the full verification sweep once after boot and logs the result, so a
+# node that comes up degraded says so in the journal without anyone asking.
+Description=Energy Node post-boot verification
+Documentation=file:/opt/energy-node/hardening/docs/node-hardening.md
+After=energy-node-collector.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/opt/energy-node/hardening/bin/energy-node-verify
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=energy-node-verify

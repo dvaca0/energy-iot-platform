@@ -1,0 +1,23 @@
+[Unit]
+# WHY: the 2026-08-01 (43h37m) and 2026-08-03 (89m) outages left almost no
+# forensic trail. Both were only diagnosable because the RTC happened to
+# preserve one bit of information. This records that automatically at every
+# boot so the NEXT incident is triaged before anyone logs in.
+#
+# PROTECTS AGAINST: nothing. Forensics only.
+# DOES NOT PROTECT AGAINST: any failure mode. It records, it does not recover.
+Description=Energy Node black-box boot recorder
+Documentation=file:/opt/energy-node/hardening/docs/node-hardening.md
+After=systemd-journald.service local-fs.target
+Wants=systemd-journald.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/opt/energy-node/hardening/bin/energy-node blackbox record
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=energy-node-blackbox
+
+[Install]
+WantedBy=multi-user.target

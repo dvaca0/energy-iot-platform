@@ -1,0 +1,6 @@
+#!/usr/bin/env python3
+"""Entry point for the power/UPS telemetry recorder."""
+import sys
+sys.path.insert(0, "/opt/energy-node/hardening/lib")
+import powerlog
+sys.exit(powerlog.main())

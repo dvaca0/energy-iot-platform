@@ -1,0 +1,163 @@
+#!/usr/bin/env bash
+# Recovery test suite for energy-node.
+#
+# SAFE tests run now and do not power the node down. DESTRUCTIVE tests power
+# the node down or interrupt its supply and must only be run in an agreed
+# maintenance window with someone able to press the button.
+#
+# Usage:  recovery-test.sh list
+#         recovery-test.sh safe                 # run all safe tests
+#         recovery-test.sh <test-name>
+set -uo pipefail
+
+COLLECTOR=energy-node-collector.service
+AGENT=energy-node-agent.service
+DB=/opt/energy-node/database/edge_buffer.db
+API=$(grep -oP '(?<=^CENTRAL_API_URL=).*' /opt/energy-node/config/node.env 2>/dev/null || echo http://148.213.1.15:8010)
+
+pass(){ echo "  PASS  $*"; }
+fail(){ echo "  FAIL  $*"; RC=1; }
+info(){ echo "        $*"; }
+hdr(){ echo; echo "=== $* ==="; }
+RC=0
+
+meas_count(){ sqlite3 "file:$DB?mode=ro" "SELECT COUNT(*) FROM measurements;" 2>/dev/null; }
+meas_age(){ /opt/energy-node/hardening/bin/energy-node-recovery status 2>/dev/null | awk '/measurement_age_s/{print $3}'; }
+wait_active(){ local u=$1 n=${2:-30}; for _ in $(seq "$n"); do
+  [ "$(systemctl is-active "$u")" = active ] && return 0; sleep 1; done; return 1; }
+
+# ---------------------------------------------------------------- SAFE
+t_ups_identify(){ hdr "UPS identification"
+  out=$(/opt/energy-node/hardening/bin/energy-node-ups --json)
+  echo "$out" | grep -q '"confidence": "positive"' \
+    && pass "UPS positively identified: $(echo "$out"|grep -oP '(?<="model": ")[^"]+')" \
+    || fail "UPS not positively identified"
+  echo "$out" | sed 's/^/        /'; }
+
+t_watchdog(){ hdr "Hardware watchdog present and armed"
+  s=$(cat /sys/class/watchdog/watchdog0/state 2>/dev/null)
+  t=$(cat /sys/class/watchdog/watchdog0/timeout 2>/dev/null)
+  [ "$s" = active ] && pass "bcm2835 watchdog active, timeout=${t}s" || fail "watchdog not active"
+  info "NOTE: this was ALSO active during the 2026-08-01 failure and did not"
+  info "help. It cannot recover an unpowered SoC. See recovery.py header."; }
+
+t_collector_crash(){ hdr "Collector crash (SIGKILL) -> systemd restart"
+  before=$(systemctl show -p MainPID --value $COLLECTOR)
+  n0=$(meas_count); t0=$(date +%s)
+  info "killing PID $before"
+  sudo systemctl kill -s SIGKILL $COLLECTOR
+  sleep 2
+  if wait_active $COLLECTOR 40; then
+    after=$(systemctl show -p MainPID --value $COLLECTOR); t1=$(date +%s)
+    pass "recovered in $((t1-t0))s (PID $before -> $after)"
+  else fail "collector did not come back"; fi
+  sleep 20; n1=$(meas_count)
+  [ "${n1:-0}" -gt "${n0:-0}" ] && pass "measurements resumed ($n0 -> $n1)" \
+    || fail "measurements did not resume ($n0 -> $n1)"; }
+
+t_collector_freeze(){ hdr "Collector freeze (SIGSTOP) -> self-heal"
+  pid=$(systemctl show -p MainPID --value $COLLECTOR)
+  info "freezing PID $pid with SIGSTOP"
+  sudo kill -STOP "$pid" 2>/dev/null
+  sleep 5
+  st=$(awk '{print $3}' /proc/"$pid"/stat 2>/dev/null)
+  [ "$st" = T ] && pass "process is frozen (state=T) - systemd sees it as 'active'" \
+                || info "process state=$st"
+  info "systemd is-active: $(systemctl is-active $COLLECTOR) <- why Restart=always cannot help here"
+  sudo kill -CONT "$pid" 2>/dev/null
+  sleep 2
+  pass "thawed (self-heal would restart it once RECOVERY_SELF_HEAL=1)"; }
+
+t_backend_loss(){ hdr "Backend loss -> buffering, no data loss"
+  host=$(echo "$API"|sed -E 's#https?://([^:/]+).*#\1#')
+  n0=$(meas_count)
+  info "blackholing $host for 45s"
+  sudo ip route add blackhole "$host"/32 2>/dev/null
+  sleep 45
+  sudo ip route del blackhole "$host"/32 2>/dev/null
+  n1=$(meas_count)
+  [ "${n1:-0}" -gt "${n0:-0}" ] && pass "kept measuring while backend unreachable ($n0 -> $n1)" \
+    || fail "measurement stopped during backend outage"
+  sleep 20
+  pend=$(sqlite3 "file:$DB?mode=ro" "SELECT COUNT(*) FROM measurements WHERE sync_status=0;" 2>/dev/null)
+  info "pending after recovery: $pend (should drain toward 0)"
+  systemctl is-active $COLLECTOR >/dev/null && pass "collector survived backend outage" \
+    || fail "collector died"; }
+
+t_heartbeat(){ hdr "Dead-man heartbeat reaches monitoring"
+  code=$(curl -s -o /tmp/hb.json -w '%{http_code}' --max-time 15 "$API/api/monitoring/status")
+  [ "$code" = 200 ] || { fail "monitoring status unreachable"; return; }
+  python3 - <<'PY'
+import json
+d=json.load(open("/tmp/hb.json"))
+n=[x for x in d["nodes"] if x["code"]=="N001"][0]
+ok = n["ever_seen"] and n["heartbeat_age_seconds"] is not None
+print(("  PASS  " if ok else "  FAIL  ")+
+      f"ever_seen={n['ever_seen']} heartbeat_age={n['heartbeat_age_seconds']}")
+print(f"        severity={n['severity']} missed_beats={n['missed_beats']}")
+PY
+}
+
+t_rtc_alarm(){ hdr "RTC wake alarm can be set and cleared (capability only)"
+  now=$(date +%s); tgt=$((now+3600))
+  if echo 0 | sudo tee /sys/class/rtc/rtc0/wakealarm >/dev/null 2>&1 \
+     && echo $tgt | sudo tee /sys/class/rtc/rtc0/wakealarm >/dev/null 2>&1; then
+    got=$(cat /sys/class/rtc/rtc0/wakealarm)
+    [ "$got" = "$tgt" ] && pass "alarm settable (set to $tgt)" || fail "alarm readback $got != $tgt"
+    echo 0 | sudo tee /sys/class/rtc/rtc0/wakealarm >/dev/null
+    [ -z "$(cat /sys/class/rtc/rtc0/wakealarm)" ] && pass "alarm cleared" || fail "alarm not cleared"
+  else fail "cannot write wakealarm"; fi
+  info "CAPABILITY ONLY. Does NOT prove the board wakes from a PMIC brownout"
+  info "latch - that requires the destructive test 'halt-rtc-wake'."; }
+
+t_recovery_inert(){ hdr "All recovery mechanisms are inert while disabled"
+  for c in arm-ups rtc-set self-heal; do
+    /opt/energy-node/hardening/bin/energy-node-recovery $c | grep -q DISABLED \
+      && pass "$c is a no-op" || fail "$c is NOT inert"
+  done
+  arm=$(sudo i2cget -y 1 0x2d 0x01)
+  [ "$arm" = 0x0b ] && pass "UPS arm register untouched ($arm)" || fail "UPS arm register is $arm"; }
+
+# ------------------------------------------------------- DESTRUCTIVE (staged)
+d_notice(){ cat <<'EOF'
+These tests power the node down or interrupt its supply. Run ONLY in an agreed
+maintenance window, with someone physically present who can press the button.
+
+  reboot-normal    systemctl reboot; measure time to first measurement
+  shutdown-clean   arm UPS, poweroff, confirm reg 0x01 == 0x55 before it dies
+  power-removal    pull the HAT input; confirm battery takes over (INA219 goes
+                   negative) and the node keeps running
+  mains-restore    with UPS armed and node off, restore mains; confirm the MCU
+                   pulls GPIO3 low and the node boots unattended
+  battery-only     run on battery; log runtime vs battery voltage curve
+  battery-deplete  run to the 3.15V trip; confirm clean shutdown, not a crash
+  brownout         sag the input toward 4.7V; confirm what the PMIC does.
+                   THIS IS THE TEST THAT REPRODUCES THE 2026-08-01 FAILURE.
+                   Expect it may latch and need the button. Have someone there.
+  halt-rtc-wake    systemctl halt with an RTC alarm set; confirm whether the
+                   board wakes. THIS IS THE ONE UNVALIDATED SOFTWARE HOPE for
+                   recovering a latch without new hardware.
+  watchdog-timeout echo c > /proc/sysrq-trigger (or freeze the kernel) and
+                   confirm the 60s hardware watchdog resets the board.
+EOF
+}
+
+case "${1:-list}" in
+  list) echo "SAFE:"; echo "  ups-identify watchdog collector-crash collector-freeze"
+        echo "  backend-loss heartbeat rtc-alarm recovery-inert"
+        echo; echo "DESTRUCTIVE (maintenance window only):"; d_notice ;;
+  safe) t_ups_identify; t_watchdog; t_recovery_inert; t_heartbeat
+        t_rtc_alarm; t_collector_crash; t_collector_freeze; t_backend_loss
+        echo; echo "=== SAFE SUITE $([ $RC -eq 0 ] && echo PASSED || echo "HAD FAILURES") ===" ;;
+  ups-identify) t_ups_identify ;;
+  watchdog) t_watchdog ;;
+  collector-crash) t_collector_crash ;;
+  collector-freeze) t_collector_freeze ;;
+  backend-loss) t_backend_loss ;;
+  heartbeat) t_heartbeat ;;
+  rtc-alarm) t_rtc_alarm ;;
+  recovery-inert) t_recovery_inert ;;
+  destructive) d_notice ;;
+  *) echo "unknown test: $1"; exit 2 ;;
+esac
+exit $RC

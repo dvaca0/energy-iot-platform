@@ -1,0 +1,35 @@
+[Unit]
+# WHY: 180 undervoltage events were logged on N001 with nothing recording
+# input voltage, battery state or board power at the moment of each, so the
+# cause could not be identified.
+# PROTECTS AGAINST: nothing directly - this is instrumentation. It makes the
+#   next brownout explainable instead of a mystery.
+# DOES NOT PROTECT AGAINST: any failure mode. It records, it does not recover.
+Description=Energy Node Power/UPS Telemetry Recorder
+Documentation=file:/opt/energy-node/hardening/docs/node-hardening.md
+After=local-fs.target
+StartLimitIntervalSec=300
+StartLimitBurst=20
+
+[Service]
+Type=simple
+User=__EN_USER__
+Group=__EN_GROUP__
+SupplementaryGroups=i2c video
+ExecStart=/opt/energy-node/hardening/bin/energy-node-powerlog
+Restart=always
+RestartSec=5
+Nice=10
+IOSchedulingClass=idle
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/energy-node/database
+PrivateTmp=true
+LockPersonality=true
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=energy-node-powerlog
+
+[Install]
+WantedBy=multi-user.target

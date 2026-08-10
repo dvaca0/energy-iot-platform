@@ -1,0 +1,6 @@
+#!/usr/bin/env python3
+"""Deprecated alias for `energy-node doctor`, kept so M14-era automation and
+the systemd verify unit keep working."""
+import os, sys
+os.execv("/opt/energy-node/hardening/bin/energy-node",
+         ["energy-node", "doctor"] + sys.argv[1:])

@@ -1,0 +1,16 @@
+#!/usr/bin/env python3
+"""UPS hardware discovery CLI. Prints the identified model or an honest
+'unidentified' with the raw I2C fingerprint, so an unknown HAT on N002/N003
+can be added to the registry without a site visit."""
+import json, sys
+sys.path.insert(0, "/opt/energy-node/hardening/lib")
+import ups
+s = ups.discover()
+if "--json" in sys.argv:
+    print(json.dumps(s.as_dict(), indent=2))
+else:
+    print(s.summary())
+    if s.present and not s.identified:
+        print("\nRaw fingerprint (add a driver to lib/ups/ for this hardware):")
+        print(json.dumps(s.fingerprint, indent=2))
+sys.exit(0 if s.present else 1)

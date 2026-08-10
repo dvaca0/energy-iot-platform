@@ -1,0 +1,18 @@
+[Unit]
+# WHY: on 2026-08-01 the platform alerted "Node N001 is alive but not
+# measuring". That condition had no automatic remedy. systemd's
+# Restart=always cannot help: a wedged process is still "active".
+# PROTECTS AGAINST: a stalled collector (layer 3); optionally escalates to a
+#   reboot after repeated failed restarts (layer 4).
+# DOES NOT PROTECT AGAINST: a node that is fully down. Nothing runs then.
+# INERT unless RECOVERY_SELF_HEAL=1 in hardening.conf.
+Description=Energy Node collector self-heal check (inert unless enabled)
+Documentation=file:/opt/energy-node/hardening/docs/node-hardening.md
+After=energy-node-collector.service
+
+[Service]
+Type=oneshot
+ExecStart=/opt/energy-node/hardening/bin/energy-node-recovery self-heal
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=energy-node-selfheal
