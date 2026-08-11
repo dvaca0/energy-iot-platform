@@ -5,7 +5,11 @@
   energy-node hardening status [--json]     what version is installed
   energy-node ups [--json]                  UPS discovery / fingerprint
   energy-node sensors [--json]              measurement hardware discovery
-  energy-node recovery status               recovery modules and their flags
+  energy-node boot status [--json]          how far THIS boot got
+  energy-node boot history [--json] [-n N]  how far previous boots got
+  energy-node why                           plain English: why not healthy?
+  energy-node recovery status [--json]      recovery modules, flags, live state
+  energy-node recovery history [--json]     what recovery did, this boot
   energy-node recovery <arm-ups|rtc-set|rtc-clear|self-heal>
   energy-node selftest [--json]             non-destructive regression suite
   energy-node blackbox [record|history|summary] [--json]
@@ -18,6 +22,7 @@ Exit codes: 0 = healthy / success, 1 = at least one FAIL.
 from __future__ import annotations
 
 import json
+import os
 import sys
 
 sys.path.insert(0, "/opt/energy-node/hardening/lib")
@@ -109,15 +114,151 @@ def cmd_sensors(argv) -> int:
     return 0 if d["primary"].identified else 1
 
 
+STAGE_COLOR = {"ok": "32", "failed": "31", "unknown": "36"}
+
+
+def _health_state():
+    """The Recovery Manager's published contract, or None if it is not running."""
+    import enconfig
+    p = os.path.join(enconfig.get("NETD_STATE_DIR", "/run/energy-node"),
+                     "health-state.json")
+    try:
+        with open(p, encoding="utf-8") as fh:
+            return json.load(fh)
+    except (OSError, ValueError):
+        return None
+
+
+def cmd_boot(argv) -> int:
+    from recovery import bootstate
+    sub = argv[0] if argv and not argv[0].startswith("-") else "status"
+    js = "--json" in argv
+    n = 10
+    if "-n" in argv:
+        try:
+            n = int(argv[argv.index("-n") + 1])
+        except (IndexError, ValueError):
+            pass
+
+    if sub == "history":
+        rows = bootstate.history(limit=n)
+        if js:
+            print(json.dumps(rows, indent=2, default=str))
+            return 0
+        print(f"{'booted (UTC)':21}{'reached':22}{'complete':9}"
+              f"{'to healthy':>11}  first failure")
+        for r in rows:
+            ok = "yes" if r.get("boot_complete") else paint("NO", "31")
+            tth = (f"{r['time_to_healthy_s']:.0f}s"
+                   if r.get("time_to_healthy_s") is not None else "-")
+            print(f"{(r.get('boot_started_iso') or ''):21}"
+                  f"{(r.get('last_successful_stage') or ''):22}{ok:9}"
+                  f"{tth:>11}  {(r.get('first_failed_stage') or '')}")
+        return 0
+
+    r = bootstate.status()
+    if js:
+        print(json.dumps({"boot": r, "events": bootstate.events(limit=n)},
+                         indent=2, default=str))
+        return 0
+    if not r:
+        print("No boot record yet. Is energy-node-recovery running?")
+        return 1
+    print(f"=== boot {(r.get('boot_id') or '')[:8]} — {r.get('node_id')} ===")
+    print(f"  started            : {r.get('boot_started_iso')}")
+    print(f"  previous boot ended: {r.get('prev_boot_reason') or 'unknown'}")
+    print(f"  current stage      : {r.get('current_stage')}")
+    print(f"  last reached       : {r.get('last_successful_stage')}")
+    if r.get("first_failed_stage"):
+        print(f"  first failed       : {paint(r['first_failed_stage'], '31')} "
+              f"[{r.get('failure_owner')}]")
+        print(f"    reason           : {r.get('failure_reason')}")
+    complete = r.get("boot_complete")
+    print(f"  boot complete      : "
+          f"{paint('yes', '32') if complete else paint('NO', '31')}"
+          + (f"  (in {r['time_to_healthy_s']:.0f}s)"
+             if r.get("time_to_healthy_s") is not None else ""))
+    print(f"  recovery this boot : {r.get('service_restarts', 0)} restarts, "
+          f"{r.get('reboot_attempts', 0)} reboots, safe mode "
+          f"{'YES' if r.get('safe_mode_entered') else 'no'}")
+    print("  subsystems         : " + "  ".join(
+        f"{k}={paint(str(r.get(k + '_state')), STAGE_COLOR.get(str(r.get(k + '_state')), '0'))}"
+        for k in ("time_sync", "tailscale", "sensor", "collector",
+                  "measurements", "backend", "heartbeat")))
+    ev = bootstate.events(limit=n)
+    if ev:
+        print("\n  recent events:")
+        for e in ev:
+            print(f"    {e['at']}  {e['kind']:18}"
+                  f"{(e['stage'] or ''):22}{(e['detail'] or '')[:56]}")
+    return 0 if complete else 1
+
+
+def cmd_why(argv) -> int:
+    from recovery import bootstate, explain
+    health = _health_state()
+    boot = None
+    events = []
+    try:
+        boot = bootstate.status()
+        events = bootstate.events(limit=20)
+    except Exception:
+        pass
+    lines = explain.explain(health, boot, events)
+    if "--json" in argv:
+        print(json.dumps({"lines": lines, "health": health, "boot": boot},
+                         indent=2, default=str))
+        return 0
+    for line in lines:
+        print(line)
+    return 0 if (health or {}).get("state") == "HEALTHY" else 1
+
+
 def cmd_recovery(argv) -> int:
     import recovery
     from recovery import rtc_wake, selfheal, ups_wake
     sub = argv[0] if argv else "status"
-    table = {"status": recovery.print_status, "arm-ups": ups_wake.arm,
-             "rtc-set": rtc_wake.set_alarm, "rtc-clear": rtc_wake.clear,
-             "self-heal": selfheal.run}
+    js = "--json" in argv
+
+    if sub == "history":
+        from recovery import bootstate
+        ev = [e for e in bootstate.events(limit=200)
+              if e["kind"] in ("remedy", "reboot", "safe_mode_entered",
+                               "safe_mode_left", "stage_failed")]
+        if js:
+            print(json.dumps(ev, indent=2, default=str))
+            return 0
+        if not ev:
+            print("No recovery actions recorded this boot.")
+            return 0
+        print(f"{'when (UTC)':21}{'what':20}{'stage':22}detail")
+        for e in ev:
+            print(f"{e['at']:21}{e['kind']:20}{(e['stage'] or ''):22}"
+                  f"{(e['detail'] or '')[:50]}")
+        return 0
+
+    if sub == "status":
+        rc = recovery.print_status()
+        health = _health_state()
+        if health:
+            led = health.get("ledger") or {}
+            print("\n=== Recovery Manager (live) ===")
+            print(f"  state           : {health.get('state')}")
+            print(f"  observe only    : {health.get('observe_only')}")
+            print(f"  first failure   : {health.get('first_failure') or '-'}")
+            print(f"  next action     : {(health.get('decision') or {}).get('action')}")
+            print(f"  reboots in window: {led.get('reboots_last_window', 0)}")
+            print(f"  safe mode since : {led.get('safe_mode_since') or '-'}")
+        else:
+            print("\n=== Recovery Manager (live) ===")
+            print("  not publishing state — is energy-node-recovery running?")
+        return rc
+
+    table = {"arm-ups": ups_wake.arm, "rtc-set": rtc_wake.set_alarm,
+             "rtc-clear": rtc_wake.clear, "self-heal": selfheal.run}
     if sub not in table:
-        print(f"usage: energy-node recovery [{'|'.join(table)}]")
+        print("usage: energy-node recovery "
+              "[status|history|arm-ups|rtc-set|rtc-clear|self-heal]")
         return 2
     return table[sub]()
 
@@ -174,7 +315,7 @@ def cmd_version(argv) -> int:
 COMMANDS = {"doctor": cmd_doctor, "hardening": cmd_hardening, "ups": cmd_ups,
             "sensors": cmd_sensors, "recovery": cmd_recovery,
             "selftest": cmd_selftest, "version": cmd_version,
-            "blackbox": cmd_blackbox}
+            "blackbox": cmd_blackbox, "boot": cmd_boot, "why": cmd_why}
 
 
 def main() -> int:

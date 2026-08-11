@@ -39,6 +39,7 @@ if _LIB not in sys.path:
 
 import enconfig  # noqa: E402
 
+from recovery import bootstate  # noqa: E402
 from recovery import ledger as ledger_mod  # noqa: E402
 from recovery import pipeline as P  # noqa: E402
 from recovery import probes  # noqa: E402
@@ -80,6 +81,38 @@ REMEDIES = {
 
 def log(msg: str) -> None:
     print(f"[recovery] {msg}", flush=True)
+
+
+# --------------------------------------------------------------- boot record
+
+#: The boot record is valuable but it is NOT load-bearing for recovery. If the
+#: database is missing, locked or corrupt the node must still recover itself,
+#: so every call goes through here: it complains loudly, once per failure, and
+#: never propagates.
+_bs_conn = None
+_bs_broken = False
+
+
+def bs(fn, *args, **kwargs):
+    """Run a bootstate operation, tolerating a broken database."""
+    global _bs_conn, _bs_broken
+    try:
+        if _bs_conn is None:
+            _bs_conn = bootstate.connect()
+            _bs_broken = False
+        return fn(_bs_conn, *args, **kwargs)
+    except Exception as exc:
+        if not _bs_broken:
+            log(f"BOOT RECORD UNAVAILABLE ({type(exc).__name__}: {exc}). "
+                f"Recovery continues; boot progression is not being persisted.")
+            _bs_broken = True
+        try:
+            if _bs_conn is not None:
+                _bs_conn.close()
+        except Exception:
+            pass
+        _bs_conn = None
+        return None
 
 
 def run(cmd: List[str], timeout: int = 90) -> bool:
@@ -144,7 +177,7 @@ def enter_safe_mode() -> None:
 
 
 def publish(state: str, results: List[P.StageResult], decision: P.Decision,
-            led: P.Ledger, now: float) -> None:
+            led: P.Ledger, now: float, boot: Optional[dict] = None) -> None:
     """One fact, on the netd pattern, so Health has a machine-readable contract
     instead of something a human reads in a terminal."""
     d = enconfig.get("NETD_STATE_DIR", "/run/energy-node")
@@ -172,6 +205,21 @@ def publish(state: str, results: List[P.StageResult], decision: P.Decision,
             "attempts": led.attempts,
             "safe_mode_since": led.safe_mode_since,
         },
+        # The durable boot record, surfaced through the SAME local contract
+        # rather than a second daemon or a second endpoint.
+        "boot": {
+            "boot_id": (boot or {}).get("boot_id"),
+            "started_at": (boot or {}).get("boot_started_iso"),
+            "prev_boot_reason": (boot or {}).get("prev_boot_reason"),
+            "last_successful_stage": (boot or {}).get("last_successful_stage"),
+            "first_failed_stage": (boot or {}).get("first_failed_stage"),
+            "failure_owner": (boot or {}).get("failure_owner"),
+            "boot_complete": bool((boot or {}).get("boot_complete")),
+            "time_to_healthy_s": (boot or {}).get("time_to_healthy_s"),
+            "service_restarts": (boot or {}).get("service_restarts"),
+            "reboot_attempts": (boot or {}).get("reboot_attempts"),
+            "safe_mode_entered": bool((boot or {}).get("safe_mode_entered")),
+        } if boot else None,
     }
     try:
         os.makedirs(d, exist_ok=True)
@@ -220,6 +268,8 @@ def act(decision: P.Decision, led: P.Ledger, now: float, dry: bool) -> None:
         log(f"{prefix}REMEDY {stage} attempt {attempt + 1}: {' '.join(cmd)}")
         if not dry:
             run(cmd)
+            bs(bootstate.event, bootstate.E_REMEDY, stage,
+               f"attempt {attempt + 1}: {' '.join(cmd)}", now)
         led.attempts[stage] = attempt + 1
         led.last_attempt[stage] = now
         if led.safe_mode_since is not None:
@@ -236,6 +286,7 @@ def act(decision: P.Decision, led: P.Ledger, now: float, dry: bool) -> None:
             # Persist BEFORE rebooting: a ledger written after the reboot
             # command is a ledger that never gets written, and that is exactly
             # how the old code lost its escalation memory every boot.
+            bs(bootstate.event, bootstate.E_REBOOT, stage, decision.reason, now)
             ledger_mod.save(led, observe_only=False)
             run(["systemctl", "reboot"], timeout=30)
 
@@ -244,10 +295,13 @@ def act(decision: P.Decision, led: P.Ledger, now: float, dry: bool) -> None:
         led.safe_mode_since = now
         led.safe_mode_last_retry = now
         if not dry:
+            bs(bootstate.event, bootstate.E_SAFE_MODE, stage, decision.reason, now)
             enter_safe_mode()
 
     elif decision.action == P.LEAVE_SAFE_MODE:
         log("LEAVING SAFE MODE - node healthy")
+        bs(bootstate.event, bootstate.E_SAFE_MODE_EXIT, None,
+           "all stages healthy", now)
         led.safe_mode_since = None
         led.safe_mode_last_retry = None
         led.safe_mode_last_reboot = None
@@ -276,12 +330,17 @@ def tick(led: P.Ledger, policy: P.Policy, last_state: Optional[str]) -> str:
             led.attempts.pop(r.stage, None)
             led.last_attempt.pop(r.stage, None)
 
+    # Durable boot progression, so "how far did this boot get" survives the
+    # next reboot, watchdog reset or power cut.
+    bs(bootstate.update, results, decision, policy, now)
+
     ledger_mod.prune(led, now)
     try:
         ledger_mod.save(led, observe_only=observe_only())
     except OSError as exc:
         log(f"could not persist ledger: {exc}")
-    publish(decision.state, results, decision, led, now)
+    publish(decision.state, results, decision, led, now,
+            boot=bs(bootstate.status))
     return decision.state
 
 
