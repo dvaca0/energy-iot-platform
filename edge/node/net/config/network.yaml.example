@@ -41,6 +41,32 @@ access_point:
   band: "bg"
   hidden: false
 
+# ---------------------------------------------------------------------------
+# Known Wi-Fi networks — the DECLARATIVE BASELINE.
+#
+# SSIDs, priorities and metadata only. NEVER a passphrase: this file is
+# git-managed and the repository is public. Credentials live in
+#   /var/lib/energy-node-net/secrets.json   (0600, written only by netd)
+# and are set through the maintenance portal or `netdctl connect`.
+#
+# This list is NOT the whole whitelist. Networks a technician adds at the node
+# are kept separately in /var/lib/energy-node-net/operator-networks.json, and a
+# deployment from git NEVER deletes them. To go back to just this baseline,
+# run the explicit `netdctl networks --reset-operator`.
+wifi:
+  allow_open_networks: false   # never join an open network automatically
+  backoff_initial: 15          # seconds, doubling per consecutive failure
+  backoff_max: 300
+  recent_success_window: 86400 # a success older than this stops ranking first
+
+  networks:
+    - ssid: "wirelesslan"
+      priority: 30
+      notes: "campus WLAN"
+    - ssid: "PruebasAlarma"
+      priority: 60
+      notes: "lab network, preferred"
+
 timing:
   # Seconds. Tuned for a headless appliance on a campus network: patient
   # enough not to flap the AP during a transient outage, quick enough that a

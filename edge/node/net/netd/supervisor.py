@@ -101,6 +101,9 @@ class Supervisor:
             "wifi.disconnect": self._cmd_wifi_disconnect,
             "wifi.forget": self._cmd_wifi_forget,
             "wifi.priority": self._cmd_wifi_priority,
+            "wifi.networks": self._cmd_wifi_networks,
+            "wifi.reconcile": self._cmd_wifi_reconcile,
+            "wifi.reset_operator": self._cmd_wifi_reset_operator,
             "ap.start": self._cmd_ap_start,
             "ap.stop": self._cmd_ap_stop,
             "net.restart": self._cmd_net_restart,
@@ -217,7 +220,7 @@ class Supervisor:
     #: actually needs to see when reading back the networking history.
     _READ_ONLY_COMMANDS = frozenset(
         {
-            "ping", "status", "config", "wifi.saved",
+            "ping", "status", "config", "wifi.saved", "wifi.networks",
             "diagnostics.full", "diagnostics.tests", "diagnostics.collector",
             "diagnostics.services", "logs.network", "logs.collector",
         }
@@ -247,6 +250,39 @@ class Supervisor:
         with self._lock:
             saved = self._wifi.saved_networks()
         return self._ok({"saved": [n.to_dict() for n in saved]})
+
+    def _cmd_wifi_networks(self, _args: Dict[str, Any]) -> Dict[str, Any]:
+        """The effective whitelist, its provenance, its health and its rank.
+
+        Credentials are never included - only whether one is held.
+        """
+        with self._lock:
+            described = self._wifi.store.describe()
+            health = {k: v.as_dict() for k, v in self._wifi.store.health().items()}
+            ranked = [
+                {"ssid": c.network.ssid, "source": c.network.source,
+                 "priority": c.network.priority, "eligible": c.eligible,
+                 "reason": c.reason, "signal": c.signal,
+                 "retry_after": c.retry_after}
+                for c in self._wifi.ranked()
+            ]
+        described["health"] = health
+        described["ranked"] = ranked
+        described["secrets"] = self._wifi.store.secrets_audit()
+        return self._ok(described)
+
+    def _cmd_wifi_reconcile(self, _args: Dict[str, Any]) -> Dict[str, Any]:
+        with self._lock:
+            actions = self._wifi.reconcile()
+        return self._ok({"actions": actions})
+
+    def _cmd_wifi_reset_operator(self, _args: Dict[str, Any]) -> Dict[str, Any]:
+        """Explicit return to the git baseline. Never automatic."""
+        with self._lock:
+            ok, message = self._wifi.store.reset_operator_networks()
+            if ok:
+                self._wifi.reconcile()
+        return self._ok({"reset": ok, "message": message})
 
     def _cmd_wifi_connect(self, args: Dict[str, Any]) -> Dict[str, Any]:
         ssid = str(args.get("ssid", "")).strip()
@@ -463,7 +499,25 @@ class Supervisor:
             verdict = self._evaluator.evaluate(ap_active=ap_active, deep=deep)
             self._verdict = verdict
 
-            known = bool(self._wifi.known_networks_in_range()) if not ap_active else False
+            # Health-aware: a network that is merely visible is not a network
+            # worth trying. One that is backing off after repeated failures
+            # does not count as available, so the AP goes up when there is
+            # genuinely nothing left to attempt rather than when nothing is in
+            # range. should_raise_ap() is the inverse of this flag.
+            known = (not self._wifi.should_raise_ap()) if not ap_active else False
+
+            # Record what the world just told us, and keep NetworkManager's
+            # roaming order in step with it. Reconciling every cycle would
+            # spawn nmcli constantly, so do it on the deep cycle only.
+            if deep:
+                # The verdict already carries the associated SSID, and
+                # `usable` is netd's own bar for "a network worth staying on".
+                if verdict.ssid and verdict.usable:
+                    self._wifi.note_result(verdict.ssid, True)
+                try:
+                    self._wifi.reconcile()
+                except Exception as exc:  # noqa: BLE001 - never break the loop
+                    log.warning("network reconciliation failed: %s", exc)
             data = MachineInput(
                 verdict=verdict,
                 now=time.monotonic(),

@@ -112,6 +112,44 @@ def _cmd_saved(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_networks(args: argparse.Namespace) -> int:
+    """The effective whitelist: where each entry came from, and its health."""
+    if getattr(args, "reset_operator", False):
+        response = _client().call("wifi.reset_operator")
+        return _emit(response, args.json)
+
+    response = _client().call("wifi.networks")
+    if args.json or not response.get("ok"):
+        return _emit(response, args.json)
+    data = response.get("data", {})
+    ranked: List[Dict[str, Any]] = data.get("ranked", [])
+    health: Dict[str, Any] = data.get("health", {})
+    creds = set(data.get("secrets", {}).get("ssids_with_credentials", []))
+
+    if not ranked:
+        print("no known networks declared or saved")
+        return 0
+
+    print(f"{'#':>2} {'SSID':<24} {'SOURCE':<9} {'PRIO':>4} {'CRED':>4} "
+          f"{'SIG':>4} {'FAILS':>5}  WHY")
+    for i, c in enumerate(ranked, 1):
+        ssid = c.get("ssid", "")
+        h = health.get(ssid, {})
+        mark = " " if c.get("eligible") else "-"
+        print(f"{i:>2}{mark}{ssid[:24]:<24} {c.get('source', ''):<9} "
+              f"{c.get('priority', 0):>4} "
+              f"{'yes' if ssid in creds else 'NO':>4} "
+              f"{(c.get('signal') if c.get('signal') is not None else '-'):>4} "
+              f"{h.get('consecutive_failures', 0):>5}  {c.get('reason', '')}")
+    sup = data.get("suppressed") or []
+    if sup:
+        print(f"\nsuppressed baseline networks: {', '.join(sup)}")
+    print(f"\ncredentials: {data.get('secrets', {}).get('path')} "
+          f"(mode {data.get('secrets', {}).get('mode')})")
+    print("entries marked '-' are not being tried right now; see WHY")
+    return 0
+
+
 def _cmd_connect(args: argparse.Namespace) -> int:
     password = args.password
     if password is None and not args.open:
@@ -194,6 +232,15 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("scan", help="scan for Wi-Fi networks").set_defaults(func=_cmd_scan)
     sub.add_parser("saved", help="list saved networks").set_defaults(func=_cmd_saved)
     sub.add_parser("disconnect", help="disconnect Wi-Fi").set_defaults(func=_cmd_disconnect)
+
+    networks = sub.add_parser(
+        "networks",
+        help="effective whitelist: git baseline + operator networks, with health")
+    networks.add_argument(
+        "--reset-operator", action="store_true",
+        help="DELETE all operator-added networks and their credentials, "
+             "returning to the git baseline")
+    networks.set_defaults(func=_cmd_networks)
 
     connect = sub.add_parser("connect", help="join and save a Wi-Fi network")
     connect.add_argument("ssid")

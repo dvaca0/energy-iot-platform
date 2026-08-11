@@ -10,12 +10,15 @@ exists to prevent.
 
 from __future__ import annotations
 
+import logging
 import os
 from dataclasses import dataclass, field, asdict
 from pathlib import Path
 from typing import Any, Dict, List, Mapping, Optional
 
 import yaml
+
+log = logging.getLogger("netd.config")
 
 DEFAULT_CONFIG_PATH = Path("/opt/energy-node/net/config/network.yaml")
 
@@ -313,6 +316,77 @@ class PathsConfig:
 
 
 @dataclass(frozen=True)
+class WifiPolicyConfig:
+    """How the node chooses between known Wi-Fi networks.
+
+    The declared networks live here as SSIDs, priorities and metadata ONLY.
+    Passphrases are never part of this file: it is git-managed and the
+    repository is public. Credentials live in the 0600 secrets store that
+    netd owns (see netd/knownnets.py).
+    """
+
+    #: Refuse open networks unless an operator deliberately turns this on.
+    #: A node that joins any open SSID it sees is a node that can be moved
+    #: onto an attacker's network by standing next to it.
+    allow_open_networks: bool = False
+    #: Exponential backoff bounds for a network that keeps failing.
+    backoff_initial: int = 15
+    backoff_max: int = 300
+    #: A success older than this stops earning the "try me first" slot.
+    recent_success_window: int = 86400
+    #: Declared baseline networks. Never contains a passphrase.
+    networks: List["BaselineNetwork"] = field(default_factory=list)
+
+    @classmethod
+    def from_dict(cls, d: Mapping[str, Any]) -> "WifiPolicyConfig":
+        defaults = cls()
+        raw = _get(d, "networks", []) or []
+        nets: List[BaselineNetwork] = []
+        for entry in raw:
+            if not isinstance(entry, Mapping):
+                log.warning("ignoring malformed network entry %r", entry)
+                continue
+            ssid = str(_get(entry, "ssid", "")).strip()
+            if not ssid:
+                log.warning("ignoring network entry with no ssid")
+                continue
+            for banned in ("password", "psk", "passphrase"):
+                if banned in entry:
+                    log.error(
+                        "network %s declares '%s' in network.yaml - IGNORED. "
+                        "Credentials belong in the secrets store, never in "
+                        "git.", ssid, banned)
+            nets.append(BaselineNetwork(
+                ssid=ssid,
+                priority=int(_get(entry, "priority", 0) or 0),
+                hidden=bool(_get(entry, "hidden", False)),
+                open=bool(_get(entry, "open", False)),
+                notes=str(_get(entry, "notes", "") or ""),
+            ))
+        return cls(
+            allow_open_networks=bool(_get(d, "allow_open_networks",
+                                          defaults.allow_open_networks)),
+            backoff_initial=int(_get(d, "backoff_initial",
+                                     defaults.backoff_initial)),
+            backoff_max=int(_get(d, "backoff_max", defaults.backoff_max)),
+            recent_success_window=int(_get(d, "recent_success_window",
+                                           defaults.recent_success_window)),
+            networks=nets,
+        )
+
+
+@dataclass(frozen=True)
+class BaselineNetwork:
+    """A declared network. SSID, priority and metadata - never a passphrase."""
+
+    ssid: str
+    priority: int = 0
+    hidden: bool = False
+    open: bool = False
+    notes: str = ""
+
+
+@dataclass(frozen=True)
 class Config:
     """Root configuration object."""
 
@@ -324,6 +398,7 @@ class Config:
     portal: PortalConfig = field(default_factory=PortalConfig)
     services: ServicesConfig = field(default_factory=ServicesConfig)
     paths: PathsConfig = field(default_factory=PathsConfig)
+    wifi: WifiPolicyConfig = field(default_factory=WifiPolicyConfig)
     source_path: Optional[Path] = None
 
     @property
@@ -342,6 +417,7 @@ class Config:
             portal=PortalConfig.from_dict(_get(d, "portal", {}) or {}),
             services=ServicesConfig.from_dict(_get(d, "services", {}) or {}),
             paths=PathsConfig.from_dict(_get(d, "paths", {}) or {}),
+            wifi=WifiPolicyConfig.from_dict(_get(d, "wifi", {}) or {}),
             source_path=source,
         )
 
