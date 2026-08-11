@@ -133,3 +133,44 @@ class SafeModeStateMachine(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+
+
+class ZeroRebootBudget(unittest.TestCase):
+    """A budget of 0 reaches SAFE MODE through the real ladder, with no reboot.
+
+    This is what makes an honest end-to-end validation possible on a node that
+    must not be rebooted: the fault, the remedies and the escalation are all
+    genuine, only the reboot rung is removed.
+    """
+
+    def sweep(self, **o):
+        return [P.StageResult(s, o.get(s, P.OK)) for s in P.STAGE_ORDER]
+
+    def test_exhausted_remedies_go_straight_to_safe_mode(self):
+        pol = P.Policy(remedy_attempts=3, reboot_max=0)
+        led = P.Ledger(attempts={P.COLLECTOR: 3}, last_attempt={P.COLLECTOR: 0.0})
+        d = P.decide(self.sweep(collector=P.FAILED), led, 10000.0, pol)
+        self.assertEqual(d.action, P.ENTER_SAFE_MODE)
+
+    def test_remedies_still_run_first(self):
+        pol = P.Policy(remedy_attempts=3, reboot_max=0)
+        d = P.decide(self.sweep(collector=P.FAILED), P.Ledger(), 10000.0, pol)
+        self.assertEqual(d.action, P.REMEDY)
+
+    def test_no_reboot_is_ever_chosen(self):
+        pol = P.Policy(remedy_attempts=2, reboot_max=0)
+        led = P.Ledger()
+        now = 0.0
+        for _ in range(200):
+            now += 60
+            d = P.decide(self.sweep(collector=P.FAILED), led, now, pol)
+            self.assertNotEqual(d.action, P.REBOOT)
+            if d.action == P.REMEDY:
+                led.attempts[P.COLLECTOR] = led.attempts.get(P.COLLECTOR, 0) + 1
+                led.last_attempt[P.COLLECTOR] = now
+                if led.safe_mode_since:
+                    led.safe_mode_last_retry = now
+            elif d.action == P.ENTER_SAFE_MODE:
+                led.safe_mode_since = now
+                led.safe_mode_last_retry = now
+        self.assertIsNotNone(led.safe_mode_since)
