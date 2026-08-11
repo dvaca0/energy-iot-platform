@@ -27,16 +27,23 @@ import enconfig  # noqa: E402
 from recovery.pipeline import Ledger  # noqa: E402
 
 FILENAME = "recovery-ledger.json"
+#: Observe-only runs simulate the whole ladder, including reboots that never
+#: happen, so an operator can see what the node WOULD do. Those simulated
+#: reboots must not land in the real ledger: switching to live mode would then
+#: start with a budget already spent on reboots that never occurred. The dry
+#: run therefore keeps its own shadow file.
+SHADOW_FILENAME = "recovery-ledger.observe.json"
 
 
-def path() -> str:
+def path(observe_only: bool = False) -> str:
     return os.path.join(
-        enconfig.get("EN_STATE_DIR", "/opt/energy-node/state"), FILENAME
+        enconfig.get("EN_STATE_DIR", "/opt/energy-node/state"),
+        SHADOW_FILENAME if observe_only else FILENAME,
     )
 
 
-def load(p: Optional[str] = None) -> Ledger:
-    p = p or path()
+def load(p: Optional[str] = None, observe_only: bool = False) -> Ledger:
+    p = p or path(observe_only)
     try:
         with open(p, encoding="utf-8") as fh:
             raw = json.load(fh)
@@ -62,11 +69,12 @@ def load(p: Optional[str] = None) -> Ledger:
     )
 
 
-def save(ledger: Ledger, p: Optional[str] = None) -> None:
+def save(ledger: Ledger, p: Optional[str] = None,
+         observe_only: bool = False) -> None:
     """Atomic write. A half-written ledger after a power cut would be worse
     than none: it is the only thing standing between a fault and a reboot loop.
     """
-    p = p or path()
+    p = p or path(observe_only)
     os.makedirs(os.path.dirname(p), exist_ok=True)
     payload = {
         "reboots": ledger.reboots,

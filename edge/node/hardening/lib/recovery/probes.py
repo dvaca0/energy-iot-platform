@@ -120,9 +120,24 @@ def probe_collector() -> P.StageResult:
     return P.StageResult(P.COLLECTOR, P.OK, f"{unit} active")
 
 
-def probe_measurements() -> P.StageResult:
+def probe_measurements(sensor: P.StageResult) -> P.StageResult:
     """Fresh measurements. This is the 'alive but not measuring' case that
-    systemd cannot see, because a wedged process is still 'active'."""
+    systemd cannot see, because a wedged process is still 'active'.
+
+    Only assertable as a LOCAL fault when the sensor is actually present. If
+    the meter is unreachable then measurements are stale *because of that*, and
+    restarting or rebooting cannot bring somebody else's device back.
+
+    N002, 2026-08-10 18:53-21:05: the Shelly timed out for two hours. The
+    measurements stage escalated through three remedies and three reboots into
+    SAFE MODE while the collector was perfectly healthy. In observe-only that
+    cost nothing; live it would have been three pointless reboots.
+    """
+    if sensor.status == P.FAILED:
+        return P.StageResult(
+            P.MEASUREMENTS, P.UNKNOWN,
+            f"sensor unavailable ({sensor.detail[:60]}) - "
+            f"measurement staleness is not a local fault")
     return _safe(P.MEASUREMENTS, doctor.check_collector)
 
 
@@ -175,7 +190,7 @@ def probe_all() -> List[P.StageResult]:
     tail = probe_tailscale()
     sensor = probe_sensor()
     collector = probe_collector()
-    measurements = probe_measurements()
+    measurements = probe_measurements(sensor)
     backend = probe_backend()
     heartbeat = probe_heartbeat(backend)
     return [fs, clock, net, tail, sensor, collector, measurements, backend, heartbeat]

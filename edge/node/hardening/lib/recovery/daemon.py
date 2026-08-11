@@ -236,7 +236,7 @@ def act(decision: P.Decision, led: P.Ledger, now: float, dry: bool) -> None:
             # Persist BEFORE rebooting: a ledger written after the reboot
             # command is a ledger that never gets written, and that is exactly
             # how the old code lost its escalation memory every boot.
-            ledger_mod.save(led)
+            ledger_mod.save(led, observe_only=False)
             run(["systemctl", "reboot"], timeout=30)
 
     elif decision.action == P.ENTER_SAFE_MODE:
@@ -278,7 +278,7 @@ def tick(led: P.Ledger, policy: P.Policy, last_state: Optional[str]) -> str:
 
     ledger_mod.prune(led, now)
     try:
-        ledger_mod.save(led)
+        ledger_mod.save(led, observe_only=observe_only())
     except OSError as exc:
         log(f"could not persist ledger: {exc}")
     publish(decision.state, results, decision, led, now)
@@ -297,7 +297,7 @@ def main() -> int:
     if observe_only():
         log("  OBSERVE-ONLY: decisions are computed and logged, nothing is actuated")
 
-    led = ledger_mod.load()
+    led = ledger_mod.load(observe_only=observe_only())
     sd_notify("READY=1")
     state: Optional[str] = None
     while True:
