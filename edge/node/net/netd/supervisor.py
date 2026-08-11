@@ -106,6 +106,7 @@ class Supervisor:
             "wifi.reset_operator": self._cmd_wifi_reset_operator,
             "ap.start": self._cmd_ap_start,
             "ap.stop": self._cmd_ap_stop,
+            "ap.auto": self._cmd_ap_auto,
             "net.restart": self._cmd_net_restart,
             "service.restart": self._cmd_service_restart,
             "diagnostics.full": lambda _a: self._ok(self._diagnostics.full_report()),
@@ -364,6 +365,25 @@ class Supervisor:
             self._machine.note_ap_lowered()
             self._save_runtime()
         return self._ok(None, message) if ok else self._fail(message)
+
+    def _cmd_ap_auto(self, _args: Dict[str, Any]) -> Dict[str, Any]:
+        """Return the access point to automatic control.
+
+        Clears BOTH operator overrides, so the state machine decides again by
+        its own rules. This is what SAFE MODE needs: it must guarantee the AP
+        is not suppressed, without pinning it open.
+
+        Pinning matters more than it looks. These nodes have one radio, so an
+        AP that is held open is an AP the node cannot leave to rejoin Wi-Fi -
+        which would make SAFE MODE permanent and require the very physical
+        visit the whole design exists to avoid.
+        """
+        with self._lock:
+            self._force_ap = False
+            self._suppress_ap = False
+            self._save_runtime()
+        return self._ok({"force_ap": False, "suppress_ap": False},
+                        "access point returned to automatic control")
 
     def _cmd_net_restart(self, _args: Dict[str, Any]) -> Dict[str, Any]:
         """Restart NetworkManager.

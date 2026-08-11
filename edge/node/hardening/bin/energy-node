@@ -9,7 +9,7 @@
   energy-node boot history [--json] [-n N]  how far previous boots got
   energy-node why                           plain English: why not healthy?
   energy-node recovery status [--json]      recovery modules, flags, live state
-  energy-node recovery history [--json]     what recovery did, this boot
+  energy-node recovery history [--json]     what recovery did, this boot\n  energy-node recovery safe-mode [plan|status|enter|exit]\n                                            SAFE MODE control (reversible)
   energy-node recovery <arm-ups|rtc-set|rtc-clear|self-heal>
   energy-node selftest [--json]             non-destructive regression suite
   energy-node blackbox [record|history|summary] [--json]
@@ -214,6 +214,85 @@ def cmd_why(argv) -> int:
     return 0 if (health or {}).get("state") == "HEALTHY" else 1
 
 
+SAFE_MODE_FLAG = "RECOVERY_FORCE_SAFE_MODE"
+
+
+def _set_conf(key, value):
+    """Rewrite one key in hardening.conf. Additive if absent."""
+    import enconfig
+    path = enconfig.DEFAULT_CONF
+    lines = open(path, encoding="utf-8").read().splitlines(True)
+    out, found = [], False
+    for line in lines:
+        if line.strip().startswith(f"{key}="):
+            out.append(f"{key}={value}\n")
+            found = True
+        else:
+            out.append(line)
+    if not found:
+        out.append(f"\n{key}={value}\n")
+    with open(path, "w", encoding="utf-8") as fh:
+        fh.writelines(out)
+
+
+def _cmd_safe_mode(argv, js) -> int:
+    """plan | status | enter | exit — the reversible SAFE MODE control."""
+    from recovery import bootstate, daemon
+    action = argv[0] if argv and not argv[0].startswith("-") else "status"
+
+    if action == "plan":
+        print("SAFE MODE would do exactly this:\n")
+        for step in daemon.safe_mode_actions():
+            print(f"  {step}")
+        print("\nIt would NOT:")
+        print("  - pin the access point open (netdctl ap start sets force_ap,")
+        print("    and a pinned AP on a single radio can never be left, which")
+        print("    would make SAFE MODE permanent)")
+        print("  - stop the collector, the Recovery Manager or any measurement")
+        print("  - reboot; SAFE MODE is what happens INSTEAD of more reboots")
+        print(f"\nWhile in SAFE MODE it retries full recovery every "
+              f"{daemon.load_policy().safe_mode_retry_s}s, forever, and may")
+        print(f"attempt one reboot after "
+              f"{daemon.load_policy().safe_mode_reboot_after_s}s.")
+        print("It leaves automatically as soon as every stage is healthy.")
+        return 0
+
+    health = _health_state() or {}
+    led = (health.get("ledger") or {})
+    active = led.get("safe_mode_since") is not None
+
+    if action == "status":
+        if js:
+            print(json.dumps({"safe_mode": active, "ledger": led,
+                              "forced": daemon.forced_safe_mode()}, indent=2))
+            return 0
+        print(f"SAFE MODE   : {'ACTIVE' if active else 'inactive'}")
+        print(f"forced flag : {daemon.forced_safe_mode()} ({SAFE_MODE_FLAG})")
+        print(f"since       : {led.get('safe_mode_since') or '-'}")
+        if active:
+            ev = [e for e in bootstate.events(limit=50)
+                  if e["kind"] in ("safe_mode_entered", "remedy", "reboot")]
+            print("\nretries this boot:")
+            for e in ev[:8]:
+                print(f"  {e['at']}  {e['kind']:20}{(e['detail'] or '')[:50]}")
+        return 0 if not active else 1
+
+    if action in ("enter", "exit"):
+        want = "1" if action == "enter" else "0"
+        try:
+            _set_conf(SAFE_MODE_FLAG, want)
+        except OSError as exc:
+            print(f"could not update hardening.conf: {exc} (need root?)")
+            return 1
+        print(f"{SAFE_MODE_FLAG}={want} written to hardening.conf")
+        print("restart the Recovery Manager for it to take effect:")
+        print("    sudo systemctl restart energy-node-recovery")
+        return 0
+
+    print("usage: energy-node recovery safe-mode [plan|status|enter|exit]")
+    return 2
+
+
 def cmd_recovery(argv) -> int:
     import recovery
     from recovery import rtc_wake, selfheal, ups_wake
@@ -253,6 +332,9 @@ def cmd_recovery(argv) -> int:
             print("\n=== Recovery Manager (live) ===")
             print("  not publishing state — is energy-node-recovery running?")
         return rc
+
+    if sub == "safe-mode":
+        return _cmd_safe_mode(argv[1:], js)
 
     table = {"arm-ups": ups_wake.arm, "rtc-set": rtc_wake.set_alarm,
              "rtc-clear": rtc_wake.clear, "self-heal": selfheal.run}

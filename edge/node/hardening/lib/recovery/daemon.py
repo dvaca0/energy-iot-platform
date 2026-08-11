@@ -154,23 +154,83 @@ def observe_only() -> bool:
     return enconfig.get_bool("RECOVERY_OBSERVE_ONLY", True)
 
 
+def forced_safe_mode() -> bool:
+    """Deliberate, reversible test trigger for SAFE MODE.
+
+    SAFE MODE is the hardest state to reach honestly - it needs a fault the
+    ladder cannot fix - and validating it by breaking a node for real is a poor
+    trade. This flag enters and HOLDS SAFE MODE without any fault, so the AP,
+    the portal, the retry cadence and the exit path can all be watched on a
+    live node and then undone by clearing one config value.
+
+    It lives here in the I/O layer on purpose: the pure decision core must not
+    grow a test-only branch, or the thing under test stops being the thing
+    that runs in production.
+    """
+    return enconfig.get_bool("RECOVERY_FORCE_SAFE_MODE", False)
+
+
 # ----------------------------------------------------------------- safe mode
 
 
-def enter_safe_mode() -> None:
-    """Maintenance AP up, SSH up, portal up. Nothing here may fail silently.
+def netdctl(*args: str, timeout: int = 60) -> bool:
+    binary = ("/usr/local/bin/netdctl" if os.path.exists("/usr/local/bin/netdctl")
+              else "netdctl")
+    return run([binary, *args], timeout=timeout)
 
-    SAFE MODE is what a technician arrives to. It is deliberately the most
-    reachable the node ever gets, not the least.
+
+def safe_mode_actions(dry: bool = False) -> List[str]:
+    """What SAFE MODE does, as a list of steps. Shared by the doer and the
+    planner, so `plan` can never drift from what actually happens."""
+    return [
+        "systemctl start ssh.service            (keep the operator's way in)",
+        "systemctl start energy-node-portal.service  (recovery portal)",
+        "netdctl ap auto                        (permit the AP; never pin it)",
+    ]
+
+
+def enter_safe_mode(dry: bool = False) -> None:
+    """SSH up, portal up, access point PERMITTED - never pinned.
+
+    SAFE MODE is what a technician arrives to, so it is deliberately the most
+    reachable the node ever gets. But reachable to a visitor is not the point:
+    the node must still be able to rescue itself.
+
+    WHY THIS DOES NOT RAISE THE AP
+        `netdctl ap start` sets force_ap, and the state machine then answers
+        "AP held open by operator" and skips its own self-healing probe. These
+        nodes have ONE radio, so an access point that is held open is an access
+        point the node can never leave to rejoin Wi-Fi. SAFE MODE would become
+        permanent and would require exactly the physical visit this whole
+        design exists to avoid.
+
+        So SAFE MODE only guarantees the AP is not SUPPRESSED. netd raises it
+        by its own rules when the node is genuinely offline, drops it
+        periodically to look for known networks, and takes it down for good
+        once an uplink is stable. The radio stays netd's to own.
     """
-    log("SAFE MODE: raising maintenance AP, ensuring SSH and portal")
+    prefix = "WOULD " if dry else ""
+    log(f"{prefix}SAFE MODE: ensuring SSH and portal, returning AP to "
+        f"automatic control (NOT pinning it)")
+    if dry:
+        for step in safe_mode_actions():
+            log(f"    WOULD {step}")
+        return
     run(["systemctl", "start", "ssh.service"])
     run(["systemctl", "start", "energy-node-portal.service"])
-    # netd owns the radio; ask it rather than touching NetworkManager here.
-    if os.path.exists("/usr/local/bin/netdctl"):
-        run(["/usr/local/bin/netdctl", "ap", "start"], timeout=60)
-    else:
-        run(["netdctl", "ap", "start"], timeout=60)
+    netdctl("ap", "auto")
+
+
+def leave_safe_mode(dry: bool = False) -> None:
+    """Nothing to undo on the radio.
+
+    netd lowers the access point itself once an uplink has been stable, so
+    tearing it down from here would race the supervisor for control of the
+    one thing it owns.
+    """
+    prefix = "WOULD " if dry else ""
+    log(f"{prefix}leaving SAFE MODE - netd lowers the AP on its own once the "
+        f"uplink is stable")
 
 
 # ------------------------------------------------------------------ publish
@@ -294,14 +354,14 @@ def act(decision: P.Decision, led: P.Ledger, now: float, dry: bool) -> None:
         log(f"{prefix}ENTER SAFE MODE: {decision.reason}")
         led.safe_mode_since = now
         led.safe_mode_last_retry = now
-        if not dry:
-            bs(bootstate.event, bootstate.E_SAFE_MODE, stage, decision.reason, now)
-            enter_safe_mode()
+        bs(bootstate.event, bootstate.E_SAFE_MODE, stage, decision.reason, now)
+        enter_safe_mode(dry=dry)
 
     elif decision.action == P.LEAVE_SAFE_MODE:
         log("LEAVING SAFE MODE - node healthy")
         bs(bootstate.event, bootstate.E_SAFE_MODE_EXIT, None,
            "all stages healthy", now)
+        leave_safe_mode(dry=dry)
         led.safe_mode_since = None
         led.safe_mode_last_retry = None
         led.safe_mode_last_reboot = None
@@ -314,11 +374,37 @@ def tick(led: P.Ledger, policy: P.Policy, last_state: Optional[str]) -> str:
     results = probes.probe_all()
     decision = P.decide(results, led, now, policy)
 
+    # The forced-SAFE-MODE test hook. Applied AFTER the real decision, so the
+    # production path is exactly what it would be without it.
+    if forced_safe_mode():
+        if led.safe_mode_since is None:
+            log("FORCED SAFE MODE (RECOVERY_FORCE_SAFE_MODE=1) - entering "
+                "deliberately; no fault is present")
+            led.safe_mode_since = now
+            led.safe_mode_last_retry = now
+            bs(bootstate.event, bootstate.E_SAFE_MODE, None,
+               "forced by RECOVERY_FORCE_SAFE_MODE (test)", now)
+            enter_safe_mode(dry=observe_only())
+        elif now - (led.safe_mode_last_retry or 0) >= policy.safe_mode_retry_s:
+            log("FORCED SAFE MODE: periodic recovery attempt (no fault to fix)")
+            led.safe_mode_last_retry = now
+            bs(bootstate.event, bootstate.E_REMEDY, None,
+               "forced safe-mode periodic retry", now)
+        decision = P.Decision(P.SAFE_MODE, P.WAIT, decision.stage,
+                              "held by RECOVERY_FORCE_SAFE_MODE (test hook)")
+
     if decision.state != last_state:
         log(f"STATE {last_state or 'START'} -> {decision.state} | {decision.reason}")
         for r in results:
             if r.status != P.OK:
                 log(f"    {r.stage:14} {r.status:8} {r.detail}")
+
+    if (not forced_safe_mode() and led.safe_mode_since is not None
+            and P.first_failure(results) is None):
+        # The flag was cleared (or the fault cleared) while parked in SAFE
+        # MODE: leave on the very next tick rather than waiting for a retry.
+        decision = P.Decision(P.SAFE_MODE, P.LEAVE_SAFE_MODE, None,
+                              "no failing stage and SAFE MODE not forced")
 
     if decision.action not in (P.NONE, P.WAIT):
         act(decision, led, now, dry=observe_only())
@@ -349,6 +435,9 @@ def main() -> int:
     policy = load_policy()
     log(f"Recovery Manager {__version__} starting | node={enconfig.node_id()} "
         f"interval={interval}s observe_only={observe_only()}")
+    if forced_safe_mode():
+        log("  RECOVERY_FORCE_SAFE_MODE=1 - SAFE MODE will be entered and held "
+            "deliberately. Clear the flag to leave.")
     log(f"  policy: remedy x{policy.remedy_attempts}, reboot max "
         f"{policy.reboot_max}/{policy.reboot_window_s}s, safe-mode retry "
         f"{policy.safe_mode_retry_s}s, safe-mode reboot after "

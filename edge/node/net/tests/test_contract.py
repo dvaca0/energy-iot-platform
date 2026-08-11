@@ -158,3 +158,22 @@ class NmcliParsingTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class APCommandMapping(unittest.TestCase):
+    """'auto' must never be silently treated as 'stop'.
+
+    ap.stop SUPPRESSES the access point; ap.auto PERMITS it. SAFE MODE relies
+    on the difference, and mapping every non-start action to ap.stop did the
+    exact opposite of what SAFE MODE asked for.
+    """
+
+    def test_each_action_maps_to_its_own_command(self):
+        from netd.cli import _AP_COMMANDS
+        self.assertEqual(_AP_COMMANDS["start"], "ap.start")
+        self.assertEqual(_AP_COMMANDS["stop"], "ap.stop")
+        self.assertEqual(_AP_COMMANDS["auto"], "ap.auto")
+
+    def test_auto_is_not_stop(self):
+        from netd.cli import _AP_COMMANDS
+        self.assertNotEqual(_AP_COMMANDS["auto"], _AP_COMMANDS["stop"])

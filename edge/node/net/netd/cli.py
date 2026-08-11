@@ -182,8 +182,18 @@ def _cmd_disconnect(args: argparse.Namespace) -> int:
     return _emit(_client().call("wifi.disconnect"), args.json)
 
 
+#: 'auto' is NOT a synonym for 'stop'. Stopping SUPPRESSES the AP so it is not
+#: raised again straight away, which is right for an operator but wrong for
+#: SAFE MODE - it needs the AP permitted, just not pinned. Mapping every
+#: non-start action to ap.stop silently did the opposite.
+_AP_COMMANDS = {"start": "ap.start", "stop": "ap.stop", "auto": "ap.auto"}
+
+
 def _cmd_ap(args: argparse.Namespace) -> int:
-    command = "ap.start" if args.action == "start" else "ap.stop"
+    command = _AP_COMMANDS.get(args.action)
+    if command is None:
+        print(f"unknown ap action '{args.action}'")
+        return 2
     return _emit(_client().call(command), args.json)
 
 
@@ -260,7 +270,9 @@ def build_parser() -> argparse.ArgumentParser:
     priority.set_defaults(func=_cmd_priority)
 
     ap = sub.add_parser("ap", help="control the maintenance access point")
-    ap.add_argument("action", choices=["start", "stop"])
+    ap.add_argument("action", choices=["start", "stop", "auto"],
+                    help="start pins the AP open; auto returns it to the "
+                         "state machine (what SAFE MODE uses)")
     ap.set_defaults(func=_cmd_ap)
 
     sub.add_parser("diagnostics", help="full diagnostic report").set_defaults(
