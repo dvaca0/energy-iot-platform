@@ -75,7 +75,16 @@ def explain(health: Optional[dict], boot: Optional[dict] = None,
     stages = {s["stage"]: s for s in health.get("stages", [])}
 
     # ------------------------------------------------------------ what is wrong
-    if state == P.HEALTHY and not failure:
+    if not failure:
+        # No failing stage. That is true whatever the state says - a node
+        # parked in SAFE MODE with nothing wrong is about to leave it, and
+        # saying "stage 'None' failed" is worse than saying nothing.
+        if state != P.HEALTHY:
+            out.append(f"The node is {state}, but no stage is currently "
+                       f"failing.")
+            if state == P.SAFE_MODE:
+                out.append("It will leave SAFE MODE on the next check.")
+            return out
         out.append("The node is HEALTHY. Every boot stage passed.")
         if boot and boot.get("boot_complete"):
             tth = boot.get("time_to_healthy_s")
@@ -130,8 +139,12 @@ def explain(health: Optional[dict], boot: Optional[dict] = None,
     used = (health.get("ledger") or {}).get("reboots_last_window", 0)
 
     if state == P.SAFE_MODE:
-        out.append("The node is in SAFE MODE: the maintenance access point is "
-                   "up, SSH is up and the recovery portal is up.")
+        out.append("The node is in SAFE MODE: SSH is up, the recovery portal "
+                   "is up, and the maintenance access point is PERMITTED.")
+        out.append("SAFE MODE does not raise the access point itself - these "
+                   "nodes have one radio, and an access point that is pinned "
+                   "open is one the node can never leave to rejoin Wi-Fi. "
+                   "netd raises it if the node is genuinely offline.")
         out.append(f"It will keep retrying recovery every "
                    f"{_fmt_secs(policy.safe_mode_retry_s)}, forever. It may try "
                    f"one more reboot after "

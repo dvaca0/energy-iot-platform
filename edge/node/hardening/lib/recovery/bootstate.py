@@ -127,6 +127,10 @@ E_REMEDY = "remedy"
 E_REBOOT = "reboot"
 E_SAFE_MODE = "safe_mode_entered"
 E_SAFE_MODE_EXIT = "safe_mode_left"
+#: A periodic SAFE MODE sweep that restarted nothing. Counting it as a
+#: service restart would inflate the boot record with restarts that
+#: never happened.
+E_SAFE_MODE_RETRY = "safe_mode_retry"
 E_HEALTHY = "healthy"
 
 

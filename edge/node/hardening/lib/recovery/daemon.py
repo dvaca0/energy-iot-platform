@@ -388,8 +388,9 @@ def tick(led: P.Ledger, policy: P.Policy, last_state: Optional[str]) -> str:
         elif now - (led.safe_mode_last_retry or 0) >= policy.safe_mode_retry_s:
             log("FORCED SAFE MODE: periodic recovery attempt (no fault to fix)")
             led.safe_mode_last_retry = now
-            bs(bootstate.event, bootstate.E_REMEDY, None,
-               "forced safe-mode periodic retry", now)
+            bs(bootstate.event, bootstate.E_SAFE_MODE_RETRY, None,
+               "forced safe-mode periodic retry (no service was restarted)",
+               now)
         decision = P.Decision(P.SAFE_MODE, P.WAIT, decision.stage,
                               "held by RECOVERY_FORCE_SAFE_MODE (test hook)")
 

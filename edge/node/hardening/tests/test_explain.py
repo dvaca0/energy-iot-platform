@@ -79,3 +79,30 @@ class Explain(unittest.TestCase):
     def test_every_stage_has_human_wording(self):
         for stage in P.STAGE_ORDER:
             self.assertIn(stage, explain.HUMAN, f"{stage} has no plain-English text")
+
+
+class SafeModeWording(unittest.TestCase):
+    """Operator-facing text must be true. Someone reads this at 2am."""
+
+    def test_safe_mode_with_no_failing_stage_does_not_invent_one(self):
+        lines = explain.explain(health(P.SAFE_MODE, None))
+        joined = " ".join(lines)
+        self.assertNotIn("None", joined)
+        self.assertNotIn("stage 'None' failed", joined)
+        self.assertIn("no stage is currently failing", joined)
+        self.assertIn("leave SAFE MODE", joined)
+
+    def test_safe_mode_does_not_claim_the_ap_is_up(self):
+        # SAFE MODE deliberately never raises the AP; claiming it is up would
+        # send a technician looking for an SSID that is not being broadcast.
+        lines = explain.explain(
+            health(P.SAFE_MODE, P.COLLECTOR, P.WAIT, "waiting"),
+            boot={"failure_owner": "LOCAL"})
+        joined = " ".join(lines)
+        self.assertNotIn("access point is up", joined)
+        self.assertIn("PERMITTED", joined)
+        self.assertIn("one radio", joined)
+
+    def test_healthy_still_reads_naturally(self):
+        lines = explain.explain(health(P.HEALTHY))
+        self.assertTrue(lines[0].startswith("The node is HEALTHY"))
