@@ -73,7 +73,7 @@ class IngestDecision:
 
 
 def authenticate_node(
-    db: Session, request, claimed_code: str, *, endpoint: str, enforcing: bool
+    db: Session, request, claimed_code: str, *, endpoint: str
 ) -> tuple[Node, bool]:
     """Resolve the sender to a node, or refuse.
 
@@ -82,6 +82,13 @@ def authenticate_node(
     node than the one claimed — impersonation is always refused, in either mode,
     because storing a payload known to be mislabelled corrupts the record used
     to detect the problem.
+
+    Whether a credential is *required* is asked of
+    :func:`node_auth.enforcement_applies_to`, never computed here. This function
+    used to take an ``enforcing: bool`` that callers filled in with
+    ``get_config().node_auth.enforcing`` — the mode alone, with
+    ``exempt_nodes`` dropped on the floor. Taking the node code and asking the
+    policy removes the parameter that made the divergence expressible.
     """
     source_ip = node_auth.client_ip(request)
     user_agent = request.headers.get("user-agent")
@@ -107,6 +114,7 @@ def authenticate_node(
         )
 
     if not result.authenticated:
+        enforcing = node_auth.enforcement_applies_to(claimed_code)
         node_auth.record_violation(
             db,
             violation=result.violation or "unauthenticated",
@@ -218,16 +226,13 @@ def admit(
     captured_at: datetime | None,
     *,
     endpoint: str,
-    enforcing: bool,
 ) -> IngestDecision:
     """Run the whole gate: authenticate, authorize, classify, attribute.
 
     The only entry point ingest endpoints should use, so all four questions are
     answered the same way everywhere.
     """
-    node, authenticated = authenticate_node(
-        db, request, claimed_code, endpoint=endpoint, enforcing=enforcing
-    )
+    node, authenticated = authenticate_node(db, request, claimed_code, endpoint=endpoint)
     authorize(db, node, endpoint=endpoint)
     decision = classify(db, node, captured_at)
 

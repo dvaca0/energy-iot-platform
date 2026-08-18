@@ -22,6 +22,7 @@ from sqlalchemy.orm import Session
 
 from app.db import node_auth
 from app.db.database import get_db
+from app.db.models import Node
 from app.monitoring import history
 from app.monitoring.alerts import acknowledge
 from app.monitoring.channels import build_channels
@@ -73,7 +74,7 @@ def post_heartbeat(
     result = node_auth.authenticate(db, node_auth.extract_token(request.headers))
 
     claimed = payload.node_id
-    exempt = claimed in (auth_cfg.exempt_nodes or ())
+    enforcing = node_auth.enforcement_applies_to(claimed, config)
 
     if result.authenticated and result.subject != claimed:
         node_auth.record_violation(
@@ -104,9 +105,9 @@ def post_heartbeat(
             user_agent=user_agent,
             producer=payload.software_version,
             endpoint="/api/monitoring/heartbeat",
-            detail=("enforcing" if auth_cfg.enforcing and not exempt else "permissive"),
+            detail=("enforcing" if enforcing else "permissive"),
         )
-        if auth_cfg.enforcing and not exempt:
+        if enforcing:
             db.commit()
             raise HTTPException(
                 status_code=401,
@@ -124,7 +125,7 @@ def post_heartbeat(
     )
     db.commit()
 
-    return {
+    response = {
         "status": "ok",
         "received_at": beat.received_at.isoformat(),
         "node_code": beat.node_code,
@@ -135,6 +136,31 @@ def post_heartbeat(
         "next_interval_seconds": config.heartbeat.interval_seconds,
         "clock_drift_seconds": beat.clock_drift_seconds,
     }
+
+    # The convergence handshake the fleet already speaks.
+    #
+    # The hardening heartbeat library treats the presence of a `last_sync` key
+    # here as CANONICAL_MARKER: "this backend refreshes liveness from the
+    # canonical heartbeat, so you no longer need the legacy edge beat". With
+    # HEARTBEAT_LEGACY_EDGE_PUBLISH=auto (the fleet default) a node that sees it
+    # negotiates its own unauthenticated POST to /api/edge/heartbeat off, and
+    # caches that decision.
+    #
+    # Until record_heartbeat refreshed `nodes.last_sync` this key would have
+    # been a lie, so it was correctly withheld and every node kept using the
+    # legacy path. Now it is true, and advertising it retires that path by
+    # negotiation rather than by deleting an endpoint out from under producers
+    # we do not control.
+    #
+    # Only advertised for a node the platform actually knows: an unregistered
+    # code has no row whose liveness we could have refreshed, and it must keep
+    # whatever behaviour it had rather than be told to stop.
+    if beat.node_id is not None:
+        node = db.query(Node).filter(Node.code == beat.node_code).first()
+        if node is not None and node.last_sync is not None:
+            response["last_sync"] = node.last_sync.isoformat()
+
+    return response
 
 
 # --------------------------------------------------------------------------

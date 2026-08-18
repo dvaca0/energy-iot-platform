@@ -2,13 +2,14 @@ from collections import defaultdict
 from datetime import UTC, datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from app.db import scope
 from app.db.database import get_db
 from app.db.models import Building, Campus, EnergyReading, Node, TariffPeriod
 from app.services import energy_aggregate as agg
+from app.services import live_view
 from app.services.cost_engine import estimate_reading_cost
 from app.services.platform_settings import get_thresholds
 
@@ -104,6 +105,89 @@ def live_metrics(db: Session = Depends(get_db)):
         )
 
     return result
+
+
+# --------------------------------------------------------------------------
+# The technical live view
+#
+# Two endpoints, separated because they have opposite cost profiles: the
+# snapshot is small and polled every few seconds, the window is large and is
+# either extended incrementally or refreshed slowly. `/live` above is left
+# exactly as it is — the production dashboard consumes it, and this page needs
+# per-phase detail and node health that `/live` deliberately does not carry.
+# --------------------------------------------------------------------------
+
+
+@router.get("/live/snapshot")
+def live_snapshot(
+    node_ids: str | None = Query(
+        None, description="Node codes, comma separated (e.g. 'N001,N002'). All nodes if omitted."
+    ),
+    context: str | None = Query(
+        "all",
+        description=(
+            "Measurement contexts to include, comma separated, or 'all'. Defaults to "
+            "'all' because this view reports what the hardware is doing, and a node "
+            "measuring under a non-production context is still measuring."
+        ),
+    ),
+    db: Session = Depends(get_db),
+):
+    """Instantaneous per-node state: last reading, freshness, and node health.
+
+    Unlike ``/live``, a node that has gone quiet is included rather than
+    dropped — for a technician, silence is the finding.
+    """
+    return live_view.snapshot(db, node_ids=node_ids, contexts=context)
+
+
+@router.get("/live/history")
+def live_history(
+    node_ids: str | None = Query(None, description="Node codes, comma separated."),
+    range: str = Query("15m", description=f"One of: {', '.join(live_view.RANGES)}"),
+    since: str | None = Query(
+        None,
+        description=(
+            "ISO instant the client already holds. Returns only newer samples. "
+            "Honoured for un-bucketed ranges only; see the service docstring."
+        ),
+    ),
+    context: str | None = Query("all", description="Measurement contexts, or 'all'."),
+    deployment_id: int | None = Query(
+        None,
+        description=(
+            "Only meaningful with range=deployment. Scopes the window to that "
+            "deployment's readings and to its own activated_at/closed_at bounds; "
+            "node_ids is ignored. Omitted, the newest activated deployment is used "
+            "and named in the response."
+        ),
+    ),
+    db: Session = Depends(get_db),
+):
+    """Per-node time series over the selected window.
+
+    The response declares its own resolution and aggregation, so a reader can
+    always tell a measurement from a bucket mean.
+    """
+    return live_view.history(
+        db,
+        node_ids=node_ids,
+        range_key=range,
+        since=since,
+        contexts=context,
+        deployment_id=deployment_id,
+    )
+
+
+@router.get("/live/deployments")
+def live_deployments(db: Session = Depends(get_db)):
+    """Activated deployments, newest first — the options for the range selector.
+
+    Deliberately thinner than ``/api/deployments``, which carries lifecycle
+    actions, organisational hierarchy and reading counts the chart selector has
+    no use for.
+    """
+    return live_view.list_deployments(db)
 
 
 @router.get("/hourly")

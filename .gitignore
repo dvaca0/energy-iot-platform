@@ -128,3 +128,4 @@ clean_seed_data.py
 # Node software: the rendered per-node network config holds the AP passphrase.
 # Only the redacted .example is tracked; real renders never enter the repo.
 edge/node/net/config/network.yaml
+frontend/tests/.build/

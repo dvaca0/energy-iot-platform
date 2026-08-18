@@ -31,8 +31,8 @@ function Metric({ label, value, color }: { label: string; value: string; color: 
   );
 }
 
-export function SmartPlugDashboardWidget({ deploymentId }: { deploymentId?: number | null } = {}) {
-  const { plugs, source } = useSmartPlugs(deploymentId);
+export function SmartPlugDashboardWidget() {
+  const { plugs, source } = useSmartPlugs();
 
   const totals = summarize(plugs);
   const top = highestConsumer(plugs);

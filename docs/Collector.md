@@ -105,6 +105,16 @@ why ingestion can be paused for a migration without consequence.
 | `meter_energy_kwh` | The device's own cumulative register — **reconciliation only** |
 | `voltage`, `current`, `power_factor`, `frequency_hz` | Electrical quality |
 | `phase_*_voltage`, `phase_*_current` | Three-phase detail |
+| `phase_*_power_kw`, `phase_*_apparent_kva` | Per-phase power and apparent power (M15) |
+| `phase_*_power_factor`, `phase_*_frequency_hz` | Per-phase quality (M15) |
+| `apparent_kva`, `neutral_current` | Totals the meter publishes (M15) |
+| `phase_*_energy_imported_kwh`, `phase_*_energy_returned_kwh`, `meter_energy_returned_kwh` | Meter registers (M15) |
+
+The M15 fields exist because a read-only capture from N001's meter on
+2026-08-18 showed the Shelly Pro 3EM publishes all of them in the response the
+collector already parses, and the platform stored none of them. See
+[Live-Monitoring.md](Live-Monitoring.md) for the full field matrix and
+[Plan-Shelly-Phase-Fields.md](Plan-Shelly-Phase-Fields.md) for the migration.
 
 ---
 

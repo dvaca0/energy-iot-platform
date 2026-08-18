@@ -271,6 +271,81 @@ def main() -> int:
         nxt.activated_at - prev.closed_at == timedelta(microseconds=1),
     )
 
+    print("\n--- the lifecycle keeps nodes.measurement_context true ---")
+    # The 2026-08-13 defect: deployment 7 was activated on N001 while the node
+    # was still declared `infrastructure_validation` — a context whose
+    # may_attribute is 0, so `attribution.resolve()` returned before it ever
+    # looked at a deployment window. Every reading landed with deployment_id
+    # NULL, the campaign owned nothing, and its building never reached Data
+    # Explorer. Nothing wrote this column, so the declaration could not become
+    # true again.
+    db.refresh(n2)
+    check(
+        "activating a campaign declares the node PRODUCTION",
+        n2.measurement_context == ops.MEASURING_CONTEXT,
+        n2.measurement_context,
+    )
+    check(
+        "...which is a context that may attribute",
+        db.execute(
+            sa_text("SELECT may_attribute FROM measurement_contexts WHERE code = :c"),
+            {"c": n2.measurement_context},
+        ).scalar()
+        == 1,
+    )
+
+    # A handover must not drop the node back to standby: complete() runs inside
+    # supersede_and_activate() while the incoming campaign is about to start.
+    check(
+        "a handover leaves the node measuring throughout",
+        n2.measurement_context == ops.MEASURING_CONTEXT,
+        n2.measurement_context,
+    )
+
+    # An explicit instant after activation: these fixtures live in 2027, and
+    # M12 refuses a close that precedes its own activation.
+    ops.complete(db, nxt, at=datetime(2027, 1, 2, 9, 0, 0))
+    db.commit()
+    db.refresh(n2)
+    check(
+        "finishing the last campaign returns the node to standby",
+        n2.measurement_context == ops.STANDBY_CONTEXT,
+        n2.measurement_context,
+    )
+    check(
+        "...and standby may not attribute",
+        db.execute(
+            sa_text("SELECT may_attribute FROM measurement_contexts WHERE code = :c"),
+            {"c": n2.measurement_context},
+        ).scalar()
+        == 0,
+    )
+
+    # A deliberately declared research context is the operator's, not ours.
+    n2.measurement_context = "bench"
+    db.commit()
+    d3 = plan(n2, start="2027-02-01", end="2027-02-07")
+    ops.begin_installation(db, d3)
+    ops.activate(db, d3, at=datetime(2027, 2, 1, 8, 0, 0))
+    db.commit()
+    db.refresh(n2)
+    check(
+        "activating still declares production over a stale research context",
+        n2.measurement_context == ops.MEASURING_CONTEXT,
+        n2.measurement_context,
+    )
+    n2.measurement_context = "laboratory"
+    db.commit()
+    ops.complete(db, d3, at=datetime(2027, 2, 2, 9, 0, 0))
+    db.commit()
+    db.refresh(n2)
+    check(
+        "completing does NOT overwrite a context the lifecycle did not set",
+        n2.measurement_context == "laboratory",
+        n2.measurement_context,
+    )
+    drop(d3)
+
     print("\n--- attribution fields are frozen once measuring ---")
     check(
         "an activated deployment offers no edit action",

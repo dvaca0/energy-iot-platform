@@ -165,10 +165,41 @@ def client_ip(request: Any) -> str | None:
     return request.client.host if request.client else None
 
 
+def enforcement_applies_to(node_code: str | None, config: Any = None) -> bool:
+    """Whether a missing credential must be *refused* for this node.
+
+    The single place ``node_auth.mode`` and ``node_auth.exempt_nodes`` are ever
+    combined. Every caller asks this question and none re-derives it, because
+    re-deriving it is exactly how the two halves of the policy came apart:
+
+    Between 2026-08-06 and 2026-08-13 ``exempt_nodes: ["N003"]`` was honoured by
+    ``/api/monitoring/heartbeat``, which consulted both fields, and ignored by
+    both ingest paths, which passed only ``mode`` through as a bare boolean. The
+    exemption therefore looked applied — heartbeats were accepted — while every
+    one of N003's 5,958 measurement uploads was rejected 401 and its liveness
+    silently froze. An exemption that holds on one route and not another is
+    worse than no exemption: it is invisible.
+
+    Returns True when the credential is mandatory. An exempt node still fails
+    authentication and still records a violation; it is simply not refused, so
+    ``security.unauthenticated_producer`` keeps the exemption visible.
+    """
+    if config is None:
+        from app.monitoring.config import get_config
+
+        config = get_config()
+
+    auth = config.node_auth
+    if not auth.enforcing:
+        return False
+    return node_code not in (auth.exempt_nodes or ())
+
+
 __all__ = [
     "AuthResult",
     "authenticate",
     "client_ip",
+    "enforcement_applies_to",
     "extract_token",
     "generate_token",
     "hash_token",

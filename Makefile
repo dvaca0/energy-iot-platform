@@ -11,7 +11,7 @@ NPM := npm --prefix frontend
 
 # Hermetic suites: each builds its own throwaway SQLite database, so they run
 # on any checkout and in CI.
-SUITES := monitoring collector smart_plugs synthetic_deployment
+SUITES := monitoring collector smart_plugs synthetic_deployment shelly_phase_detail
 
 # Integration suites: these read the live production database (energy_aggregate
 # reads it, deployment_lifecycle copies it with the online backup API). Neither
@@ -19,7 +19,7 @@ SUITES := monitoring collector smart_plugs synthetic_deployment
 INTEGRATION := energy_aggregate deployment_lifecycle
 
 .DEFAULT_GOAL := help
-.PHONY: help setup dev build test test-node test-integration lint format check docs-check mermaid api-docs deps-check \
+.PHONY: help setup dev build test test-node test-ui test-integration lint format check docs-check mermaid api-docs deps-check \
         clean reload backup dev-ui
 
 help:  ## Show this help
@@ -93,7 +93,12 @@ deps-check:  ## Verify every backend import is declared in requirements
 api-docs:  ## Verify docs/API.md still matches the application
 	$(PY) scripts/check_api_docs.py
 
-check: lint deps-check test test-node docs-check mermaid api-docs  ## Everything CI runs
+test-ui:  ## Render the React views in Node and fail on any render exception
+	@printf "\033[36m%-24s\033[0m " "ui-render"; \
+	if (cd frontend && npm run --silent test >/tmp/eiq-ui.log 2>&1); then \
+	  echo "PASS"; else echo "FAIL — /tmp/eiq-ui.log"; exit 1; fi
+
+check: lint deps-check test test-node test-ui docs-check mermaid api-docs  ## Everything CI runs
 
 backup:  ## Safe database backup — never use cp on a WAL database
 	@mkdir -p backups

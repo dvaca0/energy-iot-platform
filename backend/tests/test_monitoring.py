@@ -64,7 +64,7 @@ from app.monitoring.channels.base import (
     NotificationChannel,
     OutboundMessage,
 )
-from app.monitoring.config import MonitoringConfig, get_config
+from app.monitoring.config import MonitoringConfig, NodeAuthConfig, get_config
 from app.monitoring.heartbeat import (
     HeartbeatPayload,
     collect_node_state,
@@ -376,6 +376,188 @@ check(
     >= 1,
 )
 db.close()
+
+
+print("\n--- 3g. One enforcement policy, or none (exempt_nodes must not diverge) ---")
+# The 2026-08-13 incident: `exempt_nodes: ["N003"]` was honoured by
+# /api/monitoring/heartbeat and ignored by both ingest paths, which received
+# only `mode` as a bare boolean. N003 looked exempt (its heartbeats would have
+# been accepted) while all 5,958 of its measurement uploads were rejected 401,
+# freezing `nodes.last_sync` and erasing it from the dashboard for seven days.
+#
+# These checks assert the property that makes that unrepresentable: for one
+# node, in one configuration, every credential-bearing route reaches the SAME
+# admission decision. They compare routes against each other rather than
+# against hardcoded codes, so a future route that re-derives the policy fails
+# here regardless of which way it diverges.
+
+db = TestSession()
+db.add(models.Node(code="NEX", name="Exempt Node", commission_state="commissioned"))
+db.commit()
+db.close()
+
+_saved_mode = CONFIG.node_auth.mode
+_saved_exempt = CONFIG.node_auth.exempt_nodes
+
+
+def _admission_codes(node_code):
+    """Status code from each credential-bearing route, sent with no credential."""
+    return {
+        "heartbeat": client.post(
+            "/api/monitoring/heartbeat", json={"node_id": node_code}
+        ).status_code,
+        "batch": client.post(
+            "/api/v1/measurements/batch",
+            json={
+                "device_id": node_code,
+                "measurements": [{"captured_at": "2026-08-13T13:00:00.000Z"}],
+            },
+        ).status_code,
+        "readings": client.post(
+            "/api/readings",
+            json={"node_id": node_code, "timestamp": "2026-08-13T13:00:00.000Z", "voltage": 127.0},
+        ).status_code,
+    }
+
+
+check(
+    "enforce + not exempt -> enforcement applies",
+    node_auth.enforcement_applies_to("NEX", MonitoringConfig(node_auth=NodeAuthConfig("enforce"))),
+)
+check(
+    "enforce + exempt -> enforcement waived",
+    not node_auth.enforcement_applies_to(
+        "NEX", MonitoringConfig(node_auth=NodeAuthConfig("enforce", ("NEX",)))
+    ),
+)
+check(
+    "permissive -> enforcement waived even when not exempt",
+    not node_auth.enforcement_applies_to(
+        "NEX", MonitoringConfig(node_auth=NodeAuthConfig("permissive"))
+    ),
+)
+check(
+    "exemption is per node, not global",
+    node_auth.enforcement_applies_to(
+        "N001", MonitoringConfig(node_auth=NodeAuthConfig("enforce", ("NEX",)))
+    ),
+)
+
+CONFIG.node_auth.mode = "enforce"
+CONFIG.node_auth.exempt_nodes = ()
+enforced = _admission_codes("NEX")
+check("enforced, no credential: heartbeat refuses", enforced["heartbeat"] == 401, str(enforced))
+check("enforced, no credential: batch refuses", enforced["batch"] == 401, str(enforced))
+check("enforced, no credential: readings refuses", enforced["readings"] == 401, str(enforced))
+check("enforced: all routes agree", len(set(enforced.values())) == 1, str(enforced))
+
+CONFIG.node_auth.exempt_nodes = ("NEX",)
+exempt = _admission_codes("NEX")
+check("exempt: heartbeat admits", exempt["heartbeat"] == 200, str(exempt))
+check("exempt: batch admits", exempt["batch"] == 200, str(exempt))
+check("exempt: readings admits", exempt["readings"] == 200, str(exempt))
+check("exempt: all routes agree", len(set(exempt.values())) == 1, str(exempt))
+check(
+    "THE REGRESSION: exemption changes every route or none",
+    all(enforced[r] != exempt[r] for r in enforced),
+    f"enforced={enforced} exempt={exempt}",
+)
+
+check(
+    "a non-exempt node is still refused while another is exempt",
+    _admission_codes("N001")["batch"] == 401,
+)
+
+db = TestSession()
+kinds = {
+    row[0]
+    for row in db.execute(
+        _sqltext("SELECT DISTINCT detail FROM node_identity_violations WHERE claimed_node='NEX'")
+    ).all()
+}
+check(
+    "exemption stays visible: both modes recorded", kinds == {"enforcing", "permissive"}, str(kinds)
+)
+db.close()
+
+CONFIG.node_auth.mode = _saved_mode
+CONFIG.node_auth.exempt_nodes = _saved_exempt
+
+
+print("\n--- 3h. Liveness comes from the authenticated heartbeat, not from uploading ---")
+# N002/N003 both proved the old coupling wrong from opposite ends: N002 was
+# `registered` (may_upload=0, every upload 403) yet showed online because it
+# called the unauthenticated legacy /api/edge/heartbeat; N003 had no heartbeat
+# producer at all, so its refused uploads were its only liveness signal and it
+# showed offline while sampling every 15s. A node that may not upload must
+# still be able to say it is alive — over an authenticated channel.
+
+from app.db import commissioning
+from app.routers.nodes import is_node_online
+
+db = TestSession()
+standby = models.Node(code="NSB", name="Standby Node", commission_state="registered")
+db.add(standby)
+db.commit()
+check("a node that has never reported is not online", not is_node_online(standby))
+SB_TOKEN = node_auth.issue_token(db, standby)
+db.commit()
+db.close()
+
+r = client.post(
+    "/api/monitoring/heartbeat",
+    headers={"Authorization": f"Bearer {SB_TOKEN}"},
+    json={"node_id": "NSB", "collector_status": "active"},
+)
+check("registered node's authenticated heartbeat accepted", r.status_code == 200, r.text)
+
+check(
+    "registered node may still not upload",
+    client.post(
+        "/api/readings",
+        headers={"Authorization": f"Bearer {SB_TOKEN}"},
+        json={"node_id": "NSB", "voltage": 127.0},
+    ).status_code
+    == 403,
+)
+
+db = TestSession()
+standby = db.query(models.Node).filter_by(code="NSB").first()
+check("heartbeat refreshed liveness", standby.last_sync is not None)
+check("...and the node reads as online", is_node_online(standby))
+check(
+    "online without uploading: the two states are independent",
+    is_node_online(standby)
+    and not commissioning.get(db, standby.commission_state).may_upload
+    and db.query(models.EnergyReading).filter_by(node_id=standby.id).count() == 0,
+)
+db.close()
+
+# The hardening heartbeat lib reads a `last_sync` key in this response as
+# CANONICAL_MARKER and negotiates its legacy unauthenticated
+# /api/edge/heartbeat publishing off. Advertising it is only honest now that
+# record_heartbeat refreshes liveness, so the key and the write must ship
+# together — hence asserting them in one place.
+r = client.post(
+    "/api/monitoring/heartbeat",
+    headers={"Authorization": f"Bearer {SB_TOKEN}"},
+    json={"node_id": "NSB", "collector_status": "active"},
+)
+check("canonical response advertises the convergence marker", "last_sync" in r.json(), r.text)
+
+# An unknown code has no row whose liveness could have been refreshed, so it
+# must not be told to stop publishing the legacy beat. Reachable only where the
+# credential is waived, since an authenticated request cannot invent a code.
+CONFIG.node_auth.mode = "permissive"
+ghost = client.post("/api/monitoring/heartbeat", json={"node_id": "GHOST"})
+check("unregistered node still recorded", ghost.status_code == 200, ghost.text)
+check("...but is not registered", ghost.json().get("registered") is False, ghost.text)
+check(
+    "...and is not sent the convergence marker",
+    "last_sync" not in ghost.json(),
+    ghost.text,
+)
+CONFIG.node_auth.mode = _saved_mode
 
 
 # ==========================================================================
@@ -1523,7 +1705,15 @@ check(
     "monitoring wrote nothing to energy_readings beyond the test ingests",
     db.query(models.EnergyReading).count() > 0,
 )
-check("nodes table row count unchanged", db.query(models.Node).count() == 2)
+# The point is that the monitoring subsystem never *creates* a node — a
+# heartbeat from an unknown code is recorded as a security finding, not
+# registered. Asserting the exact set rather than a count says that, and does
+# not break every time a later section seeds another fixture node.
+check(
+    "monitoring registered no nodes of its own",
+    {n.code for n in db.query(models.Node).all()} == {"N001", "N002", "NEX", "NSB"},
+    str(sorted(n.code for n in db.query(models.Node).all())),
+)
 db.close()
 
 

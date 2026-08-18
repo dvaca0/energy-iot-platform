@@ -70,7 +70,7 @@ export interface UseSmartPlugsResult {
   reload: () => void;
 }
 
-export function useSmartPlugs(deploymentId?: number | null): UseSmartPlugsResult {
+export function useSmartPlugs(): UseSmartPlugsResult {
   const [plugs, setPlugs] = useState<SmartPlug[]>([]);
   const [source, setSource] = useState<SmartPlugSource>("loading");
 
@@ -83,9 +83,7 @@ export function useSmartPlugs(deploymentId?: number | null): UseSmartPlugsResult
 
   const load = useCallback(async () => {
     try {
-      // Sin despliegue seleccionado se pide el inventario completo, igual que
-      // antes; con uno, sólo los enchufes asignados a ese despliegue.
-      const data = await getSmartPlugs(deploymentId);
+      const data = await getSmartPlugs();
       const list = Array.isArray(data) ? data : data?.smart_plugs || [];
       setPlugs(list.map(normalize));
       setSourceTracked("api");
@@ -94,7 +92,7 @@ export function useSmartPlugs(deploymentId?: number | null): UseSmartPlugsResult
       // se conserva lo mostrado y sólo se marca el estado como error.
       setSourceTracked("error");
     }
-  }, [setSourceTracked, deploymentId]);
+  }, [setSourceTracked]);
 
   useEffect(() => {
     // La primera carga también se agenda en el temporizador: así el estado

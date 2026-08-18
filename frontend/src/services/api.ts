@@ -11,21 +11,8 @@ export const api = axios.create({
   timeout: 30000,
 });
 
-/**
- * Optional deployment scope for the Executive Dashboard endpoints.
- *
- * Returns undefined rather than an empty object when no deployment is selected,
- * so axios omits the query string entirely and an unscoped request is identical
- * to the one these functions sent before the selector existed.
- */
-function scopeParams(deploymentId?: number | null) {
-  return deploymentId === null || deploymentId === undefined
-    ? undefined
-    : { deployment_id: deploymentId };
-}
-
-export async function getDashboardSummary(deploymentId?: number | null) {
-  const response = await api.get("/dashboard/summary", { params: scopeParams(deploymentId) });
+export async function getDashboardSummary() {
+  const response = await api.get("/dashboard/summary");
   return response.data;
 }
 
@@ -100,23 +87,69 @@ export async function getLiveMetrics() {
   return response.data;
 }
 
-export async function getMetricsHourly(deploymentId?: number | null) {
-  const response = await api.get("/metrics/hourly", { params: scopeParams(deploymentId) });
+/**
+ * Instantaneous state of the selected nodes for the technical live view.
+ *
+ * Separate from `getLiveMetrics` on purpose: `/api/metrics/live` feeds the
+ * production dashboard and deliberately omits per-phase detail and node health,
+ * and it drops nodes that have gone quiet. This one keeps them.
+ */
+export async function getLiveSnapshot(nodeIds?: string) {
+  const response = await api.get("/metrics/live/snapshot", {
+    params: nodeIds ? { node_ids: nodeIds } : {},
+  });
   return response.data;
 }
 
-export async function getMetricsTariffs(deploymentId?: number | null) {
-  const response = await api.get("/metrics/tariffs", { params: scopeParams(deploymentId) });
+/**
+ * Time series for the technical live view.
+ *
+ * `since` asks for only the samples newer than an instant the caller already
+ * holds; the backend honours it for un-bucketed ranges and ignores it for the
+ * rest, reporting which it did in `incremental`.
+ */
+export async function getLiveHistory(
+  nodeIds: string,
+  range: string,
+  since?: string,
+  deploymentId?: number | null,
+) {
+  const response = await api.get("/metrics/live/history", {
+    params: {
+      node_ids: nodeIds,
+      range,
+      ...(since ? { since } : {}),
+      // Only meaningful with range=deployment, where it scopes the window to
+      // that campaign's readings and node_ids is ignored server-side.
+      ...(deploymentId ? { deployment_id: deploymentId } : {}),
+    },
+  });
   return response.data;
 }
 
-export async function getMetricsDaily(deploymentId?: number | null) {
-  const response = await api.get("/metrics/daily", { params: scopeParams(deploymentId) });
+/** Activated deployments, newest first — options for the deployment range. */
+export async function getLiveDeployments() {
+  const response = await api.get("/metrics/live/deployments");
   return response.data;
 }
 
-export async function getMetricsBuildings(deploymentId?: number | null) {
-  const response = await api.get("/metrics/buildings", { params: scopeParams(deploymentId) });
+export async function getMetricsHourly() {
+  const response = await api.get("/metrics/hourly");
+  return response.data;
+}
+
+export async function getMetricsTariffs() {
+  const response = await api.get("/metrics/tariffs");
+  return response.data;
+}
+
+export async function getMetricsDaily() {
+  const response = await api.get("/metrics/daily");
+  return response.data;
+}
+
+export async function getMetricsBuildings() {
+  const response = await api.get("/metrics/buildings");
   return response.data;
 }
 
@@ -125,9 +158,9 @@ export async function getMetricsBuildings(deploymentId?: number | null) {
  * false so older clients only ever see live conditions; the Insight Center
  * asks for the full list because it labels each entry ACTIVE or RESOLVED.
  */
-export async function getAnomalies(deploymentId?: number | null, includeResolved = false) {
+export async function getAnomalies(includeResolved = false) {
   const response = await api.get("/anomalies", {
-    params: { ...(scopeParams(deploymentId) || {}), include_resolved: includeResolved },
+    params: { include_resolved: includeResolved },
   });
   return response.data;
 }
@@ -217,8 +250,8 @@ export async function generateDeploymentReport(deploymentId: number) {
 }
 
 
-export async function getSmartPlugs(deploymentId?: number | null) {
-  const response = await api.get("/smart-plugs", { params: scopeParams(deploymentId) });
+export async function getSmartPlugs() {
+  const response = await api.get("/smart-plugs");
   return response.data;
 }
 

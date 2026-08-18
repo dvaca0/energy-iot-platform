@@ -132,6 +132,9 @@ Live and historical electrical metrics.
 | `GET` | `/api/metrics/daily` | Daily Metrics |
 | `GET` | `/api/metrics/hourly` | Hourly Metrics |
 | `GET` | `/api/metrics/live` | Live Metrics |
+| `GET` | `/api/metrics/live/deployments` | Live Deployments |
+| `GET` | `/api/metrics/live/history` | Live History |
+| `GET` | `/api/metrics/live/snapshot` | Live Snapshot |
 | `GET` | `/api/metrics/tariffs` | Tariff Metrics |
 
 ### Cost
@@ -339,6 +342,29 @@ deployment — a client should not treat a slow response as a failure.
 There is no WebSocket. The live monitoring screen polls at 3 s. For a series
 whose source cadence is 15 s, polling is sufficient and removes an entire class
 of connection-state bugs. See [Frontend.md](Frontend.md).
+
+### The live view is three endpoints, not one
+
+`/api/metrics/live` feeds the production dashboard and is unchanged.
+`/api/metrics/live/snapshot` and `/api/metrics/live/history` back the technical
+*Monitoreo en Vivo* screen and are separated because their costs are opposite:
+the snapshot is ~5 KB and polled at 3 s, the window is tens of kilobytes and is
+either extended with `?since=` or refreshed on a slow cadence. Splitting them is
+what keeps a page that stays open all day from re-downloading its whole window
+twenty times a minute. `history` declares its own `resolution_seconds` and
+`aggregation`, so a caller can always tell a stored sample from a bucket mean.
+See [Live-Monitoring.md](Live-Monitoring.md).
+
+### The deployment range is scoped by deployment, not by node and dates
+
+`/api/metrics/live/history?range=deployment&deployment_id=N` filters on
+`energy_readings.deployment_id` and bounds the window with that campaign's own
+`activated_at`/`closed_at`. `node_ids` is ignored — the campaign decides which
+nodes appear, discovered from the readings rather than assumed. Every response
+carries `readings_in_window` and `readings_outside_window`, because a campaign
+can legitimately own readings its own dates do not cover, and an empty chart
+should be explained rather than merely blank.
+`/api/metrics/live/deployments` lists the activated campaigns for the selector.
 
 ### Two anomaly surfaces that are not the alerting system
 

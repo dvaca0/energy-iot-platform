@@ -49,6 +49,52 @@ else. Adding a meter type is a collector change and, at most, one row in
 | `voltage`, `current`, `power_factor`, `frequency_hz` | electrical quality |
 | `phase_*_voltage`, `phase_*_current` | three-phase detail |
 
+### Optional — per-phase detail (M15)
+
+Added after a read-only capture from N001's production meter on 2026-08-18
+(Shelly Pro 3EM, `SPEM-003CEBEU`, firmware 1.4.2, profile `triphase`) showed the
+device publishes all of these in the same response the collector already parses,
+and the platform was discarding every one of them.
+
+| Field | Unit | Source key |
+|---|---|---|
+| `phase_a_power_kw`, `phase_b_…`, `phase_c_…` | kW | `a_act_power` (W) |
+| `phase_a_apparent_kva`, `phase_b_…`, `phase_c_…` | kVA | `a_aprt_power` (VA) |
+| `phase_a_power_factor`, `phase_b_…`, `phase_c_…` | — | `a_pf` |
+| `phase_a_frequency_hz`, `phase_b_…`, `phase_c_…` | Hz | `a_freq` |
+| `apparent_kva` | kVA | `total_aprt_power` (VA) |
+| `neutral_current` | A | `n_current` |
+| `phase_*_energy_imported_kwh` | kWh | `a_total_act_energy` (Wh) |
+| `phase_*_energy_returned_kwh` | kWh | `a_total_act_ret_energy` (Wh) |
+| `meter_energy_returned_kwh` | kWh | `total_act_ret` (Wh) |
+
+Three rules govern them, and none is negotiable:
+
+**Units convert exactly once, at the collector.** The meter speaks W, VA and Wh;
+every field above names the unit it is stored in. `/api/readings` receives values
+already converted; `/api/v1/measurements/batch` receives device units under
+device names (`active_power_a`, `total_apparent_power`) and converts them in
+`app/services/units.py`. A value divided by a thousand twice is still a
+plausible-looking number, which is why the naming carries the unit rather than
+relying on anyone remembering.
+
+**Nothing is derived to fill a field.** If the meter did not return `a_pf`, send
+nothing. Do not send `a_act_power / a_aprt_power` computed locally: the point of
+these fields is the meter's own figure, which accounts for waveform distortion
+in a way arithmetic does not. Reactive power is not in this list because the
+firmware does not report it — it is derived at display time and labelled there.
+
+**`n_current` is null on an installation with no neutral CT**, which is N001
+today. Send `null`; never send `0`.
+
+> [!WARNING]
+> Sending `interval_energy_kwh` or changing `energy_source` is **not** part of
+> this addition. `measurement_eras` row 2 records that N001's collector derives
+> energy from power and says to close that era only when the collector emits
+> canonical fields. Emitting them without the matching era transition would make
+> `energy_aggregate` keep reading `energy_kwh` while the collector believes it
+> has moved on. Add the per-phase fields; leave the energy contract alone.
+
 `energy_kwh` is still accepted so existing collectors keep working unchanged.
 **New collectors must not send it.** It is legacy and its meaning is resolved
 per era (ADR-0007).

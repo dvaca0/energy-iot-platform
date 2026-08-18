@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "vite build --config vite.test.config.ts && node tests/.build/render-insights.mjs && node tests/.build/render-error-boundary.mjs && node tests/.build/render-live-monitor.mjs"
   },
   "dependencies": {
     "axios": "^1.18.0",

@@ -134,6 +134,11 @@ class HeartbeatPayload(BaseModel):
     gpio_ok: bool | None = None
     spi_ok: bool | None = None
     shelly_reachable: int | None = None
+    #: The MEASURING DEVICE's internal temperature (Shelly.GetStatus
+    #: "temperature:0".tC), distinct from cpu_temperature_c which is the Pi's.
+    #: Optional: a node whose collector does not publish it leaves it NULL, and
+    #: NULL renders as "no disponible" rather than as a fault.
+    meter_temperature_c: float | None = None
     shelly_total: int | None = None
     sensors_connected: int | None = None
 
@@ -234,6 +239,7 @@ def record_heartbeat(
         gpio_ok=payload.gpio_ok,
         spi_ok=payload.spi_ok,
         shelly_reachable=payload.shelly_reachable,
+        meter_temperature_c=payload.meter_temperature_c,
         shelly_total=payload.shelly_total,
         sensors_connected=payload.sensors_connected,
         local_alerts=json.dumps(payload.local_alerts) if payload.local_alerts else None,
@@ -253,6 +259,29 @@ def record_heartbeat(
     if latest is None:
         latest = NodeHeartbeatLatest(node_code=payload.node_id)
         session.add(latest)
+
+    if node is not None:
+        # Liveness is a property of *contact*, not of a successful upload.
+        #
+        # `nodes.last_sync` is what every API caller means by "online"
+        # (`nodes.is_node_online`, `dashboard.online_nodes`, `metrics/live`,
+        # `infra`, `deployments.node_online`). Until now only three routes wrote
+        # it: the two ingest paths — both behind `authorize()`, so a node that
+        # may not upload can never refresh it — and the unauthenticated legacy
+        # `/api/edge/heartbeat`.
+        #
+        # That made "alive" reachable only by uploading or by an unauthenticated
+        # side door. N001/N002 took the side door and looked online while every
+        # reading they sent was refused; N003 had neither and looked dead while
+        # sampling every 15 seconds. Refreshing liveness from the canonical
+        # authenticated heartbeat decouples the two, so the four states stay
+        # independent: alive / authorized to upload / measuring / deployed.
+        #
+        # Writing it here is gated by the same admission decision as the beat
+        # itself (`node_auth.enforcement_applies_to`, applied in the router
+        # before this is reached), so an unauthenticated node cannot refresh its
+        # own liveness under enforcement.
+        node.last_sync = now
 
     latest.node_id = node.id if node else None
     latest.heartbeat_id = beat.id

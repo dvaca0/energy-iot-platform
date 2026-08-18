@@ -132,6 +132,13 @@ class NodeHeartbeat(Base):
     gpio_ok: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     spi_ok: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     shelly_reachable: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+    #: The MEASURING DEVICE's own internal temperature, from Shelly.GetStatus
+    #: "temperature:0".tC — not the Raspberry Pi's, which is
+    #: `cpu_temperature_c` above. The capture on 2026-08-18 read 43.6 C at the
+    #: meter and 37.5 C at the Pi at the same instant: two devices, two numbers.
+    #: Health telemetry, deliberately not an energy_readings column.
+    meter_temperature_c: Mapped[float | None] = mapped_column(Float, nullable=True)
     shelly_total: Mapped[int | None] = mapped_column(Integer, nullable=True)
     sensors_connected: Mapped[int | None] = mapped_column(Integer, nullable=True)
 

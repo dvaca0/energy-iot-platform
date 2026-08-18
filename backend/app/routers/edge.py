@@ -6,8 +6,8 @@ from sqlalchemy.orm import Session
 
 from app.db.database import get_db
 from app.db.models import EnergyReading, Node
-from app.monitoring.config import get_config
 from app.services import ingest_gate
+from app.services.units import va_to_kva, w_to_kw, wh_to_kwh
 
 router = APIRouter(tags=["Edge"])
 
@@ -40,6 +40,25 @@ class Measurement(BaseModel):
     total_apparent_power: float | None = None
     total_current: float | None = None
 
+    #: EM.GetStatus `n_current`. Null on an installation with no neutral CT,
+    #: which is N001 today. Accepted as None and stored as NULL.
+    neutral_current: float | None = None
+
+    # ---- EMData.GetStatus cumulative registers, watt-hours ----
+    #: Reconciliation only. No analytic differences these (ADR-0007).
+    a_total_act_energy: float | None = None
+    b_total_act_energy: float | None = None
+    c_total_act_energy: float | None = None
+    a_total_act_ret_energy: float | None = None
+    b_total_act_ret_energy: float | None = None
+    c_total_act_ret_energy: float | None = None
+    total_act: float | None = None
+    total_act_ret: float | None = None
+
+    #: The METER's temperature, not the Pi's. Accepted here because a collector
+    #: may already send it, but deliberately NOT stored on the reading — it is
+    #: health telemetry and belongs on the heartbeat
+    #: (monitor_node_heartbeats.meter_temperature_c). Ignored on this path.
     temperature_c: float | None = None
     uptime_s: int | None = None
 
@@ -70,7 +89,6 @@ def ingest_batch(payload: BatchPayload, request: Request, db: Session = Depends(
         request,
         payload.device_id,
         endpoint="/api/v1/measurements/batch",
-        enforcing=get_config().node_auth.enforcing,
     )
     ingest_gate.authorize(db, node, endpoint="/api/v1/measurements/batch")
 
@@ -106,6 +124,40 @@ def ingest_batch(payload: BatchPayload, request: Request, db: Session = Depends(
             phase_a_current=m.current_a,
             phase_b_current=m.current_b,
             phase_c_current=m.current_c,
+            # Everything below was already accepted by this model and silently
+            # dropped, because EnergyReading had no columns for it until M15.
+            # The meter measured it; the platform now keeps it.
+            #
+            # Watts and volt-amperes on the wire — this is the ONE place they
+            # are converted on this path. See app/services/units.
+            phase_a_power_kw=w_to_kw(m.active_power_a),
+            phase_b_power_kw=w_to_kw(m.active_power_b),
+            phase_c_power_kw=w_to_kw(m.active_power_c),
+            phase_a_apparent_kva=va_to_kva(m.apparent_power_a),
+            phase_b_apparent_kva=va_to_kva(m.apparent_power_b),
+            phase_c_apparent_kva=va_to_kva(m.apparent_power_c),
+            # The meter's own per-phase figures, passed through unchanged. Note
+            # these are NOT the `(a or 0 + b or 0 + c or 0)/3` aggregates above:
+            # those keep their historical meaning and are not touched.
+            phase_a_power_factor=m.power_factor_a,
+            phase_b_power_factor=m.power_factor_b,
+            phase_c_power_factor=m.power_factor_c,
+            phase_a_frequency_hz=m.frequency_a,
+            phase_b_frequency_hz=m.frequency_b,
+            phase_c_frequency_hz=m.frequency_c,
+            apparent_kva=va_to_kva(m.total_apparent_power),
+            # None stays None. A missing neutral CT is not zero amps.
+            neutral_current=m.neutral_current,
+            # Watt-hours on the wire.
+            phase_a_energy_imported_kwh=wh_to_kwh(m.a_total_act_energy),
+            phase_b_energy_imported_kwh=wh_to_kwh(m.b_total_act_energy),
+            phase_c_energy_imported_kwh=wh_to_kwh(m.c_total_act_energy),
+            phase_a_energy_returned_kwh=wh_to_kwh(m.a_total_act_ret_energy),
+            phase_b_energy_returned_kwh=wh_to_kwh(m.b_total_act_ret_energy),
+            phase_c_energy_returned_kwh=wh_to_kwh(m.c_total_act_ret_energy),
+            # The existing column for the device's own import register.
+            meter_energy_kwh=wh_to_kwh(m.total_act),
+            meter_energy_returned_kwh=wh_to_kwh(m.total_act_ret),
         )
 
         db.add(reading)

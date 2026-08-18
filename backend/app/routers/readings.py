@@ -6,7 +6,6 @@ from sqlalchemy.orm import Session
 
 from app.db.database import get_db
 from app.db.models import EnergyReading
-from app.monitoring.config import get_config
 from app.services import ingest_gate
 from app.services.cost_engine import estimate_reading_cost
 
@@ -45,6 +44,43 @@ class ReadingCreate(BaseModel):
     phase_b_current: float | None = None
     phase_c_current: float | None = None
 
+    # ---- per-phase detail from the meter (M15) ----
+    #
+    # Every field here names its unit, and that is load-bearing rather than
+    # decorative: this route receives values ALREADY in platform units, while
+    # /api/v1/measurements/batch receives device units (watts, volt-amperes,
+    # watt-hours) and converts them. A field called `phase_a_power_kw` cannot be
+    # mistaken for watts, which is what keeps a value from being divided by a
+    # thousand twice. See app/services/units for the full rule.
+    phase_a_power_kw: float | None = None
+    phase_b_power_kw: float | None = None
+    phase_c_power_kw: float | None = None
+
+    phase_a_apparent_kva: float | None = None
+    phase_b_apparent_kva: float | None = None
+    phase_c_apparent_kva: float | None = None
+
+    phase_a_power_factor: float | None = None
+    phase_b_power_factor: float | None = None
+    phase_c_power_factor: float | None = None
+
+    phase_a_frequency_hz: float | None = None
+    phase_b_frequency_hz: float | None = None
+    phase_c_frequency_hz: float | None = None
+
+    apparent_kva: float | None = None
+    #: Amperes. Stays None when the installation has no neutral CT.
+    neutral_current: float | None = None
+
+    #: Cumulative registers, kWh. Reconciliation only (ADR-0007).
+    phase_a_energy_imported_kwh: float | None = None
+    phase_b_energy_imported_kwh: float | None = None
+    phase_c_energy_imported_kwh: float | None = None
+    phase_a_energy_returned_kwh: float | None = None
+    phase_b_energy_returned_kwh: float | None = None
+    phase_c_energy_returned_kwh: float | None = None
+    meter_energy_returned_kwh: float | None = None
+
 
 def _parse_captured_at(value: str | None) -> datetime | None:
     """Parse the node's declared capture instant, or None.
@@ -82,7 +118,6 @@ def create_reading(payload: ReadingCreate, request: Request, db: Session = Depen
         payload.node_id,
         captured_at,
         endpoint="/api/readings",
-        enforcing=get_config().node_auth.enforcing,
     )
     node = decision.node
     timestamp = captured_at or datetime.utcnow()
@@ -116,6 +151,29 @@ def create_reading(payload: ReadingCreate, request: Request, db: Session = Depen
         phase_a_current=payload.phase_a_current,
         phase_b_current=payload.phase_b_current,
         phase_c_current=payload.phase_c_current,
+        # Already in platform units on this route — no conversion here, by
+        # design. Converting again is the failure app/services/units documents.
+        phase_a_power_kw=payload.phase_a_power_kw,
+        phase_b_power_kw=payload.phase_b_power_kw,
+        phase_c_power_kw=payload.phase_c_power_kw,
+        phase_a_apparent_kva=payload.phase_a_apparent_kva,
+        phase_b_apparent_kva=payload.phase_b_apparent_kva,
+        phase_c_apparent_kva=payload.phase_c_apparent_kva,
+        phase_a_power_factor=payload.phase_a_power_factor,
+        phase_b_power_factor=payload.phase_b_power_factor,
+        phase_c_power_factor=payload.phase_c_power_factor,
+        phase_a_frequency_hz=payload.phase_a_frequency_hz,
+        phase_b_frequency_hz=payload.phase_b_frequency_hz,
+        phase_c_frequency_hz=payload.phase_c_frequency_hz,
+        apparent_kva=payload.apparent_kva,
+        neutral_current=payload.neutral_current,
+        phase_a_energy_imported_kwh=payload.phase_a_energy_imported_kwh,
+        phase_b_energy_imported_kwh=payload.phase_b_energy_imported_kwh,
+        phase_c_energy_imported_kwh=payload.phase_c_energy_imported_kwh,
+        phase_a_energy_returned_kwh=payload.phase_a_energy_returned_kwh,
+        phase_b_energy_returned_kwh=payload.phase_b_energy_returned_kwh,
+        phase_c_energy_returned_kwh=payload.phase_c_energy_returned_kwh,
+        meter_energy_returned_kwh=payload.meter_energy_returned_kwh,
     )
 
     db.add(reading)

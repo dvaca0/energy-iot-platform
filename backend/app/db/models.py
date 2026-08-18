@@ -241,6 +241,56 @@ class EnergyReading(Base):
     phase_b_current: Mapped[float | None] = mapped_column(Float, nullable=True)
     phase_c_current: Mapped[float | None] = mapped_column(Float, nullable=True)
 
+    # ---- per-phase detail from the meter (M15) ----
+    #: The meter's OWN per-phase figures, verified against a read-only capture
+    #: from N001's Shelly Pro 3EM (SPEM-003CEBEU, fw 1.4.2) on 2026-08-18. They
+    #: are never recomputed here: the capture shows c_pf 0.87 against a_pf and
+    #: b_pf 0.99, a spread the single aggregate `power_factor` cannot express,
+    #: and which is exactly what a technician is looking for.
+    #:
+    #: NULL on every reading stored before M15 — those instants were measured
+    #: but not kept, and NULL says so. Never 0.
+    phase_a_power_kw: Mapped[float | None] = mapped_column(Float, nullable=True)
+    phase_b_power_kw: Mapped[float | None] = mapped_column(Float, nullable=True)
+    phase_c_power_kw: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+    phase_a_apparent_kva: Mapped[float | None] = mapped_column(Float, nullable=True)
+    phase_b_apparent_kva: Mapped[float | None] = mapped_column(Float, nullable=True)
+    phase_c_apparent_kva: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+    phase_a_power_factor: Mapped[float | None] = mapped_column(Float, nullable=True)
+    phase_b_power_factor: Mapped[float | None] = mapped_column(Float, nullable=True)
+    phase_c_power_factor: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+    phase_a_frequency_hz: Mapped[float | None] = mapped_column(Float, nullable=True)
+    phase_b_frequency_hz: Mapped[float | None] = mapped_column(Float, nullable=True)
+    phase_c_frequency_hz: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+    #: Total apparent power, the counterpart of `power_kw`. Until M15 the
+    #: collector read this, divided it into `power_kw` to obtain
+    #: `power_factor`, and discarded it.
+    apparent_kva: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+    #: Neutral current, amperes. NULL on installations with no neutral CT —
+    #: which is N001 today, where the meter returns `n_current: null`. That NULL
+    #: is a fact about the installation and must survive to the screen.
+    neutral_current: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+    #: Per-phase cumulative registers from EMData.GetStatus, Wh on the wire and
+    #: kWh here. Reconciliation only — NO ANALYTIC DIFFERENCES THESE, the same
+    #: rule `meter_energy_kwh` was created under (ADR-0007). The total import
+    #: register is `meter_energy_kwh` above; no second column duplicates it.
+    phase_a_energy_imported_kwh: Mapped[float | None] = mapped_column(Float, nullable=True)
+    phase_b_energy_imported_kwh: Mapped[float | None] = mapped_column(Float, nullable=True)
+    phase_c_energy_imported_kwh: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+    phase_a_energy_returned_kwh: Mapped[float | None] = mapped_column(Float, nullable=True)
+    phase_b_energy_returned_kwh: Mapped[float | None] = mapped_column(Float, nullable=True)
+    phase_c_energy_returned_kwh: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+    #: EMData `total_act_ret`. Energy exported back to the grid.
+    meter_energy_returned_kwh: Mapped[float | None] = mapped_column(Float, nullable=True)
+
     deployment = relationship("Deployment", back_populates="readings")
 
     # Who measured it, reachable without going through the deployment. Callers

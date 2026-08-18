@@ -167,13 +167,12 @@ const fmtInsightTime = (value) => {
   return Number.isNaN(parsed.getTime()) ? value : parsed.toLocaleString('es-MX');
 };
 
-/**
- * `archived` marks the whole list as history because the selected deployment
- * has stopped reporting. A finding that was ACTIVE at the moment measurement
- * ended is still not happening *now* — nothing is — so the card says
- * "histórica" rather than implying a live problem.
- */
-const AIInsightCard = ({ insights, archived = false }) => {
+// Exported for tests/render-insights.tsx, which renders it against the real
+// /api/anomalies payload shape. This card is the only place in the app that
+// renders a per-finding branch keyed on status, and a dangling identifier in
+// that branch took the whole UI down on 2026-08-13 — see that test for why it
+// must be exercised with a non-empty list.
+export const AIInsightCard = ({ insights }) => {
   const normalized = insights.map((ins, i) => {
     if (typeof ins === 'string') {
       return {
@@ -216,7 +215,7 @@ const AIInsightCard = ({ insights, archived = false }) => {
           <div>
             <div style={{fontSize:13.5,fontWeight:600,color:TEXT,letterSpacing:-0.1}}>Centro de Insights</div>
             <div style={{fontSize:11,color:TEXT_MUTED,marginTop:2}}>
-              Sin anomalías registradas para este despliegue.
+              Sin anomalías registradas.
             </div>
           </div>
         </div>
@@ -232,9 +231,7 @@ const AIInsightCard = ({ insights, archived = false }) => {
           <div>
             <div style={{fontSize:13.5,fontWeight:600,color:TEXT,letterSpacing:-0.1}}>Centro de Insights</div>
             <div style={{fontSize:11,color:TEXT_MUTED,marginTop:2}}>
-              {archived
-                ? `${normalized.length} evento(s) histórico(s) · despliegue sin telemetría`
-                : `${activeCount} activa(s) · ${normalized.length - activeCount} resuelta(s)`}
+              {`${activeCount} activa(s) · ${normalized.length - activeCount} resuelta(s)`}
             </div>
           </div>
         </div>
@@ -243,13 +240,11 @@ const AIInsightCard = ({ insights, archived = false }) => {
       <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(260px,1fr))',gap:12}}>
         {normalized.map((ins,i) => {
           const meta = PRIORITY_META[ins.priority] || PRIORITY_META.info;
-          // An archived deployment has no "now", so nothing in it is live.
-          const effectiveStatus = archived && ins.status ? 'resolved' : ins.status;
-          const status = effectiveStatus ? STATUS_META[effectiveStatus] : null;
+          const status = ins.status ? STATUS_META[ins.status] : null;
           // Severity only colours the card while the condition is live;
           // a recovered finding is history and is not tinted red.
           const accent = status
-            ? (effectiveStatus === 'active' ? meta.color : STATUS_META.resolved.color)
+            ? (ins.status === 'active' ? meta.color : STATUS_META.resolved.color)
             : meta.color;
           const showRecovery = ins.status === 'resolved';
           return (
@@ -257,7 +252,6 @@ const AIInsightCard = ({ insights, archived = false }) => {
               <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,marginBottom:10}}>
                 <div style={{display:'flex',alignItems:'center',gap:6,flexWrap:'wrap'}}>
                   {status && <Badge color={status.color}>{status.label}</Badge>}
-                  {archived && <Badge color={TEXT_MUTED}>Histórica</Badge>}
                   {!status && <Badge color={meta.color}>{meta.label}</Badge>}
                 </div>
                 <span style={{fontSize:10,color:TEXT_MUTED,textTransform:'uppercase',letterSpacing:.7}}>{ins.category}</span>
@@ -290,7 +284,7 @@ const AIInsightCard = ({ insights, archived = false }) => {
                 </div>
               )}
 
-              {effectiveStatus === 'active' && ins.currentValue !== null && ins.currentValue !== undefined && (
+              {ins.status === 'active' && ins.currentValue !== null && ins.currentValue !== undefined && (
                 <div style={{
                   display:'grid', gridTemplateColumns:'auto 1fr', gap:'4px 10px',
                   fontSize:11, marginBottom:8, paddingTop:8,
@@ -538,91 +532,6 @@ const Topbar = ({page, activeNodesText}) => {
   );
 };
 
-// ─── DEPLOYMENT SELECTOR ──────────────────────────────────────────────────────
-/**
- * ACTIVE / ARCHIVED here is `telemetry_state` from the backend — whether the
- * deployment is producing data right now — not `status`, which is the
- * administrative lifecycle. A campaign can be marked "completed" and still be
- * measuring, and the header must say what is true of the data on screen.
- */
-const isLive = (deployment) => deployment?.telemetry_state === "active";
-
-/** Newest data first, so the most relevant campaign leads each group. */
-const byNewestReading = (a, b) =>
-  String(b.last_reading_at || "").localeCompare(String(a.last_reading_at || ""));
-
-/**
- * Which deployment the dashboard opens on:
- *   1. one still producing telemetry,
- *   2. otherwise the one with the newest data,
- *   3. otherwise none.
- */
-const pickDefaultDeployment = (deployments) => {
-  if (!deployments?.length) return null;
-  const live = deployments.filter(isLive).sort(byNewestReading);
-  if (live.length) return live[0].id;
-  const withData = deployments.filter((d) => d.last_reading_at).sort(byNewestReading);
-  if (withData.length) return withData[0].id;
-  return deployments[0].id;
-};
-
-const deploymentLabel = (deployment) =>
-  `${deployment.node_id} · ${deployment.building_name}`;
-
-const DeploymentBadge = ({ deployment }) => {
-  const live = isLive(deployment);
-  const color = live ? '#22c55e' : TEXT_MUTED;
-  return (
-    <span style={{
-      display:'inline-flex', alignItems:'center', gap:6,
-      background:`${color}14`, border:`1px solid ${color}33`, color,
-      borderRadius:4, padding:'3px 8px', fontSize:10.5, fontWeight:600,
-      letterSpacing:.6, textTransform:'uppercase', whiteSpace:'nowrap'
-    }}>
-      <span style={{width:6,height:6,borderRadius:'50%',background:color,display:'inline-block'}}/>
-      {live ? 'Active' : 'Archived'}
-    </span>
-  );
-};
-
-const DeploymentSelector = ({ deployments, selectedId, onSelect }) => {
-  const current = deployments.filter(isLive).sort(byNewestReading);
-  const historical = deployments.filter((d) => !isLive(d)).sort(byNewestReading);
-  const selected = deployments.find((d) => d.id === selectedId);
-
-  if (!deployments.length) return null;
-
-  return (
-    <div style={{display:'flex',alignItems:'center',gap:10,flexWrap:'wrap'}}>
-      <select
-        value={selectedId ?? ''}
-        onChange={(e) => onSelect(Number(e.target.value))}
-        aria-label="Despliegue"
-        style={{
-          background:SURFACE_INNER, color:TEXT, border:`1px solid ${BORDER}`,
-          borderRadius:6, padding:'7px 11px', fontSize:12.5, minWidth:280
-        }}
-      >
-        {current.length > 0 && (
-          <optgroup label="Despliegues actuales">
-            {current.map((d) => (
-              <option key={d.id} value={d.id}>{deploymentLabel(d)}</option>
-            ))}
-          </optgroup>
-        )}
-        {historical.length > 0 && (
-          <optgroup label="Despliegues históricos">
-            {historical.map((d) => (
-              <option key={d.id} value={d.id}>{deploymentLabel(d)}</option>
-            ))}
-          </optgroup>
-        )}
-      </select>
-      {selected && <DeploymentBadge deployment={selected}/>}
-    </div>
-  );
-};
-
 // ─── PAGE: EXECUTIVE DASHBOARD ────────────────────────────────────────────────
 const PageDashboard = () => {
   const [dashboardSummary, setDashboardSummary] = useState(null);
@@ -630,40 +539,20 @@ const PageDashboard = () => {
   const [tariffMetrics, setTariffMetrics] = useState(null);
   const [dailyMetrics, setDailyMetrics] = useState(null);
   const [buildingMetrics, setBuildingMetrics] = useState(null);
-  const [deployments, setDeployments] = useState([]);
-  const [selectedDeploymentId, setSelectedDeploymentId] = useState(null);
-  const [scopedAnomalies, setScopedAnomalies] = useState(null);
+  const [anomalies, setAnomalies] = useState(null);
 
-  // The deployment list is loaded once; the selection it produces is what every
-  // widget below keys off.
+  // The executive view is the current operational state of the platform: every
+  // figure below is fleet-wide and unscoped.
   useEffect(() => {
-    getDeployments()
-      .then((data) => {
-        const list = Array.isArray(data) ? data : [];
-        setDeployments(list);
-        setSelectedDeploymentId((current) => current ?? pickDefaultDeployment(list));
-      })
-      .catch((error) => console.error("Deployments API error:", error));
-  }, []);
-
-  const selectedDeployment = deployments.find((d) => d.id === selectedDeploymentId) || null;
-
-  useEffect(() => {
-    // Nothing is fetched until a deployment is chosen: the dashboard shows one
-    // deployment at a time, so an unscoped first paint would briefly display
-    // fleet-wide figures under a deployment heading.
-    if (selectedDeploymentId === null) return;
-    const scope = selectedDeploymentId;
-
-    getAnomalies(scope, true)
-      .then(setScopedAnomalies)
+    getAnomalies()
+      .then(setAnomalies)
       .catch((error) => console.error("Anomalies API error:", error));
 
-    getDashboardSummary(scope)
+    getDashboardSummary()
       .then(setDashboardSummary)
       .catch((error) => console.error("Dashboard summary API error:", error));
 
-    getMetricsHourly(scope)
+    getMetricsHourly()
       .then((data) => {
         const normalized = data.map((item) => ({
           h: item.hour,
@@ -675,7 +564,7 @@ const PageDashboard = () => {
       })
       .catch((error) => console.error("Hourly metrics API error:", error));
 
-    getMetricsTariffs(scope)
+    getMetricsTariffs()
       .then((data) => {
         const normalized = data.map((item) => ({
           name: item.period === "intermediate" ? "Intermedia" : item.period === "peak" ? "Punta" : item.period === "base" ? "Base" : item.period,
@@ -687,7 +576,7 @@ const PageDashboard = () => {
       })
       .catch((error) => console.error("Tariff metrics API error:", error));
 
-    getMetricsDaily(scope)
+    getMetricsDaily()
       .then((data) => {
         const normalized = data.map((item) => ({
           day: item.day,
@@ -698,7 +587,7 @@ const PageDashboard = () => {
       })
       .catch((error) => console.error("Daily metrics API error:", error));
 
-    getMetricsBuildings(scope)
+    getMetricsBuildings()
       .then((data) => {
         const total = data.reduce((sum, item) => sum + Number(item.cost_mxn || 0), 0) || 1;
         const normalized = data.map((item) => ({
@@ -710,9 +599,7 @@ const PageDashboard = () => {
         setBuildingMetrics(normalized);
       })
       .catch((error) => console.error("Building metrics API error:", error));
-    // Re-runs on every change of selection, which is what reloads the KPIs,
-    // all four charts and the insight list together.
-  }, [selectedDeploymentId]);
+  }, []);
 
   const mxn = (value) => `$${Number(value || 0).toLocaleString("es-MX")} MXN`;
   const hourlyChartData = hourlyCost || [];
@@ -725,52 +612,8 @@ const PageDashboard = () => {
   const dailyChartData = dailyMetrics || [];
   const buildingChartData = buildingMetrics || [];
 
-  if (deployments.length === 0) {
-    return (
-      <Card>
-        <SectionTitle title="Sin despliegues registrados"
-                      subtitle="El dashboard muestra un despliegue a la vez; registra uno en Despliegues para comenzar."/>
-      </Card>
-    );
-  }
-
   return (
     <div>
-      <div style={{
-        display:'flex', alignItems:'center', justifyContent:'space-between',
-        gap:14, flexWrap:'wrap', marginBottom:18
-      }}>
-        <div>
-          <h2 style={{fontSize:14,fontWeight:600,color:TEXT,letterSpacing:-0.1}}>
-            {selectedDeployment ? selectedDeployment.building_name : 'Sin despliegue seleccionado'}
-          </h2>
-          <p style={{fontSize:11.5,color:TEXT_MUTED,marginTop:3}}>
-            {selectedDeployment
-              ? `Despliegue #${selectedDeployment.id} · ${selectedDeployment.node_id} · ${selectedDeployment.electrical_panel} · ${selectedDeployment.campus} · ${selectedDeployment.start_date} → ${selectedDeployment.end_date || 'sin cierre'}`
-              : 'Selecciona un despliegue'}
-          </p>
-        </div>
-        <DeploymentSelector
-          deployments={deployments}
-          selectedId={selectedDeploymentId}
-          onSelect={setSelectedDeploymentId}
-        />
-      </div>
-
-      {selectedDeployment && !isLive(selectedDeployment) && (
-        <div style={{
-          display:'flex', alignItems:'center', gap:8, marginBottom:18,
-          background:SURFACE_INNER, border:`1px solid ${BORDER}`, borderRadius:8,
-          padding:'9px 12px', fontSize:12, color:TEXT_SECONDARY
-        }}>
-          <Icon name="Clock" size={13} stroke={1.6} color={TEXT_MUTED}/>
-          Despliegue archivado · sin telemetría desde{' '}
-          {selectedDeployment.last_reading_at
-            ? new Date(selectedDeployment.last_reading_at).toLocaleString('es-MX')
-            : 'sin lecturas'}. Las cifras y los insights son históricos.
-        </div>
-      )}
-
       <div style={{display:'flex',flexWrap:'wrap',gap:14,marginBottom:22}}>
         <StatCard label="Costo Estimado Hoy" value={dashboardSummary ? mxn(dashboardSummary.estimated_cost_today_mxn) : "Cargando..."} sub={dashboardSummary?.most_expensive_building?.name ? `Mayor consumo: ${dashboardSummary.most_expensive_building.name}` : `${dashboardSummary?.online_nodes || 0}/${dashboardSummary?.total_nodes || 0} nodos activos`} color="#2563eb" trend={dashboardSummary?.has_previous_day_data ? Number(dashboardSummary.daily_comparison_pct) : null}
             trendLabel={dashboardSummary?.daily_comparison_label || "Histórico insuficiente"} icon="Wallet"/>
@@ -870,11 +713,8 @@ const PageDashboard = () => {
           </div>
         </Card>
       </div>
-      <SmartPlugDashboardWidget deploymentId={selectedDeploymentId}/>
-      <AIInsightCard
-        insights={scopedAnomalies?.anomalies || []}
-        archived={selectedDeployment ? !isLive(selectedDeployment) : false}
-      />
+      <SmartPlugDashboardWidget/>
+      <AIInsightCard insights={anomalies?.anomalies || []}/>
     </div>
   );
 };
@@ -1467,105 +1307,6 @@ const PageDeployments = () => {
           </button>
         </Card>
       </div>
-    </div>
-  );
-};
-
-
-// ─── PAGE: LIVE MONITORING ────────────────────────────────────────────────────
-const PageLive = () => {
-  const [metrics, setMetrics] = useState([]);
-
-  useEffect(() => {
-    const load = () => {
-      getLiveMetrics()
-        .then(setMetrics)
-        .catch((error) => console.error("Live metrics API error:", error));
-    };
-
-    load();
-    const timer = setInterval(load, 3000);
-    return () => clearInterval(timer);
-  }, []);
-
-  return (
-    <div>
-      <div style={{display:'flex',gap:12,marginBottom:18,alignItems:'center'}}>
-        <div style={{display:'flex',alignItems:'center',gap:7,background:'#22c55e14',border:'1px solid #22c55e33',borderRadius:4,padding:'4px 10px'}}>
-          <div style={{width:7,height:7,borderRadius:'50%',background:'#22c55e',animation:'pulse 2.4s ease-in-out infinite'}}/>
-          <span style={{fontSize:11,color:'#22c55e',fontWeight:500,letterSpacing:.3}}>EN VIVO</span>
-        </div>
-        <span style={{fontSize:11.5,color:TEXT_MUTED}}>Actualización cada 3s · Datos desde /api/metrics/live</span>
-      </div>
-
-      <style>{`@keyframes pulse{0%,100%{opacity:1}50%{opacity:.45}}`}</style>
-
-      {metrics.length === 0 ? (
-        <Card>
-          <div style={{fontSize:13,color:'#9aa4af'}}>No hay nodos con métricas reales todavía.</div>
-        </Card>
-      ) : metrics.map((n) => (
-        <Card key={n.node_id} style={{marginBottom:18}} glow={n.status === "online"}>
-          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
-            <div style={{display:'flex',alignItems:'center',gap:12}}>
-              <div style={{
-                background:SURFACE_INNER,
-                border:`1px solid ${BORDER}`,
-                borderRadius:6,
-                padding:'7px 10px',
-                fontSize:11,
-                color:TEXT_SECONDARY,
-                fontWeight:500,
-                letterSpacing:.5
-              }}>
-                NODE
-              </div>
-              <div>
-                <div style={{fontSize:15,fontWeight:500,color:'#f5f7fa'}}>{n.node_id}</div>
-                <div style={{fontSize:11,color:TEXT_MUTED}}>
-                  {n.last_reading_building || "Lectura sin edificio"} · Última lectura {n.latest_reading ? new Date(n.latest_reading).toLocaleString("es-MX") : "sin datos"}
-                </div>
-              </div>
-            </div>
-            <Badge color={n.status === "online" ? "#22c55e" : "#6b7280"}>
-              {n.status === "online" ? "Real API" : "Offline"}
-            </Badge>
-          </div>
-
-          <div style={{display:'flex',flexWrap:'wrap',gap:12}}>
-            {[
-              {l:'Tensión (V)',v:Number(n.voltage || 0).toFixed(1),c:'#2563eb',unit:'V'},
-              {l:'Corriente (A)',v:Number(n.current || 0).toFixed(2),c:'#f59e0b',unit:'A'},
-              {l:'Potencia (kW)',v:Number(n.power_kw || 0).toFixed(3),c:'#ef4444',unit:'kW'},
-              {l:'Factor de Potencia',v:Number(n.power_factor || 0).toFixed(3),c:'#22c55e',unit:''},
-              {l:'Frecuencia (Hz)',v:Number(n.frequency_hz || 0).toFixed(2),c:'#3b82f6',unit:'Hz'},
-              {l:'Energía Hoy',v:Number(n.energy_today_kwh || 0).toFixed(3),c:ACCENT_QUIET,unit:'kWh'}
-            ].map((m,i) => (
-              <div key={i} style={{
-                background:SURFACE_INNER, borderRadius:8, padding:'13px 15px',
-                flex:1, minWidth:120, border:`1px solid ${BORDER}`
-              }}>
-                <div style={{fontSize:10,color:TEXT_MUTED,textTransform:'uppercase',letterSpacing:.7,marginBottom:7}}>{m.l}</div>
-                <div style={{fontSize:22,fontWeight:600,color:TEXT,letterSpacing:-0.4,fontVariantNumeric:'tabular-nums'}}>{m.v}</div>
-                <div style={{fontSize:11,color:TEXT_MUTED,marginTop:3}}>{m.unit}</div>
-              </div>
-            ))}
-          </div>
-
-          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:10,marginTop:12}}>
-            {[
-              {l:'RPi Status',v:n.rpi_status === "ok" ? "OK" : "Offline",c:n.rpi_status === "ok" ? '#22c55e' : '#6b7280'},
-              {l:'Shelly Status',v:n.shelly_status === "ok" ? "OK" : "Offline",c:n.shelly_status === "ok" ? '#22c55e' : '#6b7280'},
-              {l:'Buffer',v:`${Number(n.buffer_pending || 0)} pend.`,c:Number(n.buffer_pending || 0)>0?'#f59e0b':'#22c55e'}
-            ].map((item,i) => (
-              <div key={i} style={{background:'#0e1114',borderRadius:8,padding:'8px 12px',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-                <span style={{fontSize:11,color:TEXT_MUTED}}>{item.l}</span>
-                <span style={{fontSize:12,fontWeight:500,color:item.c}}>{item.v}</span>
-              </div>
-            ))}
-          </div>
-        </Card>
-      ))}
     </div>
   );
 };
@@ -2326,227 +2067,11 @@ const PageInfra = () => {
 };
 
 
-// ─── PAGE: SETTINGS ──────────────────────────────────────────────────────────
-const PageSettings = ({ role, setRole }) => {
-  const [settings, setSettings] = useState(null);
-  const [localThresholds, setLocalThresholds] = useState(null);
-
-  useEffect(() => {
-    const load = () => {
-      getSystemSettings()
-        .then((data) => {
-          setSettings(data);
-          setLocalThresholds((current) => current || data.thresholds || {});
-        })
-        .catch((error) => console.error("Settings API error:", error));
-    };
-
-    load();
-    const timer = setInterval(load, 15000);
-    return () => clearInterval(timer);
-  }, []);
-
-  const tariffs = settings?.tariffs || {};
-  const counts = settings?.counts || {};
-  const system = settings?.system || {};
-  const thresholds = localThresholds || settings?.thresholds || {};
-  const nodes = settings?.nodes || [];
-
-  const updateThreshold = (key, value) => {
-    setLocalThresholds((current) => ({
-      ...(current || {}),
-      [key]: Number(value)
-    }));
-  };
-
-  const statusBadge = (value) => (
-    <span style={{
-      color:value === "online" ? "#22c55e" : "#6b7280",
-      background:value === "online" ? "#22c55e18" : "#6b728018",
-      border:`1px solid ${value === "online" ? "#22c55e44" : "#6b728044"}`,
-      borderRadius:999,
-      padding:'3px 10px',
-      fontSize:11,
-      fontWeight:600
-    }}>
-      {value}
-    </span>
-  );
-
-  return (
-    <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:18}}>
-      <Card>
-        <SectionTitle title="Perfil de Usuario" subtitle="Sesión local para simulación de roles"/>
-        {[
-          ["Nombre", "Administrador UdeC"],
-          ["Email", "admin@ucol.mx"],
-          ["Rol actual", role],
-          ["Campus", "Universidad de Colima"],
-        ].map(([label, value]) => (
-          <div key={label} style={{display:'flex',justifyContent:'space-between',marginBottom:14,fontSize:13}}>
-            <span style={{color:'#9aa4af'}}>{label}</span>
-            <b style={{color:'#f5f7fa'}}>{value}</b>
-          </div>
-        ))}
-      </Card>
-
-      <Card>
-        <SectionTitle title="Tarifa Activa" subtitle="Valores reales usados por el motor de costos"/>
-        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:18}}>
-          <div>
-            <div style={{fontSize:26,fontWeight:600,color:ACCENT_QUIET}}>GDMTH</div>
-            <div style={{fontSize:12,color:'#9aa4af'}}>Gran Demanda en Media Tensión H · {tariffs.month || "JUN-26"}</div>
-          </div>
-          <Badge color={cfeStatus?.status === "ready" ? "#22c55e" : "#f59e0b"}>{cfeStatus?.label || tariffs.source || "Manual fallback"}</Badge>
-        </div>
-
-        {[
-          ["Cargo Base", tariffs.base],
-          ["Cargo Intermedia", tariffs.intermediate],
-          ["Cargo Punta", tariffs.peak],
-        ].map(([label, value]) => (
-          <div key={label} style={{display:'flex',justifyContent:'space-between',marginBottom:13,fontSize:13}}>
-            <span style={{color:'#9aa4af'}}>{label}</span>
-            <b>${Number(value || 0).toFixed(4)}/kWh</b>
-          </div>
-        ))}
-
-        <button disabled style={{
-          width:'100%',
-          marginTop:14,
-          opacity:.55,
-          cursor:'not-allowed',
-          background:'#1c2126',
-          border:'1px solid #252a31',
-          color:'#3b82f6',
-          borderRadius:8,
-          padding:'9px 12px',
-          fontWeight:500
-        }}>
-          Actualizar desde CFE API / scraper pendiente
-        </button>
-      </Card>
-
-      <Card>
-        <SectionTitle title="Selector de Rol" subtitle="Cambia la vista operativa del dashboard"/>
-        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
-          {["Administrador","Ejecutivo","Técnico","Investigador"].map((item) => (
-            <button key={item} onClick={() => setRole(item)} style={{
-              background:role === item ? '#14181c' : '#121417',
-              border:`1px solid ${role === item ? '#3b82f6' : '#252a31'}`,
-              color:role === item ? '#c3cbd4' : '#9aa4af',
-              borderRadius:10,
-              padding:'12px',
-              fontWeight:600
-            }}>
-              {item}
-            </button>
-          ))}
-        </div>
-      </Card>
-
-      <Card>
-        <SectionTitle title="Estado del Sistema" subtitle="Salud real del backend y sincronización"/>
-        {[
-          ["Backend API", system.backend_api || "sin datos"],
-          ["Base de datos", system.database || "sin datos"],
-          ["Zona horaria", system.timezone || "sin datos"],
-          ["Última lectura", system.last_reading ? new Date(system.last_reading).toLocaleString("es-MX") : "Sin lecturas"],
-        ].map(([label, value]) => (
-          <div key={label} style={{display:'flex',justifyContent:'space-between',marginBottom:14,fontSize:13}}>
-            <span style={{color:'#9aa4af'}}>{label}</span>
-            <b style={{color:value === "online" ? "#22c55e" : "#f5f7fa"}}>{value}</b>
-          </div>
-        ))}
-      </Card>
-
-      <Card>
-        <SectionTitle title="Umbrales de Alertas" subtitle="Parámetros editables localmente para anomalías"/>
-        {[
-          ["min_power_factor", "Factor de potencia mínimo", "", 0.01],
-          ["max_current_a", "Corriente máxima", "A", 1],
-          ["night_power_kw", "Consumo nocturno", "kW", 0.5],
-          ["node_offline_seconds", "Nodo offline", "s", 30],
-        ].map(([key, label, unit, step]) => (
-          <div key={key} style={{display:'grid',gridTemplateColumns:'1fr 130px 40px',gap:10,alignItems:'center',marginBottom:12}}>
-            <span style={{color:'#9aa4af',fontSize:13}}>{label}</span>
-            <input
-              type="number"
-              step={step}
-              value={thresholds[key] ?? 0}
-              onChange={(e) => updateThreshold(key, e.target.value)}
-              style={{
-                background:'#121417',
-                border:'1px solid #252a31',
-                color:'#f5f7fa',
-                borderRadius:8,
-                padding:'8px 10px',
-                textAlign:'right'
-              }}
-            />
-            <span style={{color:ACCENT_QUIET,fontSize:12,fontWeight:600}}>{unit}</span>
-          </div>
-        ))}
-
-        <div style={{fontSize:11,color:'#9aa4af',marginTop:10}}>
-          Estos cambios son locales por ahora. Persistencia en backend pendiente.
-        </div>
-      </Card>
-
-      <Card>
-        <SectionTitle title="Inventario del Sistema" subtitle="Conteos reales registrados en base de datos"/>
-        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
-          {[
-            ["Nodos totales", counts.nodes_total],
-            ["Nodos online", counts.nodes_online],
-            ["Campus", counts.campuses],
-            ["Edificios", counts.buildings],
-            ["Despliegues", counts.deployments],
-            ["Lecturas", counts.readings],
-          ].map(([label, value]) => (
-            <div key={label} style={{background:'#121417',border:'1px solid #252a31',borderRadius:10,padding:12}}>
-              <div style={{fontSize:11,color:'#9aa4af',marginBottom:6}}>{label}</div>
-              <div style={{fontSize:22,fontWeight:600,color:'#f5f7fa'}}>{Number(value || 0).toLocaleString("es-MX")}</div>
-            </div>
-          ))}
-        </div>
-      </Card>
-
-      <Card style={{gridColumn:'1 / -1'}}>
-        <SectionTitle title="Nodos Registrados" subtitle="Estado real reportado por heartbeat"/>
-        <div style={{overflowX:'auto'}}>
-          <table style={{width:'100%',borderCollapse:'collapse'}}>
-            <thead>
-              <tr style={{fontSize:11,color:'#9aa4af',textTransform:'uppercase',letterSpacing:1}}>
-                <th align="left" style={{padding:'0 0 12px'}}>Nodo</th>
-                <th align="left" style={{padding:'0 0 12px'}}>Estado</th>
-                <th align="left" style={{padding:'0 0 12px'}}>Última sincronía</th>
-                <th align="left" style={{padding:'0 0 12px'}}>Buffer</th>
-                <th align="left" style={{padding:'0 0 12px'}}>Muestras</th>
-              </tr>
-            </thead>
-            <tbody>
-              {nodes.map((node) => (
-                <tr key={node.id} style={{borderTop:'1px solid #252a31'}}>
-                  <td style={{padding:'13px 0'}}>
-                    <b>{node.id}</b>
-                    <div style={{color:'#9aa4af',fontSize:12}}>{node.name}</div>
-                  </td>
-                  <td>{statusBadge(node.status)}</td>
-                  <td style={{color:'#c3cbd4'}}>{node.last_sync ? new Date(node.last_sync).toLocaleString("es-MX") : "Sin sincronía"}</td>
-                  <td style={{color:Number(node.buffer_pending || 0) > 0 ? "#f59e0b" : "#22c55e",fontWeight:600}}>
-                    {Number(node.buffer_pending || 0)} pendientes
-                  </td>
-                  <td>{Number(node.samples || 0).toLocaleString("es-MX")}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </Card>
-    </div>
-  );
-};
+// The old in-file PageSettings was removed on 2026-08-14. It had been dead
+// since the router switched to PageSettingsNew (./pages/PageSettings), and it
+// carried a dangling `cfeStatus` reference — the same class of latent
+// ReferenceError that blacked out production, waiting for anyone who wired it
+// back in. `no-undef` (see eslint.config.js) is what surfaced it.
 
 
 
@@ -2662,7 +2187,7 @@ const App = () => {
       case 'buildings': return <PageBuildings/>;
       case 'buildingDetail': return <PageBuildings/>;
       case 'deployments': return <PageDeployments/>;
-      case 'live': return <PageLive/>;
+      case 'live': return <PageLiveMonitor/>;
       case 'cost': return <PageCost cfeStatus={cfeStatus}/>;
       case 'ai': return <PageAI apiInsights={apiInsights} apiAnomalies={apiAnomalies}/>;
       case 'mining': return <PageMining/>;
@@ -2690,6 +2215,7 @@ const App = () => {
 export default App;
 
 import PageDataExplorer from "./pages/PageDataExplorer";
+import PageLiveMonitor from "./pages/PageLiveMonitor";
 import LoginPage from "./pages/LoginPage";
 import PageSettingsNew from "./pages/PageSettings";
 import PageSmartPlugs from "./pages/PageSmartPlugs";

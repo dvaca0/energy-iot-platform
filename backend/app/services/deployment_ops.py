@@ -154,6 +154,53 @@ def _transition(db: Session, deployment: Deployment, to_status: str, *, action: 
     deployment.status = to_status
 
 
+# ------------------------------------------- node measurement context coupling
+#
+# `nodes.measurement_context` answers "what kind of measurement is this node
+# producing?" and the attribution resolver consults it *before* any deployment
+# window: a context whose `may_attribute` is 0 stops resolution dead, so the
+# deployment is never even considered.
+#
+# Nothing used to write this column. Only readers existed, and there was no API
+# to set it, so it was whatever the last migration or manual edit left. That is
+# how deployment 7 was activated on N001 on 2026-08-13 and then attributed
+# nothing: the node was still declared `infrastructure_validation`, a context
+# migration 014 defines as "powered and collecting **with no operational
+# deployment**". Activating a campaign made that declaration false, and no code
+# path existed to say so. The readings kept landing unattributed, the deployment
+# owned nothing, and its building never appeared in Data Explorer.
+#
+# The declaration stays operator-driven — it is changed only by an explicit
+# lifecycle action (activate / complete / cancel), never inferred from the
+# measured values, so ADR-0003's separation of classification from attribution
+# is intact. The lifecycle simply keeps the declaration true.
+
+#: What a node declares while a campaign is measuring on it.
+MEASURING_CONTEXT = "production"
+#: What it declares while powered with no operational deployment (migration 014).
+STANDBY_CONTEXT = "infrastructure_validation"
+
+
+def _begin_measuring(node: Node) -> None:
+    """A campaign just went active on this node: it is now measuring for real."""
+    node.measurement_context = MEASURING_CONTEXT
+
+
+def _stop_measuring(db: Session, node: Node, *, exclude_id: int | None = None) -> None:
+    """A campaign ended. Return the node to standby unless another is running.
+
+    Only rewinds a node this module put into `production`. A deliberately
+    declared research context (`bench`, `laboratory`, `calibration`,
+    `simulation`) is left exactly as the operator set it — ending a campaign is
+    not a reason to overwrite a declaration the lifecycle never made.
+    """
+    if node.measurement_context != MEASURING_CONTEXT:
+        return
+    if current_deployment(db, node.id, exclude_id=exclude_id) is not None:
+        return
+    node.measurement_context = STANDBY_CONTEXT
+
+
 # --------------------------------------------------------------- operations
 def begin_installation(db: Session, deployment: Deployment) -> Deployment:
     """planned -> installing. Claims the node exclusively; writes no timestamp."""
@@ -180,6 +227,7 @@ def activate(db: Session, deployment: Deployment, *, at: datetime | None = None)
 
     _transition(db, deployment, "active", action="activate")
     deployment.activated_at = moment
+    _begin_measuring(node)
     return deployment
 
 
@@ -197,6 +245,7 @@ def complete(db: Session, deployment: Deployment, *, at: datetime | None = None)
         )
     _transition(db, deployment, "completed", action="complete")
     deployment.closed_at = at or datetime.utcnow()
+    _stop_measuring(db, deployment.node, exclude_id=deployment.id)
     return deployment
 
 
@@ -212,6 +261,7 @@ def cancel(db: Session, deployment: Deployment, *, at: datetime | None = None) -
     _transition(db, deployment, "cancelled", action="cancel")
     if deployment.activated_at is not None:
         deployment.closed_at = at or datetime.utcnow()
+    _stop_measuring(db, deployment.node, exclude_id=deployment.id)
     return deployment
 
 
@@ -265,7 +315,9 @@ def supersede_and_activate(
 # question it means.
 
 
-def current_deployment(db: Session, node_id: int) -> Deployment | None:
+def current_deployment(
+    db: Session, node_id: int, *, exclude_id: int | None = None
+) -> Deployment | None:
     """Where this node is deployed RIGHT NOW, or None.
 
     "Right now" means a deployment that has actually been activated and has not
@@ -277,20 +329,23 @@ def current_deployment(db: Session, node_id: int) -> Deployment | None:
     Derived from the lifecycle table: operational statuses that have an
     activation instant. It cannot return two, because the partial unique index
     from M12 permits only one live deployment per node.
+
+    `exclude_id` omits one deployment from the answer. It exists for the
+    lifecycle operations, which ask "is anything *else* still running on this
+    node?" mid-transaction; passing the id explicitly means the answer does not
+    depend on whether the in-flight status change has been flushed yet.
     """
     operational = [s.code for s in lifecycle.all_statuses(db) if s.is_operational]
     if not operational:
         return None
-    return (
-        db.query(Deployment)
-        .filter(
-            Deployment.node_id == node_id,
-            Deployment.status.in_(operational),
-            Deployment.activated_at.isnot(None),
-        )
-        .order_by(Deployment.activated_at.desc())
-        .first()
+    query = db.query(Deployment).filter(
+        Deployment.node_id == node_id,
+        Deployment.status.in_(operational),
+        Deployment.activated_at.isnot(None),
     )
+    if exclude_id is not None:
+        query = query.filter(Deployment.id != exclude_id)
+    return query.order_by(Deployment.activated_at.desc()).first()
 
 
 def last_completed_deployment(db: Session, node_id: int) -> Deployment | None:

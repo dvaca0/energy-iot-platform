@@ -165,6 +165,26 @@ _SQL_ID_KWH = _RESOLVED_CTE + """
 SELECT id, kwh FROM resolved WHERE kwh != 0
 """
 
+# Interval energy summed into fixed-width buckets. The bucket index is the UTC
+# epoch second divided by the width, which is the same arithmetic the live view
+# uses for its electrical aggregates — so the two agree bucket for bucket
+# without either having to know how the other rounds.
+#
+# This exists so a caller wanting sub-hourly buckets does not reimplement the
+# era resolution above. That resolution is the whole point of this module: the
+# `energy_kwh` column has meant two different things, and every place that
+# decides which is a place that can get it wrong.
+_SQL_BUCKETED = _RESOLVED_CTE + """
+SELECT
+    node_id,
+    CAST(strftime('%s', timestamp) / :bucket_seconds AS INTEGER) AS bucket,
+    SUM(kwh) AS kwh,
+    COUNT(*)  AS samples
+FROM resolved
+GROUP BY node_id, bucket
+ORDER BY node_id, bucket
+"""
+
 
 def _assert_whole_hour_offset(moment: datetime) -> None:
     """Bucketing by UTC hour is only sound if the local offset is whole hours.
@@ -306,6 +326,47 @@ def energy_by_reading_id(
 
     sql, binds = _bind(_SQL_ID_KWH, resolved, start, end)
     out = {row[0]: float(row[1]) for row in db.execute(text(sql), binds)}
+
+    db.info.setdefault("_energy_memo", {})[memo_key] = out
+    return out
+
+
+def bucketed_energy(
+    db: Session,
+    bucket_seconds: int,
+    start: datetime | None = None,
+    end: datetime | None = None,
+    contexts: str | list[str] | None = None,
+    deployment_id: int | None = None,
+) -> dict[tuple[int, int], float]:
+    """``{(node id, bucket index): kWh}`` for arbitrary bucket widths.
+
+    ``hourly_energy`` buckets by local hour because that is what tariffs and
+    daily reports need. A diagnostic chart needs 60, 300, 900 or 3600 second
+    buckets instead, and computing those from the per-reading values in Python
+    means materialising every reading in the window — 36,000 rows for a week,
+    which measured over a second before this existed.
+
+    The bucket index is ``floor(utc_epoch / bucket_seconds)``, deliberately the
+    same expression the live view uses for its electrical aggregates, so an
+    energy bucket and a current bucket over the same window describe the same
+    instants.
+    """
+    resolved = scope.resolve_contexts(db, contexts)
+    if not resolved or bucket_seconds <= 0:
+        return {}
+
+    memo_key = ("bucketed_energy", bucket_seconds, start, end, resolved, deployment_id)
+    cached = db.info.get("_energy_memo", {}).get(memo_key)
+    if cached is not None:
+        return cached
+
+    # ``deployment_id`` narrows the window function's input to the readings one
+    # deployment owns, so the first sample of that deployment contributes no
+    # delta — the same rule that already applies at the start of any window.
+    sql, binds = _bind(_SQL_BUCKETED, resolved, start, end, deployment_id)
+    binds["bucket_seconds"] = int(bucket_seconds)
+    out = {(row[0], row[1]): float(row[2] or 0.0) for row in db.execute(text(sql), binds)}
 
     db.info.setdefault("_energy_memo", {})[memo_key] = out
     return out
