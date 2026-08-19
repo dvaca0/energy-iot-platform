@@ -1,0 +1,84 @@
+/*
+ * Overrides for Leaflet's own chrome, which ships a white popup/tooltip skin
+ * that is unreadable on this dashboard.
+ *
+ * Scoped to classes this module sets. The attribution control is restyled, not
+ * hidden: the OpenStreetMap and CARTO notices are a licence obligation and must
+ * stay legible.
+ */
+
+.leaflet-container {
+  background: #0b0d10;
+  font-family: inherit;
+}
+
+.leaflet-container .leaflet-control-attribution {
+  background: rgba(14, 17, 20, 0.86);
+  color: #8b95a1;
+  font-size: 10px;
+  border-top-left-radius: 4px;
+}
+
+.leaflet-container .leaflet-control-attribution a {
+  color: #3b82f6;
+}
+
+.leaflet-container .leaflet-control-zoom a {
+  background: #171a1d;
+  color: #f5f7fa;
+  border-color: #252a31;
+}
+
+.leaflet-container .leaflet-control-zoom a:hover {
+  background: #1e2227;
+}
+
+.campus-map-tooltip.leaflet-tooltip {
+  background: #171a1d;
+  border: 1px solid #2f353d;
+  border-radius: 7px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.55);
+  color: #f5f7fa;
+  padding: 8px 11px;
+}
+
+.campus-map-tooltip.leaflet-tooltip::before {
+  display: none;
+}
+
+/*
+ * Building labels. `pointer-events: none` matters — a label sitting over a
+ * polygon must not swallow the click that selects it.
+ */
+.campus-map-label {
+  pointer-events: none;
+}
+
+.campus-map-label span {
+  display: inline-block;
+  transform: translate(-50%, -50%);
+  white-space: nowrap;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: #e7edf3;
+  text-shadow:
+    0 0 3px #0b0d10,
+    0 0 6px #0b0d10;
+  letter-spacing: 0.1px;
+}
+
+.campus-map-label span[data-selected="true"] {
+  color: #7cb0f7;
+}
+
+/*
+ * The page lays the map and its detail panel out as a two-column grid with an
+ * inline style, so the stacking rule needs `!important` to win. Below this the
+ * panel goes under the map — the map stays first, which is the order that reads
+ * on a phone.
+ */
+@media (max-width: 1100px) {
+  .campus-map-shell {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+}

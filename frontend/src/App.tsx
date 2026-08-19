@@ -3,7 +3,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import ucolLogo from "./assets/ucol-logo.png";
 import { getDashboardSummary, getHourlyCost, getBuildings, getNodes, getAiInsights, createDeployment, getDelegations, getAllOrgBuildings, getCampusesByDelegation, getUnitsByCampus, getBuildingsByUnit, getPanelsByBuilding, getLatestReadings, getLiveMetrics, getMetricsHourly, getMetricsTariffs, getMetricsDaily, getMetricsBuildings, getAnomalies,
-  getCfeStatus, getCampusMetrics, getDeployments, finishDeployment, getDeploymentReports, generateDeploymentReport, getCostSummary, getSystemSettings, getInfrastructureStatus, getMiningAnalytics, getAiCenter, askAiAssistant } from "./services/api";
+  getCfeStatus, getCampusMetrics, getCampusMapCampuses, getDeployments, finishDeployment, getDeploymentReports, generateDeploymentReport, getCostSummary, getSystemSettings, getInfrastructureStatus, getMiningAnalytics, getAiCenter, askAiAssistant } from "./services/api";
 
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
@@ -718,109 +718,6 @@ const PageDashboard = () => {
     </div>
   );
 };
-
-// ─── PAGE: CAMPUS MAP ─────────────────────────────────────────────────────────
-const PageCampus = () => {
-  const [campusData, setCampusData] = useState({ campuses: [], buildings: [] });
-
-  useEffect(() => {
-    const load = () => {
-      getCampusMetrics()
-        .then(setCampusData)
-        .catch((error) => console.error("Campus metrics API error:", error));
-    };
-
-    load();
-    const timer = setInterval(load, 15000);
-    return () => clearInterval(timer);
-  }, []);
-
-  const campuses = campusData.campuses || [];
-  const buildings = campusData.buildings || [];
-
-  return (
-    <div>
-      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(280px,1fr))',gap:18,marginBottom:22}}>
-        {campuses.map(campus => (
-          <Card key={campus.id} glow={campus.status === "active"}>
-            <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:18}}>
-              <div>
-                <div style={{fontSize:15,fontWeight:600,color:'#f5f7fa'}}>{campus.name}</div>
-                <div style={{fontSize:11,color:'#9aa4af'}}>{campus.delegation}</div>
-                <div style={{fontSize:11,color:'#9aa4af',marginTop:3}}>
-                  {campus.monitored_buildings}/{campus.total_buildings} edificios monitoreados
-                </div>
-              </div>
-              <Badge color={campus.status === "active" ? "#22c55e" : "#6b7280"}>
-                {campus.status === "active" ? "Activo" : "Sin datos"}
-              </Badge>
-            </div>
-
-            <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:12}}>
-              <div>
-                <div style={{fontSize:10,color:TEXT_MUTED,textTransform:'uppercase',letterSpacing:.8}}>Potencia</div>
-                <div style={{fontSize:19,fontWeight:600,color:'#f5f7fa'}}>{Number(campus.power_kw || 0).toFixed(2)} kW</div>
-              </div>
-              <div>
-                <div style={{fontSize:10,color:TEXT_MUTED,textTransform:'uppercase',letterSpacing:.8}}>Energía hoy</div>
-                <div style={{fontSize:19,fontWeight:600,color:'#f5f7fa'}}>{Number(campus.energy_today_kwh || 0).toFixed(3)} kWh</div>
-              </div>
-              <div>
-                <div style={{fontSize:10,color:TEXT_MUTED,textTransform:'uppercase',letterSpacing:.8}}>Costo hoy</div>
-                <div style={{fontSize:19,fontWeight:600,color:ACCENT_QUIET}}>${Number(campus.cost_today_mxn || 0).toLocaleString("es-MX")} MXN</div>
-              </div>
-            </div>
-          </Card>
-        ))}
-      </div>
-
-      <Card>
-        <SectionTitle title="Red de Edificios Inteligentes" subtitle="Datos reales de edificios registrados y lecturas recibidas"/>
-        <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(190px,1fr))',gap:14}}>
-          {buildings.map(building => {
-            const isActive = building.status === "monitored";
-            const color = building.anomaly ? "#f59e0b" : isActive ? "#22c55e" : "#6b7280";
-
-            return (
-              <div key={building.id} style={{
-                background:SURFACE_INNER,
-                border:`1px solid ${BORDER}`,
-                borderLeft:`2px solid ${color}`,
-                borderRadius:8,
-                padding:16,
-                minHeight:156,
-              }}>
-                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:14}}>
-                  <Icon name="Building" size={20} color={ACCENT_QUIET}/>
-                  <StatusDot status={building.anomaly ? "warning" : isActive ? "online" : "offline"}/>
-                </div>
-
-                <div style={{fontSize:13,fontWeight:600,color:'#f5f7fa',marginBottom:3}}>{building.name}</div>
-                <div style={{fontSize:11,color:'#9aa4af',marginBottom:10}}>{building.campus}</div>
-
-                {isActive ? (
-                  <>
-                    <div style={{fontSize:15,fontWeight:600,color:ACCENT_QUIET}}>{Number(building.power_kw || 0).toFixed(2)} kW</div>
-                    <div style={{fontSize:11,color:'#9aa4af'}}>${Number(building.cost_today_mxn || 0).toLocaleString("es-MX")} MXN hoy</div>
-                    <div style={{fontSize:11,color:'#9aa4af'}}>{Number(building.energy_today_kwh || 0).toFixed(4)} kWh</div>
-                    {building.anomaly && (
-                      <div style={{display:'inline-block',marginTop:8,padding:'2px 7px',background:'#ef444414',border:'1px solid #ef444433',borderRadius:4,color:'#ef4444',fontSize:10,fontWeight:500}}>
-                        Anomalía
-                      </div>
-                    )}
-                  </>
-                ) : (
-                  <div style={{fontSize:12,color:TEXT_MUTED}}>Sin lecturas reales</div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      </Card>
-    </div>
-  );
-};
-
 
 // ─── PAGE: BUILDINGS ──────────────────────────────────────────────────────────
 const PageBuildings = () => {
@@ -1972,8 +1869,57 @@ const PageReports = () => {
 
 
 // ─── PAGE: INFRASTRUCTURE ─────────────────────────────────────────────────────
+const CoverageItem = ({ label, value }) => (
+  <div>
+    <div style={{fontSize:10,color:TEXT_MUTED,textTransform:'uppercase',letterSpacing:.85,fontWeight:600}}>{label}</div>
+    <div style={{fontSize:19,fontWeight:600,color:TEXT,marginTop:4,fontVariantNumeric:'tabular-nums'}}>{value}</div>
+  </div>
+);
+
+// Geographic coverage of the Campus Map, as platform metadata.
+//
+// Every figure is summed from /api/campus-map/campuses — the same response the
+// map itself is driven by — so nothing here is a second count that can drift
+// from the map. The freshness window comes from that response too, which reads
+// it from deployment_scope.TELEMETRY_ACTIVE_WINDOW: one definition, quoted, not
+// restated.
+export const GeographicCoverage = ({ coverage }) => {
+  if (!coverage) return null;
+
+  const campuses = coverage.campuses || [];
+  const footprints = campuses.reduce((sum, c) => sum + (c.footprint_count || 0), 0);
+  const mapped = campuses.filter((c) => c.has_geometry).length;
+  const associations = campuses.reduce((sum, c) => sum + (c.mapped_buildings || 0), 0);
+  const buildings = campuses.reduce((sum, c) => sum + (c.energy_iq_buildings || 0), 0);
+
+  const seconds = coverage.telemetry_window_seconds;
+  const freshness =
+    seconds === null || seconds === undefined
+      ? "—"
+      : seconds % 60 === 0
+        ? `${seconds / 60} min`
+        : `${seconds} s`;
+
+  return (
+    <Card style={{marginBottom:18}}>
+      <SectionTitle title="Cobertura geográfica y telemetría" subtitle="Huellas de edificio del Mapa de Campus y ventana de datos en tiempo real"/>
+      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(150px,1fr))',gap:16}}>
+        <CoverageItem label="Huellas OpenStreetMap" value={Number(footprints).toLocaleString("es-MX")}/>
+        <CoverageItem label="Campus mapeados" value={`${mapped}/${campuses.length}`}/>
+        <CoverageItem label="Edificios Energy IQ" value={String(buildings)}/>
+        <CoverageItem label="Asociaciones al mapa" value={String(associations)}/>
+        <CoverageItem label="Datos en tiempo real" value={freshness}/>
+      </div>
+      <div style={{fontSize:11,color:TEXT_MUTED,marginTop:14,lineHeight:1.55}}>
+        Huellas de edificio © OpenStreetMap contributors (ODbL).
+      </div>
+    </Card>
+  );
+};
+
 const PageInfra = () => {
   const [infra, setInfra] = useState(null);
+  const [coverage, setCoverage] = useState(null);
 
   useEffect(() => {
     const load = () => {
@@ -1985,6 +1931,14 @@ const PageInfra = () => {
     load();
     const timer = setInterval(load, 15000);
     return () => clearInterval(timer);
+  }, []);
+
+  // Geometry changes only when someone re-curates a campus by hand, so this is
+  // fetched once rather than joining the 15 s poll above.
+  useEffect(() => {
+    getCampusMapCampuses()
+      .then(setCoverage)
+      .catch((error) => console.error("Campus map coverage API error:", error));
   }, []);
 
   const summary = infra?.summary || {};
@@ -2031,6 +1985,8 @@ const PageInfra = () => {
           </Card>
         ))}
       </div>
+
+      <GeographicCoverage coverage={coverage}/>
 
       {nodes.map((node) => (
         <Card key={node.id} style={{marginBottom:14}}>
@@ -2183,7 +2139,7 @@ const App = () => {
 
     switch(page) {
       case 'dashboard': return <PageDashboard/>;
-      case 'campus': return <PageCampus/>;
+      case 'campus': return <PageCampusMap setPage={setPage}/>;
       case 'buildings': return <PageBuildings/>;
       case 'buildingDetail': return <PageBuildings/>;
       case 'deployments': return <PageDeployments/>;
@@ -2214,6 +2170,7 @@ const App = () => {
 
 export default App;
 
+import PageCampusMap from "./pages/PageCampusMap";
 import PageDataExplorer from "./pages/PageDataExplorer";
 import PageLiveMonitor from "./pages/PageLiveMonitor";
 import LoginPage from "./pages/LoginPage";

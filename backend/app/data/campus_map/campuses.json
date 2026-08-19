@@ -1,0 +1,234 @@
+{
+  "_comment": [
+    "Campus Map view configuration. One entry per row in the `campuses` table —",
+    "the campus_id IS that row's id, and the map never invents a campus that the",
+    "database does not have.",
+    "",
+    "`bbox`, `grounds_selectors` and `clip_buffer_m` are consumed only by",
+    "scripts/build_campus_geojson.py, at curation time. The bbox is an",
+    "ACQUISITION window, not the campus boundary: what defines the campus is",
+    "`grounds_selectors`, the Overpass filters that select the university",
+    "grounds themselves, and every building is clipped to those polygons. That",
+    "is what keeps the hotel, the church and the municipal offices out of",
+    "Campus Central.",
+    "",
+    "A campus with no bbox is a campus nobody has traced yet: the API reports",
+    "has_geometry=false and the page shows its summary without a map.",
+    "",
+    "`evidence` is provenance, not configuration — nothing reads it. It records",
+    "how the physical site was identified, because a thesis dataset has to be",
+    "explainable. The same table is in docs/CampusMap.md."
+  ],
+  "campuses": [
+    {
+      "campus_id": 1,
+      "name": "El Naranjo",
+      "geometry_file": "campus-1.geojson",
+      "bbox": [
+        19.1207,
+        -104.4045,
+        19.1274,
+        -104.397
+      ],
+      "grounds_selectors": [
+        "[\"amenity\"=\"university\"][\"name\"~\"Universidad de Colima\"]"
+      ],
+      "clip_buffer_m": 15,
+      "fallback_center": [
+        19.124,
+        -104.4007
+      ],
+      "fallback_zoom": 17,
+      "evidence": "OSM way 1322637475 'Universidad de Colima Campus El Naranjo'. Corroborated by adjacent way 376618010 'Delegación Regional No. 1' (the UdeC Manzanillo delegation) and by nodes for Facultad de Ciencias Marinas (FACIMAR) and Facultad de Ingeniería Electromecánica (FIE) — organizational_units 27 and 29 of this campus."
+    },
+    {
+      "campus_id": 2,
+      "name": "San Pedrito",
+      "geometry_file": "campus-2.geojson",
+      "bbox": [
+        19.0518,
+        -104.3072,
+        19.0573,
+        -104.3007
+      ],
+      "grounds_selectors": [
+        "[\"amenity\"=\"university\"][\"name\"~\"Universidad de Colima\"]"
+      ],
+      "clip_buffer_m": 15,
+      "fallback_center": [
+        19.0546,
+        -104.3039
+      ],
+      "fallback_zoom": 17,
+      "evidence": "OSM way 1323291611 'Universidad de Colima Campus San Pedrito'. Named explicitly; this campus has no organizational_units in the database to corroborate against."
+    },
+    {
+      "campus_id": 3,
+      "name": "Valle de las Garzas",
+      "geometry_file": "campus-3.geojson",
+      "bbox": [
+        19.095,
+        -104.3083,
+        19.1017,
+        -104.3023
+      ],
+      "grounds_selectors": [
+        "[\"amenity\"=\"university\"][\"name\"~\"Universidad de Colima\"]"
+      ],
+      "clip_buffer_m": 15,
+      "fallback_center": [
+        19.0983,
+        -104.3053
+      ],
+      "fallback_zoom": 17,
+      "evidence": "OSM way 1322653033 'Universidad de Colima Campus Valle de las Garzas', tagged with the street address Avenida Elías Zamora Verduzco 269, Valle de las Garzas Barrio III, Manzanillo. Corroborated by node 9099270824 'Centro de Idiomas', operator=Universidad de Colima, inside it."
+    },
+    {
+      "campus_id": 4,
+      "name": "Santiago",
+      "geometry_file": "campus-4.geojson",
+      "bbox": [
+        19.1275,
+        -104.3511,
+        19.1346,
+        -104.3451
+      ],
+      "grounds_selectors": [
+        "[\"amenity\"=\"college\"][\"name\"~\"Bachillerato\"]"
+      ],
+      "clip_buffer_m": 15,
+      "fallback_center": [
+        19.131,
+        -104.3481
+      ],
+      "fallback_zoom": 18,
+      "evidence": "OSM way 963566217 'Bachillerato Técnico 23 y 27'. The UdeC portal gives both Bachillerato 23 and Bachillerato 27 the same address — Emiliano Zapata s/n, colonia Montebello, Manzanillo — on different shifts, which is why OSM maps them as one site. A UdeC bachillerato, not a faculty campus, so this record is a small facility by nature."
+    },
+    {
+      "campus_id": 5,
+      "name": "El Colomo",
+      "geometry_file": "campus-5.geojson",
+      "bbox": [
+        19.0509,
+        -104.2501,
+        19.0575,
+        -104.2444
+      ],
+      "grounds_selectors": [
+        "[\"amenity\"=\"college\"][\"name\"~\"Bachillerato\"]"
+      ],
+      "clip_buffer_m": 15,
+      "fallback_center": [
+        19.0542,
+        -104.2473
+      ],
+      "fallback_zoom": 18,
+      "evidence": "OSM way 1487351797 'Bachillerato Tecnico No. 14'. The UdeC portal records Bachillerato 14 (school key 06UCT0014V — the UC prefix is Universidad de Colima) as having moved to El Colomo, Manzanillo in 1988, at Prolongación Ignacio Zaragoza s/n, colonia Noriega Pizano. A bachillerato, not a faculty campus."
+    },
+    {
+      "campus_id": 6,
+      "name": "Campus Tecomán",
+      "geometry_file": "campus-6.geojson",
+      "bbox": [
+        18.9439,
+        -103.9019,
+        18.9563,
+        -103.8899
+      ],
+      "grounds_selectors": [
+        "[\"amenity\"=\"university\"]"
+      ],
+      "clip_buffer_m": 15,
+      "fallback_center": [
+        18.9501,
+        -103.8959
+      ],
+      "fallback_zoom": 16,
+      "evidence": "No single campus polygon exists in OSM. The grounds are the union of five adjacent amenity=university ways — 634424356, 634424359 'Rancho Universitario \"El Crucero\"', 1182771547, 1182771548 'Delegación No. 2' and 1182771553 'Facultad de Medicina Veterinaria y Zootécnia'. Every amenity=university way inside this bbox was checked individually and all five are UdeC; the untagged selector is scoped by the bbox, not relied on alone. Corroborated by nodes for FCBA, FCAT and FMVZ — organizational_units 24, 23 and 25 of this campus."
+    },
+    {
+      "campus_id": 7,
+      "name": "Campus Central",
+      "geometry_file": "campus-7.geojson",
+      "bbox": [
+        19.2425,
+        -103.706,
+        19.253,
+        -103.694
+      ],
+      "grounds_selectors": [
+        "[\"amenity\"=\"university\"][\"name\"~\"Universidad de Colima\"]"
+      ],
+      "clip_buffer_m": 40,
+      "fallback_center": [
+        19.2472,
+        -103.7002
+      ],
+      "fallback_zoom": 16,
+      "evidence": "OSM ways 271818376 and 1151009203, both 'Universidad de Colima', the north and south halves of the campus. Curated 2026-08-18."
+    },
+    {
+      "campus_id": 8,
+      "name": "Campus Norte",
+      "geometry_file": "campus-8.geojson",
+      "bbox": [
+        19.2585,
+        -103.692,
+        19.2663,
+        -103.6821
+      ],
+      "grounds_selectors": [
+        "[\"amenity\"=\"university\"][\"name\"~\"Universidad de Colima\"]"
+      ],
+      "clip_buffer_m": 15,
+      "fallback_center": [
+        19.2624,
+        -103.687
+      ],
+      "fallback_zoom": 17,
+      "evidence": "OSM way 346629240 'Universidad de Colima Campus Norte'. Corroborated by way 346635385 'Teatro Universitario' (operator=Universidad de Colima) and nodes for Facultad de Derecho and Facultad de Ciencias Políticas y Sociales inside it."
+    },
+    {
+      "campus_id": 9,
+      "name": "Campus Coquimatlán",
+      "geometry_file": "campus-9.geojson",
+      "bbox": [
+        19.2065,
+        -103.8085,
+        19.217,
+        -103.7985
+      ],
+      "grounds_selectors": [
+        "[\"amenity\"=\"university\"][\"name\"~\"Universidad de Colima\"]"
+      ],
+      "clip_buffer_m": 40,
+      "fallback_center": [
+        19.2119,
+        -103.8032
+      ],
+      "fallback_zoom": 16,
+      "evidence": "OSM way 569149333 'Universidad de Colima Campus Coquimatlán'. Curated 2026-08-18."
+    },
+    {
+      "campus_id": 10,
+      "name": "Campus Villa de Álvarez",
+      "geometry_file": "campus-10.geojson",
+      "bbox": [
+        19.2612,
+        -103.7455,
+        19.2685,
+        -103.739
+      ],
+      "grounds_selectors": [
+        "[\"amenity\"=\"university\"][\"name\"~\"Universidad de Colima\"]"
+      ],
+      "clip_buffer_m": 15,
+      "fallback_center": [
+        19.2649,
+        -103.7423
+      ],
+      "fallback_zoom": 17,
+      "evidence": "OSM way 564437580 'Universidad de Colima Campus Villa de Álvarez'. Corroborated by nodes for Facultad de Filosofía, Facultad de Pedagogía, Facultad de Economía and Facultad de Lenguas Extranjeras — organizational_units 18, 19, 20 and 22 of this campus."
+    }
+  ]
+}

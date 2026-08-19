@@ -11,6 +11,7 @@ from app.routers import (
     alerts,
     anomalies,
     buildings,
+    campus_map,
     cost,
     dashboard,
     data_explorer,
@@ -53,6 +54,7 @@ app.include_router(edge.router)
 app.include_router(anomalies.router, prefix="/api/anomalies", tags=["Anomalies"])
 app.include_router(settings.router, prefix="/api/settings", tags=["Settings"])
 app.include_router(infra.router, prefix="/api/infra", tags=["Infrastructure"])
+app.include_router(campus_map.router, prefix="/api/campus-map", tags=["Campus Map"])
 
 
 @app.get("/health")

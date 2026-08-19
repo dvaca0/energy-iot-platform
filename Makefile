@@ -11,7 +11,7 @@ NPM := npm --prefix frontend
 
 # Hermetic suites: each builds its own throwaway SQLite database, so they run
 # on any checkout and in CI.
-SUITES := monitoring collector smart_plugs synthetic_deployment shelly_phase_detail
+SUITES := monitoring collector smart_plugs synthetic_deployment shelly_phase_detail campus_map
 
 # Integration suites: these read the live production database (energy_aggregate
 # reads it, deployment_lifecycle copies it with the online backup API). Neither

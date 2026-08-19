@@ -277,3 +277,22 @@ export async function getSmartPlugsLive() {
   const response = await api.get("/smart-plugs/live");
   return response.data;
 }
+
+/**
+ * Campus Map. Two calls, deliberately not one.
+ *
+ * `getCampusMap` returns footprints plus the deployment/telemetry state of each
+ * Energy IQ building. Campus totals are NOT in it — power, energy today and
+ * cost today already have one definition, in `/api/metrics/campuses`, which
+ * `getCampusMetrics` above returns. The page merges the two rather than letting
+ * a second endpoint grow a second answer to the same question.
+ */
+export async function getCampusMapCampuses() {
+  const response = await api.get("/campus-map/campuses");
+  return response.data;
+}
+
+export async function getCampusMap(campusId: number) {
+  const response = await api.get(`/campus-map/${campusId}`);
+  return response.data;
+}

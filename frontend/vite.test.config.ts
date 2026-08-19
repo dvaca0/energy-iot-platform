@@ -23,6 +23,7 @@ export default defineConfig({
         "tests/render-insights.tsx",
         "tests/render-error-boundary.tsx",
         "tests/render-live-monitor.tsx",
+        "tests/render-campus-map.tsx",
         // Not part of `make check`: this one renders against the live backend.
         "tests/live-smoke.tsx",
         "tests/verify-production.tsx",

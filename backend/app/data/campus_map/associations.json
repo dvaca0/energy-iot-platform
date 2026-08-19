@@ -1,0 +1,45 @@
+{
+  "_comment": [
+    "The bridge between a physical OSM footprint and an Energy IQ building.",
+    "",
+    "It is a separate file from the geometry on purpose. Re-running",
+    "scripts/build_campus_geojson.py overwrites a campus's geometry wholesale;",
+    "this file is never touched by that script, so the curated identity survives",
+    "an OSM refresh. The reverse also holds: an association may be corrected",
+    "without re-downloading anything.",
+    "",
+    "`osm_type` + `osm_id` identify the map feature. `energy_iq_building_id` is a",
+    "`buildings.id`. The OSM name is NEVER the key — it is absent on most",
+    "footprints, and where present it is a local nickname rather than the",
+    "institutional name (this is why the pair below reads 'Servicios",
+    "Telemáticos' in OSM and 'DIGESET' in the organisational chart).",
+    "",
+    "`confidence` records how the association was made, because a footprint is",
+    "matched by a human reading a map, not by a join:",
+    "  surveyed  — someone confirmed the panel is inside this outline",
+    "  inferred  — the building's organisational unit names this dependency",
+    "",
+    "An id that no longer exists in either OSM or `buildings` is reported by the",
+    "API as an orphan rather than silently dropped. See docs/CampusMap.md."
+  ],
+  "associations": [
+    {
+      "osm_type": "way",
+      "osm_id": 625447870,
+      "osm_name_at_curation": "Servicios Telemáticos",
+      "energy_iq_building_id": 10,
+      "campus_id": 7,
+      "confidence": "inferred",
+      "note": "Buildings 9 and 10 both sit under the Servicios Telemáticos / DIGESET dependency (organizational_units 60 and 71), which occupies this footprint. Building 10 carries the active deployment."
+    },
+    {
+      "osm_type": "way",
+      "osm_id": 625447870,
+      "osm_name_at_curation": "Servicios Telemáticos",
+      "energy_iq_building_id": 9,
+      "campus_id": 7,
+      "confidence": "inferred",
+      "note": "Second Energy IQ building in the same physical footprint — a different panel/era, deployment 6, now closed."
+    }
+  ]
+}

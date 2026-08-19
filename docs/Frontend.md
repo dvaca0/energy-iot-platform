@@ -15,7 +15,7 @@ server — there is no Node runtime in production.
 | Screen | Route label | What it answers |
 |---|---|---|
 | Executive dashboard | Dashboard Ejecutivo | What is this costing, and what changed? |
-| Campus map | Mapa de Campus | Where are the nodes? |
+| Campus map | Mapa de Campus | Which physical buildings are monitored, and how are they? — real OSM footprints, see [CampusMap.md](CampusMap.md) |
 | Buildings | Edificios | Which buildings are covered, which are not? |
 | Deployments | Despliegues | What is installed where, and since when? |
 | Live monitoring | Monitoreo en Vivo | What is the panel doing *right now*? |

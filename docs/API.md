@@ -319,6 +319,18 @@ Runtime platform settings and CFE tariff sync.
 | `POST` | `/api/settings/cfe/scrape` | Scrape Cfe Gdmth |
 | `GET` | `/api/settings/cfe/status` | Cfe Scraper Status |
 
+### Campus map
+
+Real OpenStreetMap building footprints joined to Energy IQ state. Geometry is
+served from curated files on disk — the page never calls Overpass at request
+time. Campus totals are **not** here: they have one definition, in
+`/api/metrics/campuses`.
+
+| Method | Path | Purpose |
+|---|---|---|
+| `GET` | `/api/campus-map/campuses` | List Map Campuses |
+| `GET` | `/api/campus-map/{campus_id}` | Campus Map |
+
 ### Infrastructure
 
 Infrastructure status.
@@ -373,6 +385,21 @@ report anomalies. **Neither pages anyone.** Alerting is `/api/monitoring`, which
 derives thresholds from physical ratings rather than UI display defaults —
 precisely because reusing display defaults for alerting caused a 1,386-message
 incident. See [Monitoring.md](Monitoring.md).
+
+### The campus map separates OSM identity from Energy IQ identity
+
+`/api/campus-map/{campus_id}` returns each footprint with its `osm_type`,
+`osm_id` and `osm_name` alongside `energy_iq_building_ids`. The two are never
+derived from each other. Most footprints have no OSM name at all, and the ones
+that do carry a local nickname rather than the institutional name — the DIGESET
+building is tagged `Servicios Telemáticos` — so matching on the name would
+silently re-point a building's energy data the day a mapper corrects a typo. The
+join is a curated file, `backend/app/data/campus_map/associations.json`, keyed
+on the numeric OSM id. See [CampusMap.md](CampusMap.md).
+
+A campus with no traced geometry returns `200` with `geometry: null` and
+`view.has_geometry: false`, not a `404`: its buildings and readings are real
+even when its outlines have not been drawn yet.
 
 ### Deployment lifecycle is a state machine
 

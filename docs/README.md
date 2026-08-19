@@ -39,6 +39,7 @@
 | [AI.md](AI.md) | Forecasting, anomaly detection, clustering, and the honesty guarantees around them |
 | [Monitoring.md](Monitoring.md) | 39 health rules, the alerting policy, and why it is tuned the way it is |
 | [Smart-Plugs.md](Smart-Plugs.md) | Shelly Gen4 integration, discovery, assignment, sub-metering |
+| [CampusMap.md](CampusMap.md) | OSM building footprints, how they are curated and joined to Energy IQ buildings |
 
 ### Operations
 
