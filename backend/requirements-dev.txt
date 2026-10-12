@@ -11,8 +11,8 @@
 # the app through TestClient.
 httpx==0.28.1
 
-ruff==0.16.1
-black==26.5.1
+ruff==0.16.10
+black==26.10.0
 isort==8.0.1
 mypy==1.14.0
 types-requests
